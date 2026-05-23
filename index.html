@@ -591,7 +591,7 @@ function rexp(r){return-Math.log(1-Math.random())/r;}
 function sw(n,btn){
   document.querySelectorAll('.pg').forEach(function(p){p.classList.remove('on')});
   document.querySelectorAll('.nav-tabs button').forEach(function(b){b.classList.remove('on')});
-  document.getElementById('pg-'+n).classList.add('on');btn.classList.add('on');
+  document.getElementById('pg-'+n).classList.add('on');btn.classList.add('on');setTimeout(function(){window.dispatchEvent(new Event('resize'));},50);
   if(n==='mc'&&!mcCh)runMC();
   if(n==='hg'&&!hgCh)runHG();
   if(n==='op'&&!opCh)runOP();
