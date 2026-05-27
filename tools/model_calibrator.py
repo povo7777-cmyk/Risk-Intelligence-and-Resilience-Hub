@@ -375,9 +375,62 @@ def calibrate_supply_chain(raw: dict) -> dict:
     saving_inv  = round(var_base - var_inv)
     saving_both = round(var_base - var_both)
 
-    # Annual programme costs
-    dual_cost_m  = 15   # USD M/yr — validated programme cost
-    inv_cost_m   = 8    # USD M/yr
+    # ── Dual-source programme cost — derived from CSV, not hardcoded ────────────
+    #
+    # For each single-source supplier with a diversion plan:
+    #   Annual volume-premium cost = our_spend × diversion_pct × price_premium_pct
+    #
+    # This captures the main cost driver: when you split volume, the new (smaller)
+    # supplier charges a premium because they can't match the primary supplier's
+    # economies of scale.
+    #
+    # We report TWO figures:
+    #   urgent_dual_cost_m  — most urgent/feasible single programme (smallest cost,
+    #                          currently Quanta laptop ODM — the breach supplier)
+    #   full_dual_cost_m    — total cost if ALL single-source suppliers are dual-sourced
+    #
+    per_supplier_costs = []
+    for r in single_src:
+        diversion  = float(r.get("dual_source_diversion_pct",   0)) / 100
+        premium    = float(r.get("dual_source_price_premium_pct", 0)) / 100
+        spend      = float(r["our_spend_usd_m"])
+        annual_cost = spend * diversion * premium
+        per_supplier_costs.append({
+            "supplier":    r["supplier_name"],
+            "spend_usd_m": spend,
+            "diversion_pct":  diversion * 100,
+            "premium_pct":    premium * 100,
+            "annual_cost_usd_m": round(annual_cost, 1),
+        })
+
+    per_supplier_costs.sort(key=lambda x: x["annual_cost_usd_m"])   # cheapest first
+    full_dual_cost_m   = round(sum(c["annual_cost_usd_m"] for c in per_supplier_costs), 1)
+    urgent_dual_cost_m = per_supplier_costs[0]["annual_cost_usd_m"] if per_supplier_costs else 15.0
+    urgent_supplier    = per_supplier_costs[0]["supplier"] if per_supplier_costs else "Quanta"
+
+    # ── Inventory buffer cost — derived from additional weeks target ───────────
+    #
+    # Cost to hold additional safety stock above current level:
+    #   additional_inventory_value = (target_weeks - current_weeks) × weekly_spend
+    #   annual_carrying_cost = inventory_value × storage_rate (warehousing + insurance
+    #                          + obsolescence, typically 2% of inventory value per year)
+    #
+    STORAGE_RATE = 0.02   # 2% p.a. of inventory value (cash cost, not WACC)
+    total_inv_buffer_cost = 0.0
+    for r in sc:
+        target_wks  = float(r.get("target_inventory_weeks", 0))
+        current_wks = float(r["inventory_weeks"])
+        additional  = max(target_wks - current_wks, 0)
+        if additional > 0:
+            weekly_spend = float(r["our_spend_usd_m"]) / 52
+            buffer_value = additional * weekly_spend
+            total_inv_buffer_cost += buffer_value * STORAGE_RATE
+    inv_cost_m = round(total_inv_buffer_cost, 1)
+    if inv_cost_m == 0:
+        inv_cost_m = 8.0   # fallback if target_inventory_weeks not set
+
+    # Use urgent (cheapest, most actionable) programme for primary ROI calc
+    dual_cost_m = urgent_dual_cost_m
 
     # Return on investment = VaR saving / annual programme cost
     roi_dual = round(saving_dual / dual_cost_m) if dual_cost_m and saving_dual > 0 else 0
@@ -408,6 +461,12 @@ def calibrate_supply_chain(raw: dict) -> dict:
         "roi_dual_src_x":          roi_dual,
         "roi_inv_buff_x":          roi_inv,
         "roi_both_x":              roi_both,
+        # Programme costs — derived from CSV
+        "urgent_dual_cost_usd_m":  urgent_dual_cost_m,
+        "urgent_dual_supplier":    urgent_supplier,
+        "full_dual_cost_usd_m":    full_dual_cost_m,
+        "inv_buffer_cost_usd_m":   inv_cost_m,
+        "per_supplier_costs":      per_supplier_costs,
         "n_sims": N_SIMS,
     }
 
@@ -559,11 +618,15 @@ def update_html_models(dashboard_path: Path, params: dict) -> tuple[bool, list[s
         save_both  = sp.get("saving_both_usd_m",        1199)
         roi_both   = sp.get("roi_both_x",                48)
 
+        dual_cost   = sp.get("urgent_dual_cost_usd_m",  15)
+        inv_cost    = sp.get("inv_buffer_cost_usd_m",    8)
         new_banner = (
             f'<strong style="color:#22c55e">Validated benchmarks (Python simulation, N={N_SIMS:,}):'
             f'</strong> Baseline VaR 95%: <strong>USD {var_base:,}M</strong>. '
-            f'Dual-source programme (USD 15M/yr): saves <strong>USD {save_dual:,}M</strong> VaR. '
-            f'Inventory buffer (USD 8M/yr): saves <strong>USD {save_inv:,}M</strong>. '
+            f'Dual-source programme (USD {dual_cost:.1f}M/yr incremental cost): '
+            f'saves <strong>USD {save_dual:,}M</strong> VaR. '
+            f'Inventory buffer (USD {inv_cost:.1f}M/yr carrying cost): '
+            f'saves <strong>USD {save_inv:,}M</strong>. '
             f'Both together: saves <strong>USD {save_both:,}M</strong> '
             f'&mdash; {roi_both}&times; return on mitigation investment.'
         )
