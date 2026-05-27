@@ -1,0 +1,7 @@
+date,covenant_id,covenant_type,metric,current_value,threshold,headroom,facility,next_test_date,status
+2026-05-01,COV001,Financial,Net_Debt_EBITDA_ratio,2.8,3.0,0.2,RCF-USD2B,2026-06-30,amber
+2026-05-01,COV002,Financial,Interest_Coverage_ratio,4.2,3.5,0.7,Term-Loan-A,2026-06-30,ok
+2026-05-01,COV003,Financial,Liquidity_headroom_USD_B,1.1,0.8,0.3,RCF-USD2B,2026-06-30,ok
+2026-05-01,COV004,Financial,Debt_maturity_runway_months,8,12,0,Bond-2027,2026-12-01,amber
+2026-05-01,COV005,Financial,EBITDA_USD_B,2.28,1.80,0.48,All-Facilities,2026-06-30,ok
+2026-05-01,COV006,Financial,Bad_debt_provision_pct,1.44,0.80,-0.64,Trade-Finance,2026-06-30,breach
