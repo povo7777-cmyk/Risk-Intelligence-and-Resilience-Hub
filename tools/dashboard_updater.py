@@ -14,36 +14,98 @@ BACKUP_DIR = Path(__file__).parent.parent / "dashboard" / "backups"
 
 STATUS_TO_TS = {"ok": "ok", "amber": "am", "breach": "br"}
 
+DOMAIN_BUCKETS = [
+    "operational_risks",
+    "financial_risks",
+    "strategic_risks",
+    "compliance_risks",
+]
+
 KRI_NAME_MAP = {
-    "single_source_concentration":   "Single-source concentration",
-    "inventory_cover_weeks":         "Inventory cover (weeks)",
-    "supplier_distress_flags":       "Supplier financial distress flags",
-    "mttd_days":                     "Mean time to detect (MTTD)",
-    "patch_compliance_pct":          "Patch compliance rate",
-    "critical_vulns_open_gt30d":     "Critical vulnerabilities open >30 days",
-    "it_rto_hours":                  "IT system RTO",
-    "field_failure_rate_pct":        "Field failure rate",
-    "recall_readiness_score_pct":    "Recall readiness score",
-    "safety_incidents_ytd":          "Confirmed product safety incidents YTD",
-    "tech_attrition_rate_pct":       "Tech role attrition rate",
-    "critical_open_roles_gt60d":     "Critical open roles >60 days",
-    "svp_succession_coverage_pct":   "SVP+ succession plan coverage",
+    # Operational — supply chain (O-01)
+    "single_source_concentration":        "Single-source concentration",
+    "inventory_cover_weeks":              "Inventory cover (weeks)",
+    "supplier_distress_flags":            "Supplier financial distress flags",
+    # Operational — cyber (O-02)
+    "mttd_days":                          "Mean time to detect — MTTD (hours)",
+    "mttr_days":                          "Mean time to respond — MTTR (days)",
+    "patch_compliance_pct":               "Patch compliance rate",
+    # critical_vulns_open_gt30d has no dashboard tile in the chat HTML
+    "it_rto_hours":                       "RTO — order management & fulfilment systems (hours)",
+    # Operational — quality (O-03)
+    "field_failure_rate_pct":             "Field failure rate",
+    "recall_readiness_score_pct":         "Recall readiness score",
+    "safety_incidents_ytd":               "Confirmed product safety incidents YTD",
+    # Operational — talent (O-04)
+    "tech_attrition_rate_pct":            "Tech role attrition rate",
+    "critical_open_roles_gt60d":          "Critical open roles >60 days",
+    "svp_succession_coverage_pct":        "SVP+ succession coverage (%)",
+    # Financial — FX & treasury (F-01)
+    "unhedged_fx_exposure_usd_m":         "Unhedged FX exposure",
+    "avg_hedge_ratio_pct":                "FX hedge ratio (% of exposure hedged)",
+    # F-01: unrealised_pnl_usd_m — store-only, no dashboard tile
+    # Financial — receivables (F-02)
+    "top_customer_concentration_pct":     "Single customer concentration (ISG segment)",
+    "overdue_90d_pct":                    "AR overdue >90 days (% of total AR)",
+    "bad_debt_provision_pct":             "Bad debt provision % of receivables",
+    # Financial — covenants (F-03)
+    "net_debt_ebitda_ratio":              "Net-debt/EBITDA ratio",
+    "liquidity_headroom_usd_b":           "Available liquidity headroom (USD)",
+    "debt_maturity_runway_months":        "Nearest debt maturity runway (months)",
+    # Financial — controls (F-04)
+    "audit_findings_open":                "Open SOX significant deficiencies",
+    # F-04: material_weakness_count — store-only, no dashboard tile
+    # Strategic (S-01, S-02, S-03) — signal counts are store-only (no dashboard tile)
+    "synergy_delivery_pct":               "Synergy delivery vs target",
+    # Compliance — export & sanctions (C-01)
+    "export_screening_coverage_pct":      "Export screening coverage rate",
+    "confirmed_sanctions_violations_ytd": "Confirmed sanctions violations YTD",
+    # C-01: denied_party_matches_pending — store-only, no dashboard tile
+    # Compliance — data & AI (C-02)
+    "ai_audit_coverage_pct":             "AI Act audit coverage (%)",
+    # gdpr_dsr_resolution_rate_pct has no dashboard tile in the chat HTML
+    # C-02: formal_investigation_open — store-only, no dashboard tile
+    # Compliance — anti-bribery & ESG (C-03)
+    "third_party_abac_coverage_pct":      "Third-party ABAC coverage (%)",
+    # csrd_scope3_disclosure_pct has no dashboard tile in the chat HTML
+    # C-03: whistleblower_high_findings — store-only, no dashboard tile
 }
 
 KRI_FORMAT = {
-    "single_source_concentration":   lambda v: f"{v}%",
-    "inventory_cover_weeks":         lambda v: f"{v}wk",
-    "supplier_distress_flags":       lambda v: str(int(v)),
-    "mttd_days":                     lambda v: f"{int(v)} days",
-    "patch_compliance_pct":          lambda v: f"{v}%",
-    "critical_vulns_open_gt30d":     lambda v: str(int(v)),
-    "it_rto_hours":                  lambda v: f"{v}h",
-    "field_failure_rate_pct":        lambda v: f"{v}%",
-    "recall_readiness_score_pct":    lambda v: f"{int(v)}%",
-    "safety_incidents_ytd":          lambda v: str(int(v)),
-    "tech_attrition_rate_pct":       lambda v: f"{v}%",
-    "critical_open_roles_gt60d":     lambda v: str(int(v)),
-    "svp_succession_coverage_pct":   lambda v: f"{int(v)}%",
+    # Operational
+    "single_source_concentration":        lambda v: f"{v}%",
+    "inventory_cover_weeks":              lambda v: f"{v}wk",
+    "supplier_distress_flags":            lambda v: str(int(v)),
+    "mttd_days":                          lambda v: f"{int(v * 24)}h",   # store in days, HTML shows hours
+    "mttr_days":                          lambda v: f"{int(v)} days",
+    "patch_compliance_pct":               lambda v: f"{v}%",
+    "critical_vulns_open_gt30d":          lambda v: str(int(v)),
+    "it_rto_hours":                       lambda v: f"{v}h",
+    "field_failure_rate_pct":             lambda v: f"{v}%",
+    "recall_readiness_score_pct":         lambda v: f"{int(v)}%",
+    "safety_incidents_ytd":               lambda v: str(int(v)),
+    "tech_attrition_rate_pct":            lambda v: f"{v}%",
+    "critical_open_roles_gt60d":          lambda v: str(int(v)),
+    "svp_succession_coverage_pct":        lambda v: f"{int(v)}%",
+    # Financial
+    "unhedged_fx_exposure_usd_m":         lambda v: f"USD {int(v)}M",
+    "avg_hedge_ratio_pct":                lambda v: f"{int(v)}%",
+    "top_customer_concentration_pct":     lambda v: f"{v}%",
+    "overdue_90d_pct":                    lambda v: f"{v}%",
+    "bad_debt_provision_pct":             lambda v: f"{v}%",
+    "net_debt_ebitda_ratio":              lambda v: f"{v}x",
+    "liquidity_headroom_usd_b":           lambda v: f"USD {v}B",
+    "debt_maturity_runway_months":        lambda v: f"{int(v)} months",
+    "audit_findings_open":                lambda v: str(int(v)),
+    # Strategic
+    "synergy_delivery_pct":               lambda v: f"{int(v)}%",
+    # Compliance
+    "export_screening_coverage_pct":      lambda v: f"{v}%",
+    "confirmed_sanctions_violations_ytd": lambda v: str(int(v)),
+    "ai_audit_coverage_pct":             lambda v: f"{v}%",
+    "gdpr_dsr_resolution_rate_pct":      lambda v: f"{v}%",
+    "third_party_abac_coverage_pct":      lambda v: f"{v}%",
+    "csrd_scope3_disclosure_pct":         lambda v: f"{v}%",
 }
 
 EXEC_REC_IDS = {
@@ -52,6 +114,23 @@ EXEC_REC_IDS = {
     "fx":           "ec-hg",
     "supply_chain": "ec-op",
 }
+
+
+def _trim_to_sentence(text: str, limit: int) -> str:
+    """Return text trimmed to complete sentences within limit chars.
+    Falls back to the last word boundary if no sentence end is found."""
+    if len(text) <= limit:
+        return text
+    window = text[:limit]
+    # Find the last sentence-ending punctuation within the window
+    last_end = max(window.rfind('. '), window.rfind('! '), window.rfind('? '))
+    if last_end > limit // 2:          # only use it if it's in the second half
+        return window[:last_end + 1]   # include the punctuation, drop the trailing space
+    # Fall back to last word boundary
+    last_space = window.rfind(' ')
+    if last_space > 0:
+        return window[:last_space] + '…'
+    return window + '…'
 
 
 def backup_dashboard(html_path):
@@ -107,20 +186,28 @@ def run_dashboard_update(dashboard_path):
     backup = backup_dashboard(dashboard_path)
     changes = []
     total_updates = 0
+    unmapped = []
 
-    for risk_id, risk in store.get("operational_risks", {}).items():
-        kri_changes = 0
-        for kri_name, kri_data in risk.get("kris", {}).items():
-            updated_html, changed = _update_kri(
-                html, kri_name, kri_data["value"], kri_data["status"]
-            )
-            if changed:
-                html = updated_html
-                html = _update_sparkline(html, kri_name, kri_data["value"])
-                kri_changes += 1
-                total_updates += 1
-        if kri_changes > 0:
-            changes.append(f"{risk_id}: {kri_changes} KRI(s) updated")
+    for bucket in DOMAIN_BUCKETS:
+        for risk_id, risk in store.get(bucket, {}).items():
+            kri_changes = 0
+            for kri_name, kri_data in risk.get("kris", {}).items():
+                if kri_name not in KRI_NAME_MAP:
+                    unmapped.append(f"{risk_id}.{kri_name}")
+                    continue
+                updated_html, changed = _update_kri(
+                    html, kri_name, kri_data["value"], kri_data["status"]
+                )
+                if changed:
+                    html = updated_html
+                    html = _update_sparkline(html, kri_name, kri_data["value"])
+                    kri_changes += 1
+                    total_updates += 1
+            if kri_changes > 0:
+                changes.append(f"{risk_id}: {kri_changes} KRI(s) updated")
+
+    if unmapped:
+        print(f"  ⚠ {len(unmapped)} store KRI(s) not in KRI_NAME_MAP — no tile updated: {unmapped}")
 
     if total_updates > 0:
         dashboard_path.write_text(html)
@@ -130,6 +217,7 @@ def run_dashboard_update(dashboard_path):
         "backup_path": str(backup),
         "total_kri_updates": total_updates,
         "risks_updated": changes,
+        "unmapped_kris": unmapped,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -164,28 +252,88 @@ def update_exec_recommendations(dashboard_path, approved):
 
 
 def _format_board_summary(text: str) -> str:
+    """
+    Convert CRA board summary text into styled HTML sections.
+
+    Handles two layouts:
+      • Current (cra_synthesis_v1): four plain-text headers
+        RISK POSTURE / KEY RISK DRIVERS / CROSS-DOMAIN CONNECTIONS / MANAGEMENT RESPONSE
+        followed by RISK COMMITTEE RECOMMENDED ACTIONS appended by the graph.
+      • Legacy: domain-based headers  STRATEGIC / OPERATIONAL / FINANCIAL / COMPLIANCE
+
+    Also tolerates stray markdown (## headers, # title lines, • bullets) that the
+    LLM sometimes emits despite being asked for plain text.
+    """
     import re
 
-    DOMAIN_CONFIG = [
-        ('COMPOUND SCENARIOS', '#7f8c8d'),
-        ('COMPOUND',           '#7f8c8d'),
-        ('STRATEGIC',          'var(--red-md)'),
-        ('OPERATIONAL',        'var(--amb-md)'),
-        ('FINANCIAL',          'var(--grn-md)'),
-        ('COMPLIANCE',         'var(--pur-md)'),
+    # ── Step 1: strip any leading markdown title line (# BOARD RISK SUMMARY …) ──
+    text = re.sub(r'^#[^\n]*\n?', '', text.strip())
+
+    # ── Step 2: normalise section headers to "SECTION NAME:" ──
+    # Handles three patterns the LLM might emit:
+    #   "## RISK POSTURE"   — markdown heading (with or without colon)
+    #   "RISK POSTURE\n\n"  — bare label on its own line (plain text, no colon)
+    #   "RISK POSTURE:"     — already has colon (already fine)
+    SECTION_NAMES = [
+        'RISK POSTURE',
+        'KEY RISK DRIVERS',
+        'CROSS-DOMAIN CONNECTIONS',
+        'MANAGEMENT RESPONSE',
+        'RISK COMMITTEE RECOMMENDED ACTIONS',
+        'COMPOUND SCENARIOS',
+        'COMPOUND',
+        'STRATEGIC',
+        'OPERATIONAL',
+        'FINANCIAL',
+        'COMPLIANCE',
+    ]
+    for name in SECTION_NAMES:
+        # markdown heading: ## SECTION NAME (optional colon)
+        text = re.sub(
+            r'##\s*' + re.escape(name) + r'\s*:?\s*',
+            name + ':\n',
+            text, flags=re.IGNORECASE
+        )
+        # bare label on its own line followed by newline(s), no colon
+        text = re.sub(
+            r'(?m)^' + re.escape(name) + r'\s*$',
+            name + ':',
+            text, flags=re.IGNORECASE
+        )
+
+    # ── Step 3: section → colour map ──
+    SECTION_CONFIG = [
+        # Current synthesis sections (ordered longest-first to avoid prefix collisions)
+        ('RISK COMMITTEE RECOMMENDED ACTIONS', 'var(--navy)'),
+        ('CROSS-DOMAIN CONNECTIONS',           '#7f8c8d'),
+        ('KEY RISK DRIVERS',                   'var(--amb-md)'),
+        ('MANAGEMENT RESPONSE',                'var(--grn-md)'),
+        ('RISK POSTURE',                       'var(--red-md)'),
+        # Legacy domain sections
+        ('COMPOUND SCENARIOS',                 '#7f8c8d'),
+        ('COMPOUND',                           '#7f8c8d'),
+        ('STRATEGIC',                          'var(--red-md)'),
+        ('OPERATIONAL',                        'var(--amb-md)'),
+        ('FINANCIAL',                          'var(--grn-md)'),
+        ('COMPLIANCE',                         'var(--pur-md)'),
     ]
 
     segments = []
-    for label, color in DOMAIN_CONFIG:
+    for label, color in SECTION_CONFIG:
         for m in re.finditer(re.escape(label) + r'\s*:\s*', text, re.IGNORECASE):
             segments.append((m.start(), m.end(), label, color))
 
     if not segments:
-        return f'<p style="font-size:12.5px;color:var(--txt);line-height:1.6;margin:0">{text}</p>'
+        # Fallback: strip leftover markdown and return as a plain paragraph
+        clean = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE).strip()
+        return (
+            f'<p style="font-size:12.5px;color:var(--txt);line-height:1.6;margin:0">'
+            f'{clean}</p>'
+        )
 
     segments.sort(key=lambda x: x[0])
-    # dedupe: if two labels start at overlapping positions keep the longer one
-    deduped = []
+    # dedupe: if two labels overlap keep the longer one
+    deduped: list = []
     for seg in segments:
         if deduped and seg[0] < deduped[-1][1]:
             if len(seg[2]) > len(deduped[-1][2]):
@@ -194,7 +342,10 @@ def _format_board_summary(text: str) -> str:
             deduped.append(seg)
     segments = deduped
 
+    # Any text before the first section header becomes a title paragraph
     overview = text[:segments[0][0]].strip()
+    overview = re.sub(r'^#+\s*', '', overview, flags=re.MULTILINE).strip()
+
     parts = []
     if overview:
         parts.append(
@@ -205,18 +356,88 @@ def _format_board_summary(text: str) -> str:
     for i, (start, end, label, color) in enumerate(segments):
         body_end = segments[i + 1][0] if i + 1 < len(segments) else len(text)
         body = text[end:body_end].strip()
+        # Strip any residual markdown headers from body text
+        body = re.sub(r'^#+\s*', '', body, flags=re.MULTILINE).strip()
         mb = '0' if i == len(segments) - 1 else '0.55rem'
         parts.append(
             f'<div style="margin-bottom:{mb};padding:0.4rem 0.6rem 0.4rem 0.7rem;'
             f'border-left:3px solid {color};background:rgba(0,0,0,0.02)">'
             f'<div style="font-size:10px;font-weight:700;color:{color};'
-            f'text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">'
+            f'text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">'
             f'{label.title()}</div>'
-            f'<div style="font-size:12.5px;color:var(--txt);line-height:1.6">{body}</div>'
+            f'{_render_section_body(label, body)}'
             f'</div>'
         )
 
     return ''.join(parts)
+
+
+def _render_section_body(label: str, body: str) -> str:
+    """
+    Render a section body for board-level readability.
+
+    Recommended Actions: each bullet becomes its own numbered card.
+    Prose sections:       body is split into sentence-level rows so the reader
+                          can scan one point at a time instead of a wall of text.
+    """
+    import re
+
+    if 'RECOMMENDED ACTIONS' in label.upper():
+        # ── Numbered action cards ──────────────────────────────────────────────
+        bullets = [b.strip() for b in re.split(r'\s*•\s*', body) if b.strip()]
+        if not bullets:
+            return (
+                f'<div style="font-size:12px;color:var(--txt);line-height:1.6">{body}</div>'
+            )
+        cards = []
+        for idx, bullet in enumerate(bullets):
+            num = f'{idx + 1:02d}'
+            is_last = (idx == len(bullets) - 1)
+            cards.append(
+                f'<div style="display:flex;gap:0.55rem;'
+                f'{"" if is_last else "margin-bottom:0.4rem;"}'
+                f'padding:0.45rem 0.55rem;background:rgba(0,0,80,0.03);border-radius:3px">'
+                f'<span style="font-size:10px;font-weight:700;color:var(--navy);'
+                f'min-width:20px;padding-top:2px;flex-shrink:0;line-height:1">{num}</span>'
+                f'<span style="font-size:12px;color:var(--txt);line-height:1.55">{bullet}</span>'
+                f'</div>'
+            )
+        return ''.join(cards)
+
+    elif 'RISK POSTURE' in label.upper():
+        # ── Risk Posture: single dense paragraph ──────────────────────────────
+        # This section is deliberately compact — it's the opening verdict and
+        # reads well as one block.
+        return (
+            f'<div style="font-size:12.5px;color:var(--txt);line-height:1.6">{body}</div>'
+        )
+
+    else:
+        # ── Sentence-level rows ────────────────────────────────────────────────
+        # Split on sentence-ending punctuation followed by a space and capital letter.
+        # This handles board prose well; abbreviations like "USD 4,940M" and KRI
+        # codes like "O-02" don't trigger false splits because they aren't followed
+        # by ". Capital".
+        sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', body.strip())
+        sentences = [s.strip() for s in sentences if s.strip()]
+
+        if len(sentences) <= 1:
+            return (
+                f'<div style="font-size:12.5px;color:var(--txt);line-height:1.6">{body}</div>'
+            )
+
+        rows = []
+        for idx, sentence in enumerate(sentences):
+            # Ensure trailing punctuation
+            if sentence and sentence[-1] not in '.!?':
+                sentence += '.'
+            is_last = (idx == len(sentences) - 1)
+            rows.append(
+                f'<div style="font-size:12.5px;color:var(--txt);line-height:1.55;'
+                f'{"" if is_last else "margin-bottom:0.38rem;padding-bottom:0.38rem;border-bottom:1px solid rgba(0,0,0,0.05);"}'
+                f'">{sentence}</div>'
+            )
+        return ''.join(rows)
 
 
 def update_board_summary(dashboard_path, summary_text: str, run_id: str) -> bool:
@@ -278,32 +499,36 @@ def update_signals_panel(dashboard_path, regulatory: dict, emerging: dict, run_i
         )
 
     # New regulatory signals
-    for s in regulatory.get('new_signals', [])[:2]:
+    for s in regulatory.get('new_signals', []):
         items.append(
             f'<div style="margin-bottom:0.7rem;padding-bottom:0.7rem;border-bottom:1px solid var(--bdr)">'
             f'<div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:2px">'
             f'<span style="font-size:10px;font-weight:700;color:#2980b9;text-transform:uppercase">NEW SIGNAL</span>'
             f'<span style="font-size:11px;font-weight:600">{s.get("title","")}</span>'
             f'</div>'
-            f'<div style="font-size:12px;color:var(--txt)">{s.get("summary","")[:150]}</div>'
+            f'<div style="font-size:12px;color:var(--txt)">{s.get("summary","")}</div>'
             f'<div style="font-size:11px;color:var(--txt-m)">{s.get("regulation","")} · {s.get("jurisdiction","")} · Confidence: {s.get("confidence","")}</div>'
             f'</div>'
         )
 
     # Emerging risk candidates
-    for c in emerging.get('risk_candidates', [])[:2]:
+    for c in emerging.get('risk_candidates', []):
         l = c.get('initial_L', 0)
         i = c.get('initial_I', 0)
         action = c.get('recommended_action', 'watch_list')
         color = '#c0392b' if action == 'immediate_board_attention' else '#e67e22' if action == 'assess_for_register' else '#7f8c8d'
+        # Strip citation tags then trim to a clean sentence boundary
+        rationale = re.sub(r'<cite[^>]*>.*?</cite>', '', c.get('rationale', ''), flags=re.DOTALL).strip()
+        rationale = re.sub(r'\s+', ' ', rationale)
+        rationale = _trim_to_sentence(rationale, 200)
         items.append(
             f'<div style="margin-bottom:0.7rem;padding-bottom:0.7rem;border-bottom:1px solid var(--bdr)">'
             f'<div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:2px">'
             f'<span style="font-size:10px;font-weight:700;color:{color};text-transform:uppercase">{action.replace("_"," ")}</span>'
             f'<span style="font-size:11px;font-weight:600">Emerging: {c.get("proposed_id","")} ({c.get("proposed_domain","")})</span>'
             f'</div>'
-            f'<div style="font-size:12px;color:var(--txt)">{c.get("signal","")[:150]}</div>'
-            f'<div style="font-size:11px;color:var(--txt-m)">L={l} I={i} · Horizon: {c.get("horizon","")} · {c.get("rationale","")[:80]}</div>'
+            f'<div style="font-size:12px;color:var(--txt)">{c.get("signal","")}</div>'
+            f'<div style="font-size:11px;color:var(--txt-m)">L={l} I={i} · Horizon: {c.get("horizon","")} · {rationale}</div>'
             f'</div>'
         )
 
