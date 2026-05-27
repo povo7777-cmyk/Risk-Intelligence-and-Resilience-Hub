@@ -397,8 +397,6 @@ input[type=range]{width:100%;accent-color:var(--navy)}
     <button onclick="sw('mc',this)"><i class="ti ti-chart-dots"></i>EBITDA stress</button>
     <button onclick="sw('hg',this)"><i class="ti ti-shield-half"></i>Hedge analyser</button>
     <button onclick="sw('op',this)"><i class="ti ti-building-factory-2"></i>Supply Chain Resilience</button>
-    <button onclick="swExtended('agents',this)"><i class="ti ti-robot"></i>AI Agents</button>
-    <button onclick="swExtended('q3',this)"><i class="ti ti-database-import"></i>Q3 Update</button>
   </div>
 </nav>
 
@@ -635,12 +633,12 @@ input[type=range]{width:100%;accent-color:var(--navy)}
         <div class="hub-mod-name">Supply Chain Resilience Stress Test</div>
         <div class="hub-mod-desc">Supplier failure · demand shock · mitigation VaR · O-01</div>
       </div>
-      <div class="hub-mod hub-mod-locked" onclick="swExtended('agents',document.querySelector('.nav-tabs button:nth-child(8)'));setTimeout(function(){runAgent('regulatory');},300)">
+      <div class="hub-mod" onclick="showPanel('signals-panel')">
         <div class="hub-mod-ic"><i class="ti ti-radar"></i></div>
         <div class="hub-mod-name">Regulatory Signals</div>
         <div class="hub-mod-desc">EU AI Act · GDPR · OFAC · emerging risks</div>
       </div>
-      <div class="hub-mod hub-mod-locked" onclick="swExtended('agents',document.querySelector('.nav-tabs button:nth-child(8)'));setTimeout(function(){showPanel('board-summary-panel');},120)">
+      <div class="hub-mod" onclick="showPanel('board-summary-panel')">
         <div class="hub-mod-ic"><i class="ti ti-clipboard-list"></i></div>
         <div class="hub-mod-name">Board Pack</div>
         <div class="hub-mod-desc">Risk posture · key drivers · cross-domain · recommended actions</div>
@@ -1146,137 +1144,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
     </div>
   </div>
 
-<!-- Q3 DATA ENTRY PANEL -->
-<div class="q3-panel" id="pg-q3">
-  <div class="q3-inner">
-    <div class="hero-eyebrow" style="margin-bottom:1rem">
-      <div class="hero-pulse"></div>
-      <span class="hero-eyebrow-txt">Q3 2026 Data Entry &middot; Authorised Users Only</span>
-    </div>
-    <div style="font-family:'DM Serif Display',serif;font-size:1.8rem;color:#e8eaf0;margin-bottom:.4rem">Quarterly KRI Update</div>
-    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dark-muted);margin-bottom:1.5rem">Enter new KRI values for Q3 2026. System will recompute all statuses, update risk register, and trigger AI agent recommendations automatically.</div>
-    <div class="q3-grid" id="q3-grid"></div>
-    <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.5rem">
-      <button class="agent-btn" onclick="saveQ3Data()" style="background:rgba(232,197,71,.12)"><i class="ti ti-device-floppy" style="font-size:11px"></i> Save &amp; Recompute All KRIs</button>
-      <button class="agent-btn" onclick="runAllAgents()"><i class="ti ti-robot" style="font-size:11px"></i> Run All AI Agents</button>
-      <button class="agent-btn" onclick="sw('erm',document.querySelector('.nav-tabs button:nth-child(1)'))"><i class="ti ti-arrow-left" style="font-size:11px"></i> Back to Hub</button>
-    </div>
-    <div id="q3-status" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#22c55e;min-height:20px"></div>
-  </div>
-</div>
 
-<!-- AI AGENTS PANEL -->
-<div class="agent-panel" id="pg-agents" style="display:none">
-  <div class="agent-inner">
-    <div class="hero-eyebrow" style="margin-bottom:1rem">
-      <div class="hero-pulse"></div>
-      <span class="hero-eyebrow-txt">AI Risk Agents &middot; Powered by Claude</span>
-    </div>
-    <div style="font-family:'DM Serif Display',serif;font-size:1.8rem;color:#e8eaf0;margin-bottom:.4rem">Risk Intelligence Agents</div>
-    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dark-muted);margin-bottom:1.5rem">6 specialised agents read current KRI values and model outputs to generate dynamic recommendations. Run individually or all at once.</div>
-
-    <div class="agent-run-all">
-      <div class="pulse-dot idle" id="master-pulse"></div>
-      <button class="agent-btn" id="run-all-btn" onclick="runAllAgents()" style="background:rgba(232,197,71,.12)">
-        <i class="ti ti-player-play" style="font-size:11px"></i> Run All 6 Agents
-      </button>
-      <span id="master-status" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--dark-muted)">Ready</span>
-      <button class="agent-btn" onclick="sw('erm',document.querySelector('.nav-tabs button:nth-child(1)'))"><i class="ti ti-arrow-left" style="font-size:11px"></i> Back to Hub</button>
-    </div>
-
-    <!-- Strategic Agent -->
-    <div class="agent-card" id="agent-card-strategic">
-      <div class="agent-hd">
-        <div class="agent-title">
-          <div class="agent-icon"><i class="ti ti-chess"></i></div>
-          Strategic Domain Agent &mdash; S-01, S-02, S-03
-        </div>
-        <div style="display:flex;align-items:center;gap:.5rem">
-          <div class="agent-meta" id="agent-meta-strategic">Not run</div>
-          <button class="agent-btn" id="btn-strategic" onclick="runAgent('strategic')"><i class="ti ti-player-play" style="font-size:10px"></i> Run</button>
-        </div>
-      </div>
-      <div class="agent-output" id="agent-out-strategic">Click Run to generate strategic domain recommendations based on current KRI values.</div>
-    </div>
-
-    <!-- Operational Agent -->
-    <div class="agent-card" id="agent-card-operational">
-      <div class="agent-hd">
-        <div class="agent-title">
-          <div class="agent-icon"><i class="ti ti-settings"></i></div>
-          Operational Domain Agent &mdash; O-01, O-02, O-03, O-04
-        </div>
-        <div style="display:flex;align-items:center;gap:.5rem">
-          <div class="agent-meta" id="agent-meta-operational">Not run</div>
-          <button class="agent-btn" id="btn-operational" onclick="runAgent('operational')"><i class="ti ti-player-play" style="font-size:10px"></i> Run</button>
-        </div>
-      </div>
-      <div class="agent-output" id="agent-out-operational">Click Run to generate operational domain recommendations based on current KRI values and Supply Chain model outputs.</div>
-    </div>
-
-    <!-- Financial Agent -->
-    <div class="agent-card" id="agent-card-financial">
-      <div class="agent-hd">
-        <div class="agent-title">
-          <div class="agent-icon"><i class="ti ti-coin"></i></div>
-          Financial Domain Agent &mdash; F-01, F-02, F-03, F-04
-        </div>
-        <div style="display:flex;align-items:center;gap:.5rem">
-          <div class="agent-meta" id="agent-meta-financial">Not run</div>
-          <button class="agent-btn" id="btn-financial" onclick="runAgent('financial')"><i class="ti ti-player-play" style="font-size:10px"></i> Run</button>
-        </div>
-      </div>
-      <div class="agent-output" id="agent-out-financial">Click Run to generate financial domain recommendations based on current KRI values, EBITDA Stress model, and Hedge Analyser outputs.</div>
-    </div>
-
-    <!-- Compliance Agent -->
-    <div class="agent-card" id="agent-card-compliance">
-      <div class="agent-hd">
-        <div class="agent-title">
-          <div class="agent-icon"><i class="ti ti-scale"></i></div>
-          Compliance Domain Agent &mdash; C-01, C-02, C-03
-        </div>
-        <div style="display:flex;align-items:center;gap:.5rem">
-          <div class="agent-meta" id="agent-meta-compliance">Not run</div>
-          <button class="agent-btn" id="btn-compliance" onclick="runAgent('compliance')"><i class="ti ti-player-play" style="font-size:10px"></i> Run</button>
-        </div>
-      </div>
-      <div class="agent-output" id="agent-out-compliance">Click Run to generate compliance domain recommendations with deadline-anchored urgency.</div>
-    </div>
-
-    <!-- CRA Agent -->
-    <div class="agent-card" id="agent-card-cra" style="border-color:rgba(200,169,110,.3)">
-      <div class="agent-hd">
-        <div class="agent-title">
-          <div class="agent-icon" style="background:rgba(200,169,110,.25);border-color:rgba(200,169,110,.4)"><i class="ti ti-shield-check"></i></div>
-          <span style="color:var(--gold-lt)">Chief Risk Agent (CRA) &mdash; Cross-domain synthesis</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:.5rem">
-          <div class="agent-meta" id="agent-meta-cra">Requires domain agents</div>
-          <button class="agent-btn" id="btn-cra" onclick="runAgent('cra')" disabled><i class="ti ti-player-play" style="font-size:10px"></i> Run</button>
-        </div>
-      </div>
-      <div class="agent-output" id="agent-out-cra">Run all four domain agents first. The CRA synthesises their outputs into a complete Risk Committee Summary with cross-domain connections and board-level recommended actions.</div>
-    </div>
-
-    <!-- Regulatory Signals Agent -->
-    <div class="agent-card" id="agent-card-regulatory">
-      <div class="agent-hd">
-        <div class="agent-title">
-          <div class="agent-icon"><i class="ti ti-radar"></i></div>
-          Regulatory Signals Agent &mdash; Live scanning
-        </div>
-        <div style="display:flex;align-items:center;gap:.5rem">
-          <div class="agent-meta" id="agent-meta-regulatory">Not run</div>
-          <button class="agent-btn" id="btn-regulatory" onclick="runAgent('regulatory')"><i class="ti ti-player-play" style="font-size:10px"></i> Run</button>
-        </div>
-      </div>
-      <div class="agent-output" id="agent-out-regulatory">Click Run to scan for latest regulatory developments relevant to Lenovo: EU AI Act, OFAC enforcement, California SB 253, CSRD, export controls.</div>
-    </div>
-
-  </div>
-</div>
-</div>
 
 <script>
 // ── page switch: show/hide hero shell with ERM page ──
@@ -2247,32 +2115,7 @@ async function runAllAgents(){
   if(runAllBtn) runAllBtn.disabled = false;
 }
 
-// ── NAV EXTENSION for new panels ─────────────────────────────
-function swExtended(n, btn){
-  // Hide all standard pages and new panels
-  document.querySelectorAll('.pg').forEach(function(p){p.classList.remove('on')});
-  document.querySelectorAll('.nav-tabs button').forEach(function(b){b.classList.remove('on')});
-  document.getElementById('pg-agents').style.display = 'none';
-  document.getElementById('pg-q3').style.display = 'none';
-  document.getElementById('hero-landing').style.display = '';
-
-  if(n === 'agents'){
-    document.getElementById('pg-agents').style.display = 'block';
-    if(btn) btn.classList.add('on');
-    buildQ3Grid();
-  } else if(n === 'q3'){
-    document.getElementById('pg-q3').style.display = 'block';
-    if(btn) btn.classList.add('on');
-    buildQ3Grid();
-  } else {
-    sw(n, btn);
-  }
-  setTimeout(function(){window.dispatchEvent(new Event('resize'));},50);
-}
-
-
 // ── initialise ──
-buildQ3Grid();
 buildTrendChart();
 // buildSlopeChart and buildErmCharts removed (canvases no longer in DOM)
 rnReg();
