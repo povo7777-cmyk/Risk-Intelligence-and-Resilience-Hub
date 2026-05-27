@@ -428,7 +428,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
     <!-- alert -->
     <div class="hero-alert">
       <div class="hero-alert-ic"><i class="ti ti-alert-triangle"></i></div>
-      <div class="hero-alert-txt"><strong>CRITICAL:</strong> Three breaches — FX exposure ($4.94B unhedged), supply chain concentration (62.6%), and Net Debt/EBITDA (2.8&times;) — converge on the <strong>June 30 covenant test date</strong>, now 36 days away. Board oversight required.</div>
+      <div class="hero-alert-txt"><strong>CRITICAL:</strong> Three breaches — FX exposure ($4.94B unhedged), supply chain concentration (62.6%), and Net Debt/EBITDA (2.8&times;) — converge on the <strong>June 30 covenant test date</strong>, now <span id="alert-days-jun30">—</span> days away. Board oversight required.</div>
     </div>
 
     <!-- Q1 vs Q2 trend chart — sits above domain cards -->
@@ -649,7 +649,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
     <div class="hero-section-lbl">Critical deadlines</div>
     <div class="hero-deadlines">
       <div class="deadline-row">
-        <div class="dl-days dl-red">36 days</div>
+        <div class="dl-days" id="dl-jun30a">—</div>
         <div class="dl-info">
           <div class="dl-title">June 30 — Net Debt/EBITDA covenant test</div>
           <div class="dl-sub">2.8&times; ratio &middot; only 0.2&times; headroom &middot; FX hedge programme must execute</div>
@@ -657,7 +657,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
         <div class="dl-risk">F-01 / F-03</div>
       </div>
       <div class="deadline-row">
-        <div class="dl-days dl-red">36 days</div>
+        <div class="dl-days" id="dl-jun30b">—</div>
         <div class="dl-info">
           <div class="dl-title">June 30 — Third-party ABAC audit completion</div>
           <div class="dl-sub">AUD002 in-progress &middot; FCPA &amp; UK Bribery Act obligation</div>
@@ -665,7 +665,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
         <div class="dl-risk">C-03</div>
       </div>
       <div class="deadline-row">
-        <div class="dl-days dl-amber">69 days</div>
+        <div class="dl-days" id="dl-aug02">—</div>
         <div class="dl-info">
           <div class="dl-title">August 2 — EU AI Act Annex III enforcement</div>
           <div class="dl-sub">78% coverage vs 90% threshold &middot; 7% global turnover penalty</div>
@@ -673,7 +673,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
         <div class="dl-risk">C-02</div>
       </div>
       <div class="deadline-row">
-        <div class="dl-days dl-amber">90 days</div>
+        <div class="dl-days" id="dl-sep30">—</div>
         <div class="dl-info">
           <div class="dl-title">Q3 2026 — Dual-source supplier qualification</div>
           <div class="dl-sub">Reduce single-source from 62.6% to below 50% &middot; USD 15M programme</div>
@@ -2114,6 +2114,36 @@ async function runAllAgents(){
   if(masterStatus) masterStatus.textContent = 'All agents complete · '+new Date().toLocaleTimeString();
   if(runAllBtn) runAllBtn.disabled = false;
 }
+
+// ── live deadline counters — recalculate on every page load ──
+(function(){
+  function daysUntil(isoDate){
+    var target = new Date(isoDate);
+    target.setHours(0,0,0,0);
+    var today = new Date();
+    today.setHours(0,0,0,0);
+    return Math.ceil((target - today) / 86400000);
+  }
+  function colorClass(days){
+    if(days <= 45)  return 'dl-red';
+    if(days <= 90)  return 'dl-amber';
+    return 'dl-green';
+  }
+  function setDeadline(id, isoDate){
+    var el = document.getElementById(id);
+    if(!el) return;
+    var d = daysUntil(isoDate);
+    el.textContent = d > 0 ? d + ' days' : (d === 0 ? 'Today' : 'Overdue');
+    el.className = 'dl-days ' + (d <= 0 ? 'dl-red' : colorClass(d));
+  }
+  setDeadline('dl-jun30a', '2026-06-30');
+  setDeadline('dl-jun30b', '2026-06-30');
+  setDeadline('dl-aug02',  '2026-08-02');
+  setDeadline('dl-sep30',  '2026-09-30');
+  // Update alert banner inline count
+  var alertSpan = document.getElementById('alert-days-jun30');
+  if(alertSpan){ var d=daysUntil('2026-06-30'); alertSpan.textContent = d > 0 ? d : 'overdue'; }
+})();
 
 // ── initialise ──
 buildTrendChart();
