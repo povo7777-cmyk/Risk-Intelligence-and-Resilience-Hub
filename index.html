@@ -965,7 +965,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
   <div class="pg-hd"><h2>EBITDA stress simulator</h2><p>EBITDA distribution under simultaneous FX shock + demand compression. Calibrated to Lenovo actual: ~4% EBITDA margin, 96% total cost ratio, USD 170M covenant headroom. Linked to F-01 &amp; S-01. 5,000 simulations &middot; 3-year horizon.</p></div>
   <div style="background:#1a0808;border:1px solid #3a1515;border-radius:10px;padding:.8rem 1.1rem;margin-bottom:1rem;display:flex;align-items:flex-start;gap:10px">
     <i class="ti ti-alert-triangle" style="color:#ef4444;font-size:16px;margin-top:1px;flex-shrink:0"></i>
-    <div style="font-size:12px;color:#fca5a5;line-height:1.6"><strong style="color:#ef4444">Validated finding (Python simulation, N=5,000, seed=42):</strong> At Lenovo defaults (96% cost ratio, USD 57B revenue, 20% volatility), P(covenant breach) = <strong style="color:#ef4444">44.6%</strong>. A +1pp cost increase raises this to <strong>83.3%</strong>. Top customer loss raises it to <strong>56.6%</strong>. Covenant headroom: <strong>USD 170M</strong> only.</div>
+    <div style="font-size:12px;color:#fca5a5;line-height:1.6"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444">Validated finding (Python simulation, N=5,000, seed=42):</strong> At current defaults (96.0% cost ratio, USD 57.0B revenue, 20.0% volatility), P(covenant breach) = <strong style="color:#ef4444">51.6%</strong>. A +1pp cost increase raises this to <strong>58.9%</strong>. Top customer loss raises it to <strong>53.6%</strong>. Covenant headroom: <strong>USD 152M</strong> only.</div>
   </div>
   <div class="info"><strong>What this models:</strong> Each simulation draws a random price path (log-normal with drift + volatility), a demand year, and a random cost variance. EBITDA = revenue &minus; costs. Adjust sliders to stress-test assumptions.</div>
   <div class="three">
@@ -1032,8 +1032,8 @@ input[type=range]{width:100%;accent-color:var(--navy)}
     <div class="card">
       <div class="ct">Hedge parameters</div>
       <div class="slg"><div class="slr"><span>Forward rate (index)</span><span id="hv-fp">100</span></div><input type="range" min="80" max="120" step="1" value="100" id="hs-fp"></div>
-      <div class="slg"><div class="slr"><span>Hedge ratio (%)</span><span id="hv-hr">46</span></div><input type="range" min="0" max="100" step="5" value="45" id="hs-hr"></div>
-      <div class="slg"><div class="slr"><span>Hedge cost (USD M)</span><span id="hv-hc">80</span></div><input type="range" min="0" max="300" step="10" value="80" id="hs-hc"></div>
+      <div class="slg"><div class="slr"><span>Hedge ratio (%)</span><span id="hv-hr">45</span></div><input type="range" min="0" max="100" step="5" value="45" id="hs-hr"></div>
+      <div class="slg"><div class="slr"><span>Hedge cost (USD M)</span><span id="hv-hc">60</span></div><input type="range" min="0" max="300" step="10" value="60" id="hs-hc"></div>
     </div>
     <div class="card">
       <div class="ct">Comparison metrics</div>
@@ -1081,21 +1081,21 @@ input[type=range]{width:100%;accent-color:var(--navy)}
   <div class="pg-hd"><h2>Supply chain resilience stress test &mdash; O-01</h2><p>Monte Carlo operational loss model: supplier failure (Poisson) &times; demand shock (log-normal) &times; recovery lead-time. Toggle mitigations to quantify financial impact.</p></div>
   <div style="background:#0a1a0a;border:1px solid #153515;border-radius:10px;padding:.8rem 1.1rem;margin-bottom:1rem;display:flex;align-items:flex-start;gap:10px">
     <i class="ti ti-chart-dots" style="color:#22c55e;font-size:16px;margin-top:1px;flex-shrink:0"></i>
-    <div style="font-size:12px;color:#86efac;line-height:1.6"><strong style="color:#22c55e">Validated benchmarks (Python simulation, N=5,000):</strong> Baseline VaR 95%: <strong>USD 2,509M</strong>. Dual-source programme (USD 15M/yr): saves <strong>USD 663M</strong> VaR. Inventory buffer (USD 8M/yr): saves <strong>USD 584M</strong>. Both together: saves <strong>USD 1,199M</strong> &mdash; 48× return on mitigation investment.</div>
+    <div style="font-size:12px;color:#86efac;line-height:1.6"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e">Validated benchmarks (Python simulation, N=5,000):</strong> Baseline VaR 95%: <strong>USD 2,049M</strong>. Dual-source programme (USD 15M/yr): saves <strong>USD 253M</strong> VaR. Inventory buffer (USD 8M/yr): saves <strong>USD 147M</strong>. Both together: saves <strong>USD 369M</strong> &mdash; 16&times; return on mitigation investment.</div>
   </div>
   <div class="info"><strong>What this models:</strong> Each simulation draws a supplier failure event (Poisson arrival), a demand shock severity, and a recovery lead-time. Revenue loss = lost production &times; price + emergency sourcing cost. Concurrent demand shock amplifies losses.</div>
   <div class="three">
     <div class="card">
       <div class="ct">Supplier failure parameters</div>
       <div class="slg"><div class="slr"><span>Critical supplier count</span><span id="ov-fl">8</span></div><input type="range" min="3" max="20" step="1" value="8" id="os-fl"></div>
-      <div class="slg"><div class="slr"><span>MTBF per supplier (years)</span><span id="ov-mt">7</span></div><input type="range" min="2" max="15" step="1" value="7" id="os-mt"></div>
+      <div class="slg"><div class="slr"><span>MTBF per supplier (years)</span><span id="ov-mt">11</span></div><input type="range" min="2" max="15" step="1" value="11" id="os-mt"></div>
       <div class="slg"><div class="slr"><span>Mean recovery time (months)</span><span id="ov-rc">5</span></div><input type="range" min="1" max="12" step="1" value="5" id="os-rc"></div>
       <div class="slg"><div class="slr"><span>Emergency sourcing premium (%)</span><span id="ov-ec">25</span></div><input type="range" min="5" max="60" step="5" value="25" id="os-ec"></div>
     </div>
     <div class="card">
       <div class="ct">Demand &amp; revenue</div>
-      <div class="slg"><div class="slr"><span>Annual revenue at risk (USD B)</span><span id="ov-rv">12</span></div><input type="range" min="2" max="30" step="1" value="12" id="os-rv"></div>
-      <div class="slg"><div class="slr"><span>Demand shock probability (% / yr)</span><span id="ov-dp">30</span></div><input type="range" min="5" max="60" step="5" value="30" id="os-dp"></div>
+      <div class="slg"><div class="slr"><span>Annual revenue at risk (USD B)</span><span id="ov-rv">9</span></div><input type="range" min="2" max="30" step="1" value="9" id="os-rv"></div>
+      <div class="slg"><div class="slr"><span>Demand shock probability (% / yr)</span><span id="ov-dp">17</span></div><input type="range" min="5" max="60" step="5" value="17" id="os-dp"></div>
       <div class="slg"><div class="slr"><span>Demand shock impact (%)</span><span id="ov-di">15</span></div><input type="range" min="5" max="40" step="5" value="15" id="os-di"></div>
       <div class="slg"><div class="slr"><span>Impact volatility (%)</span><span id="ov-dv">8</span></div><input type="range" min="2" max="20" step="2" value="8" id="os-dv"></div>
     </div>
@@ -1847,7 +1847,7 @@ function runHG(){
   document.getElementById('hv-sp').textContent=sp;document.getElementById('hv-vl').textContent=document.getElementById('hs-vl').value;
   document.getElementById('hv-dr').textContent=document.getElementById('hs-dr').value;document.getElementById('hv-fp').textContent=fp;
   document.getElementById('hv-hr').textContent=document.getElementById('hs-hr').value;document.getElementById('hv-hc').textContent=hc;
-  var N=5000,base=12,uh=[],hd=[];
+  var N=5000,base=9.1,uh=[],hd=[];
   for(var i=0;i<N;i++){var tu=0,th=0,p=sp;for(var y=0;y<3;y++){p=p*Math.exp((dr-.5*vl*vl)+vl*randn());var av=base*(p/100)*(1+.12*randn());var hv=Math.min(base*(fp/100)*hr,av);tu+=av*1000;th+=(hv*1000+(av-Math.min(base*(fp/100)*hr,av))*1000-hc);}uh.push(tu/3);hd.push(th/3);}
   uh.sort(function(a,b){return a-b});hd.sort(function(a,b){return a-b});
   function st(a){var n=a.length,vi=Math.floor(n*.05);return{var95:a[vi],negP:a.filter(function(v){return v<9600}).length/n*100,p95:a[Math.floor(n*.95)]};}
