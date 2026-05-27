@@ -519,6 +519,78 @@ def _repair_truncated_json(text: str) -> str:
     return text + closer
 
 
+# ── Model params brief formatter ─────────────────────────────────────────────
+
+def _format_model_params_for_brief(model_params: dict) -> str:
+    """
+    Format live model parameters and simulation outputs for the specialist brief.
+    Falls back to labelled defaults if model_params is empty (standalone run).
+    """
+    if not model_params:
+        return (
+            "EBITDA Stress: revenue USD 57B | cost ratio 96% | volatility 20% | "
+            "P(covenant breach) 44.6% | headroom USD 170M\n"
+            "Hedge Analyser: gross FX exposure USD 9,140M | hedge ratio 46% | "
+            "unhedged USD 4,940M | unrealised P&L USD -47M\n"
+            "Supply Chain: 8 suppliers | recovery 5mo | "
+            "VaR baseline USD 2,509M | dual-src saves USD 663M\n"
+            "(NOTE: these are defaults — model_params not in state; "
+            "run full pipeline for live values)"
+        )
+
+    ep = model_params.get("ebitda",       {})
+    hp = model_params.get("hedge",        {})
+    sp = model_params.get("supply_chain", {})
+    lines = []
+
+    if ep:
+        lines.append(
+            f"EBITDA Stress:\n"
+            f"  Parameters: revenue USD {ep.get('revenue_usd_b')}B | "
+            f"cost ratio {ep.get('cost_ratio_pct')}% | "
+            f"volatility {ep.get('volatility_pct')}% p.a. | "
+            f"demand var {ep.get('demand_var_pct')}%\n"
+            f"  Outputs:    P(covenant breach) {ep.get('p_covenant_breach_pct')}% | "
+            f"+1pp cost → {ep.get('p_breach_cost_up1pp_pct')}% | "
+            f"top-cust loss → {ep.get('p_breach_top_cust_loss_pct')}% | "
+            f"VaR 95% USD {ep.get('ebitda_var_95_usd_m', 0):,}M | "
+            f"headroom USD {int(ep.get('ebitda_headroom_usd_m', 0))}M"
+        )
+
+    if hp:
+        lines.append(
+            f"Hedge Analyser:\n"
+            f"  Parameters: gross FX USD {hp.get('gross_exposure_usd_m', 0):,.0f}M | "
+            f"hedge ratio {hp.get('hedge_ratio_pct')}% | "
+            f"volatility {hp.get('volatility_pct')}% p.a. | "
+            f"hedge cost USD {hp.get('hedge_cost_usd_m')}M\n"
+            f"  Outputs:    unhedged USD {hp.get('unhedged_usd_m', 0):,.0f}M | "
+            f"unrealised P&L USD {hp.get('unrealised_pnl_usd_m')}M | "
+            f"VaR unhedged USD {hp.get('var_95_unhedged_usd_m', 0):,}M | "
+            f"VaR hedged USD {hp.get('var_95_hedged_usd_m', 0):,}M | "
+            f"improvement USD {hp.get('var_improvement_usd_m', 0):,}M"
+        )
+
+    if sp:
+        lines.append(
+            f"Supply Chain Stress:\n"
+            f"  Parameters: {sp.get('supplier_count')} suppliers | "
+            f"MTBF {sp.get('mtbf_years')}yr | "
+            f"recovery {sp.get('recovery_months')}mo | "
+            f"revenue at risk USD {sp.get('rev_at_risk_usd_b')}B | "
+            f"demand shock {sp.get('demand_shock_prob_pct')}%/yr\n"
+            f"  Outputs:    VaR baseline USD {sp.get('var_95_baseline_usd_m', 0):,}M | "
+            f"CVaR USD {sp.get('cvar_95_baseline_usd_m', 0):,}M | "
+            f"dual-src saves USD {sp.get('saving_dual_src_usd_m', 0):,}M "
+            f"({sp.get('roi_dual_src_x')}× ROI) | "
+            f"inv-buffer saves USD {sp.get('saving_inv_buff_usd_m', 0):,}M | "
+            f"both saves USD {sp.get('saving_both_usd_m', 0):,}M "
+            f"({sp.get('roi_both_x')}× ROI)"
+        )
+
+    return "\n".join(lines) if lines else "(model_params empty)"
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 
 def run(state: dict | None = None) -> dict:
@@ -547,9 +619,13 @@ def run(state: dict | None = None) -> dict:
           f"{len(det_findings) - critical_count - high_count} other")
 
     # Build shared data brief for both specialists
-    # Include board summary and exec recs from state if available
+    # Include board summary, exec recs, and live model params from state
     board_summary_text = (state or {}).get("board_summary", "")
-    exec_recs = (state or {}).get("exec_rec_drafts", {})
+    exec_recs          = (state or {}).get("exec_rec_drafts", {})
+    model_params       = (state or {}).get("model_params", {})
+    # Fall back to store if state has no model_params (e.g. standalone run)
+    if not model_params:
+        model_params = store.get("model_params", {})
 
     shared_brief = f"""
 === COMPANY CONTEXT ===
@@ -590,24 +666,8 @@ avg_hedge_ratio_pct:     amber=60%,   breach=45%   (CSV: amber=55%, breach=40%)
 === HRIS / TALENT ===
 {json.dumps(raw["hris_talent"], indent=2)}
 
-=== EBITDA STRESS MODEL DEFAULT PARAMETERS ===
-Base revenue: USD 57B | Cost ratio: 96% | Volatility: 20% p.a. | Demand variability: 12%
-Implied base EBITDA: USD 2.28B | Covenant threshold: P(EBITDA < USD 2.13B) = 44.6%
-Covenant headroom: USD 170M
-
-=== HEDGE ANALYSER DEFAULT PARAMETERS ===
-FX-exposed revenue: USD 12B | Spot base: 95 | Volatility: 18% p.a.
-Default hedge ratio: 60% | Forward rate: 100 | Hedge cost: USD 80M
-
-=== SUPPLY CHAIN MODEL DEFAULT PARAMETERS ===
-Critical suppliers: 8 | MTBF display: 7yr (SLIDER DEFAULT: 15yr — UI BUG)
-Recovery time: 3 months | Revenue at risk: USD 12B
-Demand shock P: 30%/yr | Demand shock impact: 15%
-
-=== VALIDATED MODEL OUTPUTS (from dashboard banners) ===
-EBITDA: P(covenant breach) = 44.6% | CVaR 95% not specified
-Supply chain: Baseline VaR 95% = USD 2,509M | Dual-source saves USD 663M VaR
-Hedge: Dual-source + inventory buffer saves USD 1,199M combined
+=== MODEL PARAMETERS & SIMULATION OUTPUTS (live — calibrated from current CSVs) ===
+{_format_model_params_for_brief(model_params)}
 
 === DETERMINISTIC CROSS-CHECKS ALREADY COMPLETED ===
 {json.dumps(det_findings, indent=2)}
