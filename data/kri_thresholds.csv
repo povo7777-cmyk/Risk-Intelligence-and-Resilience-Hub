@@ -1,0 +1,34 @@
+risk_id,kri_name,amber_threshold,breach_threshold,direction,unit,description
+S-01,geopolitical_signal_count,2,3,higher_worse,count,Number of geopolitical signals detected in market intelligence this period
+S-01,high_severity_signals,1,3,higher_worse,count,Number of high-severity geopolitical signals this period
+S-02,competitive_signals,3,5,higher_worse,count,Number of AI competitive signals detected this period
+O-01,single_source_concentration,40,50,higher_worse,%,Single supplier concentration as % of category spend
+O-01,inventory_cover_weeks,6,4,lower_worse,weeks,Minimum inventory cover across critical SKUs
+O-01,supplier_distress_flags,1,3,higher_worse,count,Suppliers flagged for financial/operational distress
+O-02,mttd_days,3,7,higher_worse,days,Mean time to detect security incidents — amber at 3d (poor), breach at 7d (critical)
+O-02,mttr_days,7,14,higher_worse,days,Mean time to respond to and contain security incidents
+O-02,patch_compliance_pct,90,80,lower_worse,%,% of systems with patches applied within SLA
+O-02,critical_vulns_open_gt30d,5,10,higher_worse,count,Critical vulnerabilities open more than 30 days
+O-02,it_rto_hours,4,6,higher_worse,hours,IT recovery time objective for order management and fulfilment systems
+O-03,field_failure_rate_pct,0.05,0.10,higher_worse,%,Product field failure rate
+O-03,recall_readiness_score_pct,80,70,lower_worse,%,Readiness score for executing a product recall
+O-03,safety_incidents_ytd,1,3,higher_worse,count,Safety incidents year to date
+O-04,tech_attrition_rate_pct,12,18,higher_worse,%,Engineering and tech function voluntary attrition
+O-04,critical_open_roles_gt60d,3,6,higher_worse,count,Critical roles vacant more than 60 days
+O-04,svp_succession_coverage_pct,80,70,lower_worse,%,SVP and above roles with identified successor
+F-01,unhedged_fx_exposure_usd_m,350,500,higher_worse,USD_M,Gross unhedged FX exposure in USD millions
+F-01,avg_hedge_ratio_pct,60,45,lower_worse,%,Average hedge ratio across all FX positions
+F-02,top_customer_concentration_pct,20,25,higher_worse,%,Revenue concentration in single largest customer
+F-02,overdue_90d_pct,0.8,1.5,higher_worse,%,AR overdue more than 90 days as % of total AR
+F-02,bad_debt_provision_pct,0.70,0.80,higher_worse,%,Bad debt provision as % of total AR — breach threshold equals Trade Finance covenant limit
+F-03,net_debt_ebitda_ratio,2.5,3.0,higher_worse,ratio,Net debt to EBITDA ratio against covenant ceiling — amber at 2.5x provides 60-day warning before 3.0x covenant
+F-03,liquidity_headroom_usd_b,1.2,0.9,lower_worse,USD_B,Available liquidity headroom in USD billions
+F-03,debt_maturity_runway_months,12,6,lower_worse,months,Months until next material debt maturity
+F-04,audit_findings_open,2,5,higher_worse,count,High-severity internal audit findings open
+S-03,synergy_delivery_pct,75,70,lower_worse,%,M&A synergy delivery against integration plan target
+C-01,export_screening_coverage_pct,98,95,lower_worse,%,% of transactions screened against denied party lists
+C-01,confirmed_sanctions_violations_ytd,999999,0.5,higher_worse,count,Confirmed sanctions violations year to date — zero tolerance
+C-02,ai_audit_coverage_pct,95,90,lower_worse,%,AI systems covered by audit against regulatory requirement
+C-02,gdpr_dsr_resolution_rate_pct,95,90,lower_worse,%,GDPR data subject requests resolved within statutory deadline
+C-03,third_party_abac_coverage_pct,100,95,lower_worse,%,Third parties covered by anti-bribery and corruption programme
+C-03,csrd_scope3_disclosure_pct,80,70,lower_worse,%,Scope 3 emissions disclosed against CSRD requirement
