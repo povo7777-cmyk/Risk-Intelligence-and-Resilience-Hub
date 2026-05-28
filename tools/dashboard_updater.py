@@ -35,6 +35,7 @@ KRI_NAME_MAP = {
     "single_source_concentration":        "Single-source concentration",
     "inventory_cover_weeks":              "Inventory cover (weeks)",
     "supplier_distress_flags":            "Supplier financial distress flags",
+    "supplier_cyber_resilience_assess_pct": "Single-source supplier cyber resilience assessment coverage",
     # Operational — cyber (O-02)
     "mttd_days":                          "Mean time to detect — MTTD (hours)",
     "mttr_days":                          "Mean time to respond — MTTR (days)",
@@ -85,6 +86,7 @@ KRI_FORMAT = {
     "single_source_concentration":        lambda v: f"{v}%",
     "inventory_cover_weeks":              lambda v: f"{v}wk",
     "supplier_distress_flags":            lambda v: str(int(v)),
+    "supplier_cyber_resilience_assess_pct": lambda v: f"{v}%",
     "mttd_days":                          lambda v: f"{int(v * 24)}h",   # store in days, HTML shows hours
     "mttr_days":                          lambda v: f"{int(v)} days",
     "patch_compliance_pct":               lambda v: f"{v}%",
@@ -124,6 +126,7 @@ KRI_DATA_KEY_MAP = {
     "o01_single_source":      "single_source_concentration",
     "o01_inventory":          "inventory_cover_weeks",
     "o01_distress":           "supplier_distress_flags",
+    "o01_cyber_assess":       "supplier_cyber_resilience_assess_pct",
     "o02_mttd":               "mttd_days",
     "o02_mttr":               "mttr_days",
     "o02_patch":              "patch_compliance_pct",
@@ -152,6 +155,7 @@ THRESHOLD_FORMAT = {
     "single_source_concentration":        lambda v: f"{v:g}%",
     "inventory_cover_weeks":              lambda v: f"{int(v)}wk",
     "supplier_distress_flags":            lambda v: str(int(v)),
+    "supplier_cyber_resilience_assess_pct": lambda v: f"{v:g}%",
     "mttd_days":                          lambda v: f"{int(v * 24)}h",
     "mttr_days":                          lambda v: f"{int(v)} days",
     "patch_compliance_pct":               lambda v: f"{v:g}%",
