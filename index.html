@@ -1221,7 +1221,7 @@ var DOMAINS={
        metric:'Synergy delivery vs target by month 18 (%); pipeline acquisition DD coverage (%)',threshold:'Synergy delivery >=80% by month 18; DD coverage >=80% before deal close',owner:'CFO / Chief Strategy Officer',
        tolNote:'Synergy threshold reflects the company\'s historical M&A track record — IBM PC (2005), IBM x86 server (2014), Motorola (2014) all required multi-year integration. Below 70% synergy delivery at month 18 has historically preceded goodwill impairment. Pipeline DD threshold directly addresses expert override: two H2 2026 acquisitions with no controls yet designed.',
        kris:[
-         {n:'Synergy delivery vs target',cur:'84%',a:'80%',r:'70%',tr:[40,55,65,72,80,84],ts:'ok',
+         {n:'Synergy delivery vs target',cur:'84%',a:'75%',r:'70%',tr:[40,55,65,72,80,84],ts:'ok',
           ra:'Integration steering committee review. EBITDA Stress model: synergy shortfall feeds directly into base revenue and COGS assumptions — run simulator with revised revenue to quantify covenant impact. Remediation plan within 30 days. Owner: CFO.',
           rr:'Below 70% synergy delivery: historical precedent (Motorola integration) shows this trajectory leads to goodwill impairment within 36 months. EBITDA Stress model: reduce base revenue by synergy gap amount to quantify P(covenant breach) increase. External programme advisor engaged. Board update within 10 days. Owner: CEO.'},
          {n:'Pipeline acquisition DD coverage (%)',cur:'35%',a:'80%',r:'60%',tr:[0,0,0,10,20,35],ts:'br',
@@ -1242,7 +1242,7 @@ var DOMAINS={
          {n:'Inventory cover (weeks)',cur:'3.9wk',a:'6wk',r:'4wk',tr:[6.0,6.0,5.0,5.0,3.9,3.9],ts:'br',
           ra:'Procurement to rebuild safety stock to 6-week minimum. Supply Chain model: strategic inventory buffer toggle shows 60% absorption of short disruptions — at USD 12B revenue at risk, 6-week buffer prevents ~USD 420M disruption losses in 60% of scenarios. Owner: CPO.',
           rr:'4 weeks cover vs 18-week TSMC lead time = zero buffer for any disruption. Supply Chain model: run inventory buffer scenario — shows recovery from current VaR baseline. COO authorised to use premium sourcing immediately. Owner: COO.'},
-         {n:'Supplier financial distress flags',cur:'2',a:'1',r:'2',tr:[0.0,1.0,1.0,2.0,2.0,2.0],ts:'am',
+         {n:'Supplier financial distress flags',cur:'2',a:'1',r:'3',tr:[0.0,1.0,1.0,2.0,2.0,2.0],ts:'am',
           ra:'Procurement financial review of flagged supplier immediately. Identify backup ODM/EMS sources and accelerate qualification. Owner: CPO.',
           rr:'2 distress flags = structural supply continuity risk. Activate supplier replacement programme. Legal review of supply contracts. Board update within 5 days. Owner: COO/GC.'}
        ]},
@@ -1267,10 +1267,10 @@ var DOMAINS={
        metric:'Field failure rate (%); recall readiness score (%)',threshold:'Field failure <0.03%; recall readiness >=85%',owner:'Chief Quality Officer / COO',
        tolNote:'Thresholds anchored to regulatory trigger points at the company\'s scale: the organisation ships ~60M PCs and ~50M smartphones per year. At 0.04% field failure rate = 44,000 units — borderline CPSC mandatory report territory. ThinkPad brand quality is central to enterprise business model; a recall affecting the ThinkPad line has disproportionate revenue impact vs unit volume. Recall readiness red at 75% — below this a recall cannot be executed within EU/US regulatory timelines across 180+ countries. Recall cost estimate: USD 150-400M for a high-volume laptop SKU.',
        kris:[
-         {n:'Field failure rate',cur:'0.048%',a:'0.03%',r:'0.04%',tr:[0.035,0.038,0.045,0.048,0.048,0.048],ts:'ok',
+         {n:'Field failure rate',cur:'0.048%',a:'0.05%',r:'0.1%',tr:[0.035,0.038,0.045,0.048,0.048,0.048],ts:'ok',
           ra:'Quality engineering root-cause analysis within 14 days. At 0.03%, approaching CPSC mandatory report threshold at 60M+ unit annual shipment scale. Component review initiated — differentiate ThinkPad (enterprise brand risk) from consumer lines. Owner: CQO.',
           rr:'0.04% field failure at 60M units = 24,000 failing units — CPSC mandatory report territory. Estimated recall cost USD 150-400M. Product hold order. Safety investigation. CPSC notification within 24h. EU notification within 72h. Owner: CEO/CQO.'},
-         {n:'Recall readiness score',cur:'72%',a:'85%',r:'75%',tr:[78.0,75.0,74.0,72.0,72.0,72.0],ts:'am',
+         {n:'Recall readiness score',cur:'72%',a:'80%',r:'70%',tr:[78.0,75.0,74.0,72.0,72.0,72.0],ts:'am',
           ra:'Quality team to update recall playbook for 180+ country distribution network. Score must be independently validated by Internal Audit — not self-assessed by quality team. Tabletop exercise within 60 days. Owner: CQO.',
           rr:'Below 75% readiness, a recall across the company\'s 180+ country footprint cannot be executed within regulatory timelines. Recall programme escalated to COO. External logistics and regulatory specialist engaged within 30 days. Owner: COO.'}
        ]},
@@ -1278,10 +1278,10 @@ var DOMAINS={
        metric:'Critical open roles >60 days (count); SVP+ succession coverage (%); critical programme staffing — dual-source & SOC (%)',threshold:'Open critical roles <=5; SVP+ succession >=92%; programme staffing >=80%',owner:'CHRO',
        tolNote:'Thresholds calibrated as operational multiplier on O-01 and O-02: above 5 open critical IT-Operations roles, SOC coverage falls below 80% (feeds MTTD directly). Above 8 open roles, dual-source programme cannot execute on schedule. Key-person note: CEO Yang Yuanqing (~8% shareholder, defining strategic force since 2005) has no documented public succession plan — the SVP+ metric should explicitly include CEO succession as the highest-severity succession gap.',
        kris:[
-         {n:'Critical open roles >60 days',cur:'7',a:'5',r:'8',tr:[5.0,5.0,6.0,7.0,7.0,7.0],ts:'br',
+         {n:'Critical open roles >60 days',cur:'7',a:'3',r:'6',tr:[5.0,5.0,6.0,7.0,7.0,7.0],ts:'br',
           ra:'Talent acquisition escalation. Above 5 open IT-Operations roles, SOC coverage falls below 80% — directly degrades MTTD. Supply Chain model: programme staffing decline feeds into dual-source VaR model. Interim resourcing approved immediately. Owner: CHRO.',
           rr:'Above 8 open critical roles: dual-source programme cannot execute (O-01 VaR remains at baseline ~USD 800M-1.2B vs mitigated ~USD 700M-1.1B) and SOC is critically understaffed (MTTD remains at 264h). External executive search mandated within 14 days. Owner: COO.'},
-         {n:'SVP+ succession coverage (%)',cur:'72%',a:'92%',r:'85%',tr:[68.0,70.0,71.0,72.0,72.0,72.0],ts:'am',
+         {n:'SVP+ succession coverage (%)',cur:'72%',a:'80%',r:'70%',tr:[68.0,70.0,71.0,72.0,72.0,72.0],ts:'am',
           ra:'CHRO to identify succession gaps. Below 92% means at least one SVP role has no documented successor during elevated operational risk period. CEO succession gap (Yang Yuanqing) should be explicitly documented and reviewed by Board Governance Committee. Owner: CHRO.',
           rr:'Below 85% succession coverage during concurrent O-01/O-02 breach period. CEO succession gap at this risk posture = HKEx corporate governance disclosure obligation. CEO review of leadership pipeline. Board Governance Committee notified. Owner: CEO/CHRO.'},
          {n:'Critical programme staffing — dual-source & SOC (%)',cur:'48%',a:'80%',r:'60%',tr:[90.0,85.0,75.0,65.0,55.0,48.0],ts:'br',
@@ -1310,10 +1310,10 @@ var DOMAINS={
        metric:'Single customer share of ISG segment revenue (%); bad debt provision % of receivables',threshold:'No single customer >10% of ISG segment; bad debt provision <=1.2%',owner:'CFO / Chief Revenue Officer',
        tolNote:'Single customer threshold anchored to covenant model: at 10% of USD 20B ISG = USD 2B revenue, customer loss = ~USD 360M EBITDA impact — 212% of USD 170M covenant headroom. Bad debt red at 1.2% on USD 7B receivables = USD 84M provision — USD 45M above 0.8% base. Note: China government/education procurement represents concentrated revenue subject to policy risk as much as commercial risk — a policy shift can eliminate a procurement channel without commercial warning.',
        kris:[
-         {n:'Single customer concentration (ISG segment)',cur:'22.1%',a:'8%',r:'10%',tr:[7.5,8.0,9.0,10.0,22.1,22.1],ts:'am',
+         {n:'Single customer concentration (ISG segment)',cur:'22.1%',a:'20%',r:'25%',tr:[7.5,8.0,9.0,10.0,22.1,22.1],ts:'am',
           ra:'CRO active diversification programme. EBITDA Stress model: run with base revenue reduced by customer revenue amount to quantify covenant probability. Review China government/education procurement concentration separately. Owner: CRO.',
           rr:'EBITDA Stress model — top customer loss scenario: reduce base revenue slider by USD 2B (22.1% of USD 20B ISG = ~USD 4.4B revenue × 35% ISG share of total). P(covenant breach) increases materially from current baseline. Sales to accelerate enterprise new logo programme. Board notification within 5 days. Owner: CFO.'},
-         {n:'Bad debt provision % of receivables',cur:'1.44%',a:'0.70%',r:'0.80%',tr:[0.4,0.45,0.52,0.65,0.72,1.44],ts:'br',
+         {n:'Bad debt provision % of receivables',cur:'1.44%',a:'0.7%',r:'0.8%',tr:[0.4,0.45,0.52,0.65,0.72,1.44],ts:'br',
           ra:'EBITDA Stress model: each 0.1pp provision increase on USD 7B receivables = USD 7M EBITDA charge — run simulator to show cumulative covenant impact. Credit team review of top-50 accounts. Tighten credit terms for at-risk customers. Owner: CFO.',
           rr:'EBITDA Stress model: at 1.44% provision = USD 101M — USD 59% of USD 170M covenant headroom consumed by bad debt alone. Run EBITDA simulator with COGS adjusted upward for provision charge to show P(covenant breach). Audit Committee notification required. Credit insurance review and receivables factoring assessed. Owner: CFO.'}
        ]},
@@ -1321,7 +1321,7 @@ var DOMAINS={
        metric:'Available liquidity headroom (USD); net-debt/EBITDA ratio; nearest debt maturity runway (months)',threshold:'Liquidity headroom >=USD 800M; net-debt/EBITDA <=3.0x; refinancing initiated >=12 months ahead',owner:'CFO / Group Treasurer',
        tolNote:'At the company\'s ~4% EBITDA margin, USD 800M liquidity threshold = ~35% of annual EBITDA — proportionally much more significant than implied by 18% margin models. Net-debt/EBITDA covenant headroom is USD 170M (not USD 690M as previously modelled). EBITDA Stress model is the primary tool for this risk — covenant breach probability is the most important single output in the hub. Headroom <USD 600M or net-debt/EBITDA >3.5x requires Board notification within 48h.',
        kris:[
-         {n:'Available liquidity headroom (USD)',cur:'USD 1.1B',a:'USD 1.0B',r:'USD 800M',tr:[1.4,1.3,1.2,1.2,1.1,1.1],ts:'am',
+         {n:'Available liquidity headroom (USD)',cur:'USD 1.1B',a:'USD 1.2B',r:'USD 0.9B',tr:[1.4,1.3,1.2,1.2,1.1,1.1],ts:'am',
           ra:'EBITDA Stress model: VaR 95% EBITDA represents the floor scenario — if VaR 95% falls below interest coverage requirement, liquidity headroom collapses. Run simulator at current settings and check VaR 95% vs USD 800M threshold. Treasury drawdown review. CFO to assess RCF availability. Owner: Group Treasurer.',
           rr:'EBITDA Stress model: at VaR 95% EBITDA scenario, show P(liquidity breach) — this is the CFO\'s primary board argument for immediate action. CFO/Board emergency liquidity action plan. Drawdown RCF. Defer capex. Owner: CFO.'},
          {n:'Net-debt/EBITDA ratio',cur:'2.8x',a:'2.5x',r:'3.0x',tr:[2.2,2.3,2.4,2.5,2.7,2.8],ts:'am',
@@ -1350,7 +1350,7 @@ var DOMAINS={
        metric:'Export screening coverage rate (%)',threshold:'Screening coverage 100% of transactions >USD 10K',owner:'Chief Compliance Officer / General Counsel',
        tolNote:'Export screening is the most existential compliance KRI for the organisation. BIS Entity List addition or technology licence denial would eliminate access to Intel/AMD processors, Qualcomm/NVIDIA chips — making it impossible to build products. Screening amber at 99% / red at 98%: at USD 57B revenue with ~45-day debtor terms, 2% unscreened = ~USD 1.1B in transactions without sanctions check per quarter. Note: The company faces dual export control obligations — US EAR/ITAR on US-origin technology AND local export control law on dual-use technologies. Both screening systems must be maintained.',
        kris:[
-         {n:'Export screening coverage rate',cur:'96.0%',a:'99%',r:'98%',tr:[98.0,97.0,96.0,96.0,96.0,96.0],ts:'am',
+         {n:'Export screening coverage rate',cur:'96.0%',a:'98%',r:'95%',tr:[98.0,97.0,96.0,96.0,96.0,96.0],ts:'am',
           ra:'CCO to identify and close screening gaps within 14 days. Separate reporting for US EAR screening vs local export control screening — both systems must reach 99% coverage independently. Owner: CCO.',
           rr:'At 96% coverage on USD 57B revenue: ~USD 2.3B in transactions per year without screening. Even 0.01% confirmed violation rate = USD 2.3M at risk of enforcement per transaction category. Transaction freeze on unscreened deals. Dual-system emergency review: US BIS counsel AND local export control counsel engaged simultaneously. Owner: CEO/GC.'}
        ]},
@@ -1358,7 +1358,7 @@ var DOMAINS={
        metric:'AI Act high-risk system audit coverage (%)',threshold:'AI audit coverage >=85%; zero confirmed GDPR/PIPL violations',owner:'Chief Privacy Officer / CTO',
        tolNote:'AI Act Annex III enforcement postponed to December 2027 (Digital Omnibus amendment, 7 May 2026) — thresholds loosened accordingly. Red moved to 70%, amber to 85%. The company\'s AI Act exposure is primarily through AI-enabled products (AI PCs, AI servers with Neptune liquid cooling, on-device inference) rather than AI service provision. Maximum EU AI Act penalty: 7% of global annual turnover = USD 3.99B at USD 57B revenue — largest potential fine in the compliance domain.',
        kris:[
-         {n:'AI Act audit coverage (%)',cur:'78.0%',a:'85%',r:'70%',tr:[68.0,72.0,75.0,78.0,78.0,78.0],ts:'br',
+         {n:'AI Act audit coverage (%)',cur:'78.0%',a:'95%',r:'90%',tr:[68.0,72.0,75.0,78.0,78.0,78.0],ts:'br',
           ra:'Legal/product team to accelerate audit of remaining AI-enabled systems. December 2027 deadline gives 18 months runway — use it to conduct thorough audit rather than rushed compliance. Prioritise ISG AI infrastructure products (highest revenue impact of non-compliance). Owner: CTO/GC.',
           rr:'Below 70% audit coverage: EU AI Act penalty up to 7% global turnover = USD 3.99B. Suspend deployment of unaudited high-risk AI systems in EU markets. Regulator engagement initiated. Owner: CEO/CTO.'}
        ]},
@@ -1366,7 +1366,7 @@ var DOMAINS={
        metric:'Third-party ABAC due diligence coverage (%); California SB 253 GHG reporting readiness (%)',threshold:'Third-party coverage >=97%; SB 253 readiness >=80% by July 2026',owner:'Chief Compliance Officer / Chief Sustainability Officer',
        tolNote:'ABAC threshold tightened to 97% red (from 95%): at USD 57B scale with global distribution, 3% uncovered = ~USD 1.7B in transactions without ABAC check. The company operates extensively in CPI <40 markets (China, Southeast Asia, Latin America, Middle East, Africa) — FCPA "adequate procedures" defence requires near-complete coverage. Average FCPA settlement for companies of this scale: USD 150-500M (ABB USD 315M, Ericsson USD 206M). California SB 253: hard August 2026 deadline with no delay — applies to Scope 1/2 GHG reporting for companies with >USD 1B California revenue.',
        kris:[
-         {n:'Third-party ABAC coverage (%)',cur:'89.0%',a:'99%',r:'97%',tr:[83.0,85.0,87.0,88.0,89.0,89.0],ts:'br',
+         {n:'Third-party ABAC coverage (%)',cur:'89.0%',a:'100%',r:'95%',tr:[83.0,85.0,87.0,88.0,89.0,89.0],ts:'br',
           ra:'CCO to complete outstanding third-party reviews within 60 days. Track review velocity (completions per month vs required rate to reach 97% by year-end). At current ~1%/quarter improvement rate, coverage reaches 97% in Q4 2027 — 6 quarters from now. Interim: suspend new commercial relationships in CPI <40 markets until coverage improves. Owner: CCO.',
           rr:'ABAC coverage breach in CPI <40 markets with USD 1.7B in uncertified transactions. FCPA enforcement exposure estimated USD 150-500M based on settlement precedents. Suspend payments to uncertified third parties. External FCPA counsel engaged. Board notification within 5 days. Owner: CEO/GC.'},
          {n:'California SB 253 GHG reporting readiness (%)',cur:'42%',a:'80%',r:'60%',tr:[0,0,10,20,30,42],ts:'br',
