@@ -3,11 +3,20 @@ tools/dashboard_updater.py
 Patches the Risk Intelligence and Resilience Hub index.html with
 updated KRI values and approved executive recommendation text.
 Includes idempotency check and sparkline update.
+
+Systemic consistency guarantees applied on every run:
+  - KRI tile thresholds (a: / r:) are synced from kri_thresholds.csv
+    so the CSV is always the single authoritative threshold source.
+  - Model benchmark figures are verified via consistency_checker after
+    all patches are applied, with issues reported before GitHub push.
 """
 
-import json, re, shutil
+import csv, json, re, shutil
 from datetime import datetime, timezone
 from pathlib import Path
+
+THRESHOLDS_PATH   = Path(__file__).parent.parent / "data" / "kri_thresholds.csv"
+BENCHMARKS_PATH   = Path(__file__).parent.parent / "data" / "model_benchmarks.json"
 
 STORE_PATH = Path(__file__).parent.parent / "api" / "risk_store.json"
 BACKUP_DIR = Path(__file__).parent.parent / "dashboard" / "backups"
@@ -107,6 +116,151 @@ KRI_FORMAT = {
     "third_party_abac_coverage_pct":      lambda v: f"{v}%",
     "csrd_scope3_disclosure_pct":         lambda v: f"{v}%",
 }
+
+# ── KRI_DATA chip key → CSV kri_name ─────────────────────────────────────────
+# These are the JS dict keys in the KRI_DATA block (for status chips/tiles).
+# Only entries present in kri_thresholds.csv are listed here.
+KRI_DATA_KEY_MAP = {
+    "o01_single_source":      "single_source_concentration",
+    "o01_inventory":          "inventory_cover_weeks",
+    "o01_distress":           "supplier_distress_flags",
+    "o02_mttd":               "mttd_days",
+    "o02_mttr":               "mttr_days",
+    "o02_patch":              "patch_compliance_pct",
+    "o02_rto":                "it_rto_hours",
+    "o03_field_failure":      "field_failure_rate_pct",
+    "o03_recall":             "recall_readiness_score_pct",
+    "o04_open_roles":         "critical_open_roles_gt60d",
+    "o04_succession":         "svp_succession_coverage_pct",
+    "s03_synergy":            "synergy_delivery_pct",
+    "f01_unhedged_fx":        "unhedged_fx_exposure_usd_m",
+    "f01_hedge_ratio":        "avg_hedge_ratio_pct",
+    "f02_cust_concentration": "top_customer_concentration_pct",
+    "f02_bad_debt":           "bad_debt_provision_pct",
+    "f03_nd_ebitda":          "net_debt_ebitda_ratio",
+    "f03_liquidity":          "liquidity_headroom_usd_b",
+    "f03_maturity":           "debt_maturity_runway_months",
+    "f04_journal":            "audit_findings_open",
+    "c01_screening":          "export_screening_coverage_pct",
+    "c02_ai_act":             "ai_audit_coverage_pct",
+    "c03_abac":               "third_party_abac_coverage_pct",
+    "c03_sb253":              "csrd_scope3_disclosure_pct",
+}
+
+# Threshold display formatters — same units as KRI_FORMAT so tile display is consistent
+THRESHOLD_FORMAT = {
+    "single_source_concentration":        lambda v: f"{v:g}%",
+    "inventory_cover_weeks":              lambda v: f"{int(v)}wk",
+    "supplier_distress_flags":            lambda v: str(int(v)),
+    "mttd_days":                          lambda v: f"{int(v * 24)}h",
+    "mttr_days":                          lambda v: f"{int(v)} days",
+    "patch_compliance_pct":               lambda v: f"{v:g}%",
+    "critical_vulns_open_gt30d":          lambda v: str(int(v)),
+    "it_rto_hours":                       lambda v: f"{v:g}h",
+    "field_failure_rate_pct":             lambda v: f"{v}%",
+    "recall_readiness_score_pct":         lambda v: f"{v:g}%",
+    "safety_incidents_ytd":               lambda v: str(int(v)),
+    "tech_attrition_rate_pct":            lambda v: f"{v:g}%",
+    "critical_open_roles_gt60d":          lambda v: str(int(v)),
+    "svp_succession_coverage_pct":        lambda v: f"{v:g}%",
+    "unhedged_fx_exposure_usd_m":         lambda v: f"USD {int(v)}M",
+    "avg_hedge_ratio_pct":                lambda v: f"{v:g}%",
+    "top_customer_concentration_pct":     lambda v: f"{v:g}%",
+    "bad_debt_provision_pct":             lambda v: f"{v}%",
+    "net_debt_ebitda_ratio":              lambda v: f"{v}x",
+    "liquidity_headroom_usd_b":           lambda v: f"USD {v}B",
+    "debt_maturity_runway_months":        lambda v: f"{int(v)} months",
+    "audit_findings_open":                lambda v: str(int(v)),
+    "synergy_delivery_pct":               lambda v: f"{v:g}%",
+    "export_screening_coverage_pct":      lambda v: f"{v:g}%",
+    "confirmed_sanctions_violations_ytd": lambda v: str(int(v)),
+    "ai_audit_coverage_pct":              lambda v: f"{v:g}%",
+    "gdpr_dsr_resolution_rate_pct":       lambda v: f"{v:g}%",
+    "third_party_abac_coverage_pct":      lambda v: f"{v:g}%",
+    "csrd_scope3_disclosure_pct":         lambda v: f"{v:g}%",
+}
+
+
+def _load_thresholds() -> dict:
+    """Load kri_thresholds.csv → {kri_name: {amber, breach, direction}}."""
+    if not THRESHOLDS_PATH.exists():
+        return {}
+    out = {}
+    with open(THRESHOLDS_PATH, newline="") as f:
+        for row in csv.DictReader(f):
+            out[row["kri_name"]] = {
+                "amber":     float(row["amber_threshold"]),
+                "breach":    float(row["breach_threshold"]),
+                "direction": row["direction"],
+            }
+    return out
+
+
+def _sync_kri_thresholds_to_html(html: str, thresholds: dict) -> tuple[str, list[str]]:
+    """
+    Update every KRI threshold display in the HTML to match kri_thresholds.csv.
+    Patches both:
+      (a) KRI_DATA chip entries:  'js_key': {cur:'...',a:'AMBER',r:'BREACH',ts:'...',risk:'...'}
+      (b) Risk register tile entries: {n:'Name',cur:'...',a:'AMBER',r:'BREACH',tr:[...],ts:'...'}
+
+    Called at the end of run_dashboard_update() so the CSV is always authoritative.
+    Returns (updated_html, list_of_change_descriptions).
+    """
+    changes = []
+
+    # ── Part A: KRI_DATA chip entries ─────────────────────────────────────────
+    for js_key, kri_name in KRI_DATA_KEY_MAP.items():
+        if kri_name not in thresholds:
+            continue
+        t = thresholds[kri_name]
+        fmt = THRESHOLD_FORMAT.get(kri_name)
+        if not fmt:
+            continue
+        amber_str  = fmt(t["amber"])
+        breach_str = fmt(t["breach"])
+
+        # Match: 'js_key': {cur:'...',a:'OLD_A',r:'OLD_R',ts:'...',risk:'...'}
+        pat = re.compile(
+            r"('" + re.escape(js_key) + r"':\s*\{cur:'[^']*',a:')([^']*)(',r:')([^']*)(',ts:'[^']*',risk:'[^']*'\})"
+        )
+        m = pat.search(html)
+        if not m:
+            continue
+        old_a, old_r = m.group(2), m.group(4)
+        if old_a == amber_str and old_r == breach_str:
+            continue
+        new_frag = m.group(1) + amber_str + m.group(3) + breach_str + m.group(5)
+        html = html[:m.start()] + new_frag + html[m.end():]
+        changes.append(f"chip:{js_key} a:{old_a}→{amber_str} r:{old_r}→{breach_str}")
+
+    # ── Part B: Risk register tile entries (n: format) ────────────────────────
+    for kri_name, js_display_name in KRI_NAME_MAP.items():
+        if kri_name not in thresholds:
+            continue
+        t = thresholds[kri_name]
+        fmt = THRESHOLD_FORMAT.get(kri_name)
+        if not fmt:
+            continue
+        amber_str  = fmt(t["amber"])
+        breach_str = fmt(t["breach"])
+
+        # Match: {n:'Display Name',cur:'...',a:'OLD_A',r:'OLD_R',tr:[...],ts:'...'}
+        pat = re.compile(
+            r"(\{n:'" + re.escape(js_display_name) + r"',cur:'[^']*',a:')([^']*)(',r:')([^']*)(',tr:\[[^\]]*\],ts:'[^']*')",
+            re.DOTALL
+        )
+        m = pat.search(html)
+        if not m:
+            continue
+        old_a, old_r = m.group(2), m.group(4)
+        if old_a == amber_str and old_r == breach_str:
+            continue
+        new_frag = m.group(1) + amber_str + m.group(3) + breach_str + m.group(5)
+        html = html[:m.start()] + new_frag + html[m.end():]
+        changes.append(f"tile:{kri_name} a:{old_a}→{amber_str} r:{old_r}→{breach_str}")
+
+    return html, changes
+
 
 EXEC_REC_IDS = {
     "bcm":          "ec-bcm",
@@ -209,16 +363,43 @@ def run_dashboard_update(dashboard_path):
     if unmapped:
         print(f"  ⚠ {len(unmapped)} store KRI(s) not in KRI_NAME_MAP — no tile updated: {unmapped}")
 
+    # ── Threshold sync: CSV → HTML (runs every time regardless of KRI updates) ──
+    thresholds = _load_thresholds()
+    threshold_changes = []
+    if thresholds:
+        html, threshold_changes = _sync_kri_thresholds_to_html(html, thresholds)
+        if threshold_changes:
+            print(f"  Threshold sync: {len(threshold_changes)} tile(s) corrected from kri_thresholds.csv")
+            for c in threshold_changes:
+                print(f"    ↳ {c}")
+        else:
+            print("  Threshold sync: all tiles already match kri_thresholds.csv ✓")
+        total_updates += len(threshold_changes)
+    else:
+        print("  ⚠ Threshold sync skipped — kri_thresholds.csv not found")
+
+    # ── Write HTML if anything changed ───────────────────────────────────────
     if total_updates > 0:
         dashboard_path.write_text(html)
 
+    # ── Consistency check: catch remaining figure contradictions ─────────────
+    consistency_report = {}
+    try:
+        from tools.consistency_checker import run as _cc_run, print_report as _cc_print
+        consistency_report = _cc_run(dashboard_path)
+        _cc_print(consistency_report)
+    except Exception as e:
+        print(f"  ⚠ Consistency checker failed: {e}")
+
     return {
-        "dashboard_path": str(dashboard_path),
-        "backup_path": str(backup),
-        "total_kri_updates": total_updates,
-        "risks_updated": changes,
-        "unmapped_kris": unmapped,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "dashboard_path":      str(dashboard_path),
+        "backup_path":         str(backup),
+        "total_kri_updates":   total_updates,
+        "risks_updated":       changes,
+        "threshold_changes":   threshold_changes,
+        "unmapped_kris":       unmapped,
+        "consistency":         consistency_report,
+        "timestamp":           datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -257,7 +438,7 @@ def _format_board_summary(text: str) -> str:
 
     Handles two layouts:
       • Current (cra_synthesis_v1): four plain-text headers
-        RISK POSTURE / KEY RISK DRIVERS / CROSS-DOMAIN CONNECTIONS / MANAGEMENT RESPONSE
+        RISK POSTURE / KEY RISK DRIVERS / CROSS-DOMAIN CONNECTIONS / QUARTER-ON-QUARTER MOVEMENT
         followed by RISK COMMITTEE RECOMMENDED ACTIONS appended by the graph.
       • Legacy: domain-based headers  STRATEGIC / OPERATIONAL / FINANCIAL / COMPLIANCE
 
@@ -278,7 +459,7 @@ def _format_board_summary(text: str) -> str:
         'RISK POSTURE',
         'KEY RISK DRIVERS',
         'CROSS-DOMAIN CONNECTIONS',
-        'MANAGEMENT RESPONSE',
+        'QUARTER-ON-QUARTER MOVEMENT',
         'RISK COMMITTEE RECOMMENDED ACTIONS',
         'COMPOUND SCENARIOS',
         'COMPOUND',
@@ -305,9 +486,9 @@ def _format_board_summary(text: str) -> str:
     SECTION_CONFIG = [
         # Current synthesis sections (ordered longest-first to avoid prefix collisions)
         ('RISK COMMITTEE RECOMMENDED ACTIONS', 'var(--navy)'),
+        ('QUARTER-ON-QUARTER MOVEMENT',        'var(--grn-md)'),
         ('CROSS-DOMAIN CONNECTIONS',           '#7f8c8d'),
         ('KEY RISK DRIVERS',                   'var(--amb-md)'),
-        ('MANAGEMENT RESPONSE',                'var(--grn-md)'),
         ('RISK POSTURE',                       'var(--red-md)'),
         # Legacy domain sections
         ('COMPOUND SCENARIOS',                 '#7f8c8d'),
