@@ -108,9 +108,11 @@ def _compute_operational() -> dict:
     dist  = float(sc["supplier_distress_flags"])
 
     mttd   = cy["mttd_days"]
+    mttr   = cy["mttr_days"]
     patch  = cy["patch_compliance_pct"]
     vulns  = float(cy["critical_vulns_open_gt30d"])
     rto    = cy["it_rto_hours"]
+    cyber_assess = cy.get("supplier_cyber_resilience_assess_pct", 0.0) or 0.0
 
     ffr    = qu["max_field_failure_rate_pct"]
     recall = qu["recall_readiness_score_pct"]
@@ -122,12 +124,14 @@ def _compute_operational() -> dict:
 
     return {
         "O-01": [
-            _kri("single_source_concentration", conc, "%",   _status(conc,  "single_source_concentration")),
-            _kri("inventory_cover_weeks",        inv,  "weeks", _status(inv,  "inventory_cover_weeks")),
-            _kri("supplier_distress_flags",       dist, "count", _status(dist, "supplier_distress_flags")),
+            _kri("single_source_concentration",          conc,         "%",     _status(conc,         "single_source_concentration")),
+            _kri("inventory_cover_weeks",                inv,          "weeks", _status(inv,          "inventory_cover_weeks")),
+            _kri("supplier_distress_flags",              dist,         "count", _status(dist,         "supplier_distress_flags")),
+            _kri("supplier_cyber_resilience_assess_pct", cyber_assess, "%",     _status(cyber_assess, "supplier_cyber_resilience_assess_pct")),
         ],
         "O-02": [
             _kri("mttd_days",                    mttd,  "days",  _status(mttd,  "mttd_days")),
+            _kri("mttr_days",                    mttr,  "days",  _status(mttr,  "mttr_days")),
             _kri("patch_compliance_pct",         patch, "%",     _status(patch, "patch_compliance_pct")),
             _kri("critical_vulns_open_gt30d",    vulns, "count", _status(vulns, "critical_vulns_open_gt30d")),
             _kri("it_rto_hours",                 rto,   "hours", _status(rto,   "it_rto_hours")),
