@@ -94,6 +94,7 @@ def get_cyber_data() -> dict:
         "security_incidents_mtd": metrics.get("security_incidents_mtd", None),
         "mfa_coverage_pct": metrics.get("mfa_coverage", None),
         "third_party_vendor_assessed_pct": metrics.get("third_party_vendor_assessed", None),
+        "supplier_cyber_resilience_assess_pct": metrics.get("supplier_cyber_resilience_assess_pct", None),
         "raw_metrics": metrics,
     }
 
