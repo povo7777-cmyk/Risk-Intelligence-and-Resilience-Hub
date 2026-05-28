@@ -5,8 +5,8 @@ S-03,synergy_delivery_pct,75,70,lower_worse,%,M&A synergy delivery vs plan
 O-01,single_source_concentration,40,50,higher_worse,%,Single supplier concentration as % of category spend
 O-01,inventory_cover_weeks,6,4,lower_worse,weeks,Minimum inventory cover across critical SKUs
 O-01,supplier_distress_flags,1,3,higher_worse,count,Suppliers flagged for financial/operational distress
-O-02,mttd_days,2,4,higher_worse,days,Mean time to detect a security incident
-O-02,mttr_days,7,14,higher_worse,days,Mean time to respond and contain a security incident
+O-02,mttd_days,7,10,higher_worse,days,Mean time to detect a security incident
+O-02,mttr_days,14,21,higher_worse,days,Mean time to respond and contain a security incident
 O-02,patch_compliance_pct,90,80,lower_worse,%,Percentage of systems with current security patch applied
 O-02,critical_vulns_open_gt30d,5,10,higher_worse,count,Critical vulnerabilities open more than 30 days
 O-02,it_rto_hours,4,6,higher_worse,hours,Recovery time objective for order management system
