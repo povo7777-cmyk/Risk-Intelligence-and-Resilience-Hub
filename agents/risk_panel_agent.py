@@ -611,11 +611,12 @@ def run(state: dict | None = None) -> dict:
     if not model_params:
         model_params = store.get("model_params", {})
 
-    # Produce compact CSV summaries (row count + first 3 rows) to keep input tokens manageable
-    def _brief_csv(rows: list, max_rows: int = 4) -> str:
+    # Produce full CSV content for each source — all rows, no truncation.
+    # Full data costs ~$0.004 extra per panel run (negligible) but truncating
+    # source data means the panel validates on incomplete evidence.
+    def _brief_csv(rows: list, max_rows: int = 9999) -> str:
         if not rows:
             return "(empty)"
-        header = list(rows[0].keys())
         sample = rows[:max_rows]
         return f"({len(rows)} rows) " + json.dumps(sample, separators=(',', ':'))
 
@@ -658,8 +659,8 @@ Covenant test {_cov_date}: Net Debt/EBITDA ≤ {_cov_ceil}× (current {_nd_ebitd
 === KRI THRESHOLDS (from kri_thresholds.csv — live source) ===
 {_brief_csv(raw["kri_thresholds"], max_rows=35)}
 
-=== CURRENT KRI STORE VALUES (summary) ===
-{json.dumps(store, separators=(',', ':'))[:3000]}
+=== CURRENT KRI STORE VALUES (live — from risk_store.json) ===
+{json.dumps(store, separators=(',', ':'))}
 
 === HTML DASHBOARD KRI DISPLAY THRESHOLDS ===
 Dashboard thresholds are reconciled to kri_thresholds.csv after every pipeline run by consistency_checker.py.
@@ -690,13 +691,13 @@ Use the KRI THRESHOLDS section above as the single source of truth for all thres
 {json.dumps(det_findings, indent=2)}
 
 === BOARD SUMMARY (pipeline output to validate) ===
-{board_summary_text[:4000] if board_summary_text else "(no board summary in state — run pipeline first)"}
+{board_summary_text if board_summary_text else "(no board summary in state — run pipeline first)"}
 
 === EXEC RECOMMENDATIONS (pipeline output to validate) ===
-BCM: {exec_recs.get("bcm","")[:1200] if exec_recs else "(none)"}
-EBITDA: {exec_recs.get("ebitda","")[:1200] if exec_recs else "(none)"}
-FX: {exec_recs.get("fx","")[:1200] if exec_recs else "(none)"}
-Supply Chain: {exec_recs.get("supply_chain","")[:1200] if exec_recs else "(none)"}
+BCM: {exec_recs.get("bcm","") if exec_recs else "(none)"}
+EBITDA: {exec_recs.get("ebitda","") if exec_recs else "(none)"}
+FX: {exec_recs.get("fx","") if exec_recs else "(none)"}
+Supply Chain: {exec_recs.get("supply_chain","") if exec_recs else "(none)"}
 
 === EBITDA MONTE CARLO — VALIDATED MODEL NOTE ===
 The EBITDA Monte Carlo uses 3 log-normal annual steps with {ep_vol}% p.a. revenue volatility (read from financial_summary.csv).
