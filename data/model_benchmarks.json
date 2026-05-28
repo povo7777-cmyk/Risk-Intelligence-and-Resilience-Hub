@@ -1,0 +1,29 @@
+{
+  "_comment": "Single source of truth for quantitative model benchmark figures. Update this file when simulation parameters change — dashboard_updater will inject these values into the HTML automatically.",
+  "_updated": "2026-05-28",
+  "supply_chain": {
+    "baseline_var_95_usd_m": 2049,
+    "dual_source_var_saving_usd_m": 253,
+    "dual_source_cost_per_yr_usd_m": 14.4,
+    "dual_source_roi_x": 17,
+    "inventory_buffer_var_saving_usd_m": 147,
+    "inventory_buffer_cost_per_yr_usd_m": 7.7,
+    "combined_var_saving_usd_m": 369,
+    "combined_roi_x": 17,
+    "revenue_at_risk_usd_m": 660,
+    "simulation_n": 5000,
+    "_source": "Python Monte Carlo simulation N=5000 | 8 suppliers | MTBF 7yr | recovery 3mo | USD 12B revenue at risk"
+  },
+  "ebitda": {
+    "covenant_breach_probability_pct": 44.6,
+    "cogs_1pp_breach_increase_pp": 38.7,
+    "top_customer_loss_breach_increase_pp": 12.0,
+    "covenant_headroom_usd_m": 170,
+    "base_revenue_usd_b": 57,
+    "_source": "EBITDA Stress Monte Carlo, current slider settings"
+  },
+  "fx_hedge": {
+    "fx_exposed_revenue_usd_b": 9.1,
+    "_source": "Hedge Analyser Monte Carlo, FX-only positions (CNY+EUR+JPY+KRW)"
+  }
+}
