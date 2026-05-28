@@ -73,7 +73,7 @@ def calibrate_ebitda(raw: dict) -> dict:
     revenue_b    = float(latest.get("revenue_usd_b",    57.0))
     cost_ratio   = float(latest.get("cost_ratio_pct",   96.0))
     ebitda_b     = float(latest.get("ebitda_usd_b",      2.28))
-    volatility   = 20.0   # % p.a. — calibrated to hardware sector; no direct CSV source
+    volatility   = float(latest.get("revenue_volatility_pct", 12.0))   # % p.a. — from financial_summary.csv; falls back to 12.0
     drift        = 0.0
     demand_var   = 12.0   # demand variability %
 
