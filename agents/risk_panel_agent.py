@@ -41,17 +41,18 @@ def _load_raw_data() -> dict:
         return rows
 
     return {
-        "kri_thresholds":    read_csv("kri_thresholds.csv"),
-        "siem_cyber":        read_csv("siem_cyber.csv"),
-        "treasury":          read_csv("treasury_positions.csv"),
-        "supply_chain":      read_csv("erp_supply_chain.csv"),
-        "covenant_tracker":  read_csv("covenant_tracker.csv"),
-        "ar_aging":          read_csv("ar_aging.csv"),
-        "hris_talent":       read_csv("hris_talent.csv"),
-        "compliance":        read_csv("compliance_metrics.csv"),
-        "market_intel":      read_csv("market_intelligence.csv"),
-        "regulatory":        read_csv("regulatory_horizon.csv"),
-        "risk_register":     read_csv("risk_register.csv"),
+        "kri_thresholds":     read_csv("kri_thresholds.csv"),
+        "siem_cyber":         read_csv("siem_cyber.csv"),
+        "treasury":           read_csv("treasury_positions.csv"),
+        "supply_chain":       read_csv("erp_supply_chain.csv"),
+        "covenant_tracker":   read_csv("covenant_tracker.csv"),
+        "ar_aging":           read_csv("ar_aging.csv"),
+        "hris_talent":        read_csv("hris_talent.csv"),
+        "compliance":         read_csv("compliance_metrics.csv"),
+        "market_intel":       read_csv("market_intelligence.csv"),
+        "regulatory":         read_csv("regulatory_horizon.csv"),
+        "risk_register":      read_csv("risk_register.csv"),
+        "financial_summary":  read_csv("financial_summary.csv"),
     }
 
 
@@ -64,55 +65,12 @@ def _run_deterministic_checks(raw: dict, store: dict) -> dict:
     findings = {}
     dashboard_path = Path(__file__).parent.parent / "dashboard" / "index.html"
 
-    # ── KRI thresholds: CSV vs HTML (corrected in dashboard after audit) ────────
-    # These now document the CORRECTED HTML thresholds (aligned to CSV master).
-    # Only flag if they still diverge from CSV (regression check).
-    HTML_THRESHOLDS = {
-        # CORRECTED: was 4h/24h, now 72h/168h = 3d/7d matching CSV exactly
-        "mttd_days":                    {"a_html": "72h",   "r_html": "168h", "note": "corrected — now matches CSV 3d/7d"},
-        # CORRECTED: was 4h/8h, now 4h/6h matching CSV amber=4h, breach=6h
-        "it_rto_hours":                 {"a_html": "4h",    "r_html": "6h",   "note": "corrected — matches CSV"},
-        # CORRECTED: breach was 55%, now 50% matching CSV
-        "single_source_concentration":  {"a_html": "40%",   "r_html": "50%",  "note": "corrected — breach now matches CSV 50%"},
-        # CORRECTED: was 0.80/1.20%, now 0.70/0.80% matching CSV and Trade Finance covenant
-        "bad_debt_provision_pct":       {"a_html": "0.70%", "r_html": "0.80%","note": "corrected — now equals covenant threshold"},
-        # Matches CSV: amber=2.5x, breach=3.0x
-        "net_debt_ebitda_ratio":        {"a_html": "2.5x",  "r_html": "3.0x", "note": "matches CSV"},
-        # Matches CSV: amber=60%, breach=45%
-        "avg_hedge_ratio_pct":          {"a_html": "60%",   "r_html": "45%",  "note": "matches CSV"},
-    }
-    # Expected CSV values for regression verification
-    CSV_EXPECTED = {
-        # mttd_days recalibrated 2026-05-28: amber=7d/breach=10d (operational baseline, CRO/CISO approved)
-        "mttd_days":                   {"amber": "7", "breach": "10", "unit": "days"},
-        "it_rto_hours":                {"amber": "4", "breach": "6",  "unit": "hours"},
-        "single_source_concentration": {"amber": "40", "breach": "50", "unit": "%"},
-        "bad_debt_provision_pct":      {"amber": "0.70", "breach": "0.80", "unit": "%"},
-        "net_debt_ebitda_ratio":       {"amber": "2.5", "breach": "3.0", "unit": "ratio"},
-        "avg_hedge_ratio_pct":         {"amber": "60", "breach": "45", "unit": "%"},
-    }
-    for kri, html in HTML_THRESHOLDS.items():
-        csv_row = next((r for r in raw["kri_thresholds"] if r["kri_name"] == kri), None)
-        expected = CSV_EXPECTED.get(kri, {})
-        if csv_row:
-            csv_amber  = str(csv_row["amber_threshold"]).strip()
-            csv_breach = str(csv_row["breach_threshold"]).strip()
-            exp_amber  = expected.get("amber", "")
-            exp_breach = expected.get("breach", "")
-            # Only raise a finding if CSV has diverged from expected (data drift)
-            if csv_amber != exp_amber or csv_breach != exp_breach:
-                findings[f"THR-{kri}"] = {
-                    "severity": "HIGH" if kri == "mttd_days" else "MEDIUM",
-                    "category": "threshold_drift",
-                    "check": f"KRI CSV threshold changed since last dashboard reconciliation — {kri}",
-                    "csv_amber": csv_amber,
-                    "csv_breach": csv_breach,
-                    "expected_amber": exp_amber,
-                    "expected_breach": exp_breach,
-                    "html_amber": html["a_html"],
-                    "html_breach": html["r_html"],
-                    "note": f"CSV value changed; verify HTML tile thresholds still aligned. {html['note']}",
-                }
+    # ── KRI threshold alignment: delegated to consistency_checker ───────────────
+    # Threshold CSV-vs-HTML validation is owned by tools/consistency_checker.py,
+    # which runs after every pipeline run and reads both sources dynamically.
+    # Duplicating it here with hardcoded expected values creates stale baselines
+    # that generate false positives whenever thresholds are intentionally updated.
+    # Panel receives consistency_checker output via the pipeline state instead.
 
     # ── Covenant tracker vs computed actuals ──────────────────────────────────
     # Only fire if discrepancy is material (>5%) — rounding diffs are not findings.
@@ -661,32 +619,51 @@ def run(state: dict | None = None) -> dict:
         sample = rows[:max_rows]
         return f"({len(rows)} rows) " + json.dumps(sample, separators=(',', ':'))
 
+    # ── Derive company context dynamically from source CSVs ─────────────────
+    _fin  = raw.get("kri_thresholds", [])   # use thresholds as KRI count source
+    _fs   = next(iter(raw.get("financial_summary", []) or []), {})  # latest fin row
+    _cov1 = next((r for r in raw.get("covenant_tracker", []) if r.get("covenant_id") == "COV001"), {})
+    _cov5 = next((r for r in raw.get("covenant_tracker", []) if r.get("covenant_id") == "COV005"), {})
+
+    _rev_b      = float(_fs.get("revenue_usd_b",    57.0))
+    _ebitda_b   = float(_fs.get("ebitda_usd_b",      2.28))
+    _ebitda_pct = round(_ebitda_b / _rev_b * 100, 1) if _rev_b else 4.0
+    _net_debt   = float(_fs.get("net_debt_usd_b",    6.384))
+    _nd_ebitda  = round(_net_debt / _ebitda_b, 2) if _ebitda_b else 2.8
+    _cov_ceil   = float(_cov1.get("threshold", 3.0))
+    _nd_headroom= round(_cov_ceil - _nd_ebitda, 2)
+    _cov_floor  = float(_cov5.get("threshold", 1.80)) if _cov5 else None
+    _kri_count  = len(set(r["risk_id"] for r in _fin)) if _fin else 0
+    _thr_count  = len(_fin)
+    _quarter    = _fs.get("fiscal_quarter", "FY26Q2")
+    _cov_date   = _cov1.get("test_date", "2026-06-30") if _cov1 else "2026-06-30"
+    _rr         = raw.get("risk_register", [])
+    _risk_count = len(_rr)
+    _domain_count = len(set(r.get("domain", "") for r in _rr if r.get("domain"))) if _rr else 4
+
     # Extract EBITDA model values for the validated-model note (used in shared_brief below)
     _ep = model_params.get("ebitda", {})
-    ep_vol = _ep.get("volatility_pct", 12.0)
+    ep_vol = _ep.get("volatility_pct", _fs.get("revenue_volatility_pct", 12.0))
     ep_dv  = _ep.get("demand_var_pct", 12.0)
     ep_pb  = _ep.get("p_covenant_breach_pct", 49.7)
-    ep_hd  = int(_ep.get("ebitda_headroom_usd_m", 152))
+    ep_hd  = int(_ep.get("ebitda_headroom_usd_m", round((_ebitda_b - _net_debt / _cov_ceil) * 1000)))
 
     shared_brief = f"""
-=== COMPANY CONTEXT ===
-An Asia-headquartered global technology hardware company. Revenue USD 57B. EBITDA margin ~4%. Fiscal Q2 2026.
-June 30 covenant test: Net Debt/EBITDA ≤ 3.0× (current 2.8×, headroom 0.2×).
-14 risks across 4 domains. 30 KRIs.
+=== COMPANY CONTEXT (derived from financial_summary.csv + covenant_tracker.csv) ===
+Asia-headquartered global technology hardware company. Fiscal {_quarter}.
+Revenue: USD {_rev_b}B | EBITDA: USD {_ebitda_b}B ({_ebitda_pct}% margin).
+Covenant test {_cov_date}: Net Debt/EBITDA ≤ {_cov_ceil}× (current {_nd_ebitda}×, headroom {_nd_headroom}×).
+{_risk_count} risks across {_domain_count} domains. {_thr_count} KRI thresholds across {_kri_count} risk IDs.
 
-=== KRI THRESHOLDS (from kri_thresholds.csv) ===
-{_brief_csv(raw["kri_thresholds"], max_rows=30)}
+=== KRI THRESHOLDS (from kri_thresholds.csv — live source) ===
+{_brief_csv(raw["kri_thresholds"], max_rows=35)}
 
 === CURRENT KRI STORE VALUES (summary) ===
 {json.dumps(store, separators=(',', ':'))[:3000]}
 
 === HTML DASHBOARD KRI DISPLAY THRESHOLDS ===
-Dashboard thresholds are reconciled to kri_thresholds.csv after every pipeline run.
-Consistency checker confirms alignment this run — no discrepancies.
-Use the KRI THRESHOLDS section above as the single source of truth.
-Key calibrated thresholds (matching CSV): mttd_days amber=7d/breach=10d (operational baseline, CRO/CISO approved);
-avg_hedge_ratio_pct amber=60%/breach=45%; bad_debt_provision_pct amber=0.70%/breach=0.80%;
-single_source_concentration amber=40%/breach=50%.
+Dashboard thresholds are reconciled to kri_thresholds.csv after every pipeline run by consistency_checker.py.
+Use the KRI THRESHOLDS section above as the single source of truth for all threshold values.
 
 === CYBER SIEM DATA ===
 {_brief_csv(raw["siem_cyber"])}
