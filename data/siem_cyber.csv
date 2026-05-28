@@ -1,0 +1,14 @@
+date,metric,value,unit,source_system
+2026-05-01,mean_time_to_detect,11,days,SIEM-Splunk
+2026-05-01,mean_time_to_respond,18,days,SIEM-Splunk
+2026-05-01,patch_compliance_rate,71,percent,ITSM-ServiceNow
+2026-05-01,critical_vulnerabilities_open_gt30d,8,count,Vulnerability-Scanner
+2026-05-01,high_vulnerabilities_open_gt30d,23,count,Vulnerability-Scanner
+2026-05-01,it_rto_oms,6,hours,ITSM-ServiceNow
+2026-05-01,ot_scada_bcp_documented,0,boolean,BCM-Register
+2026-05-01,security_incidents_mtd,4,count,SIEM-Splunk
+2026-05-01,phishing_attempt_rate,2.3,percent,Email-Gateway
+2026-05-01,mfa_coverage,87,percent,IAM-System
+2026-05-01,privileged_access_unreviewed_days,45,days,PAM-System
+2026-05-01,third_party_vendor_assessed,62,percent,TPRM-System
+2026-05-01,supplier_cyber_resilience_assess_pct,0,percent,CISO-Assessment
