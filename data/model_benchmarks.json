@@ -1,5 +1,5 @@
 {
-  "_comment": "Single source of truth for quantitative model benchmark figures. Update this file when simulation parameters change — dashboard_updater will inject these values into the HTML automatically.",
+  "_comment": "Single source of truth for quantitative model benchmark figures. Update this file when simulation parameters change \u2014 dashboard_updater will inject these values into the HTML automatically.",
   "_updated": "2026-05-28",
   "supply_chain": {
     "baseline_var_95_usd_m": 2049,
@@ -15,12 +15,13 @@
     "_source": "Python Monte Carlo simulation N=5000 | 8 suppliers | MTBF 7yr | recovery 3mo | USD 12B revenue at risk"
   },
   "ebitda": {
-    "covenant_breach_probability_pct": 44.6,
-    "cogs_1pp_breach_increase_pp": 38.7,
-    "top_customer_loss_breach_increase_pp": 12.0,
-    "covenant_headroom_usd_m": 170,
+    "covenant_breach_probability_pct": 49.7,
+    "cogs_1pp_breach_increase_pp": 7.1,
+    "top_customer_loss_breach_increase_pp": 1.2,
+    "covenant_headroom_usd_m": 152,
     "base_revenue_usd_b": 57,
-    "_source": "EBITDA Stress Monte Carlo, current slider settings"
+    "_source": "EBITDA Stress Monte Carlo N=5000 | vol=12% (from financial_summary.csv) | 96% cost ratio | USD 57B revenue",
+    "revenue_volatility_pct": 12.0
   },
   "fx_hedge": {
     "fx_exposed_revenue_usd_b": 9.1,
