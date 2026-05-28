@@ -30,3 +30,4 @@ C-02,ai_audit_coverage_pct,95,90,lower_worse,%,AI systems with completed conform
 C-02,gdpr_dsr_resolution_rate_pct,95,90,lower_worse,%,GDPR data subject request resolution rate
 C-03,third_party_abac_coverage_pct,100,95,lower_worse,%,Third-party anti-bribery and corruption coverage
 C-03,csrd_scope3_disclosure_pct,80,70,lower_worse,%,CSRD Scope 3 emissions disclosure completeness
+O-01,supplier_cyber_resilience_assess_pct,80,50,lower_worse,%,Single-source supplier cyber resilience assessment coverage
