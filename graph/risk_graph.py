@@ -396,6 +396,11 @@ def chief_risk_synthesis_node(state: RiskIntelligenceState) -> RiskIntelligenceS
         board_summary += "\n\nRISK COMMITTEE RECOMMENDED ACTIONS:\n" + \
                          "\n".join(f"  • {a}" for a in committee_actions)
 
+    # Append deterministic KRI roll-up table — always appended, never LLM-generated
+    kri_gt = state.get("kri_ground_truth", {})
+    if kri_gt:
+        board_summary += _build_kri_rollup_table(kri_gt)
+
     state["board_summary"] = board_summary
 
     # Write to dashboard
@@ -1122,6 +1127,51 @@ def _build_kri_count_facts(sf, of, ff, cf) -> str:
         + f"\n  TOTAL: {total_b} KRI breach(es), {total_a} amber(s) "
         f"across {domains_in_breach} domain(s) in breach"
     )
+
+
+def _build_kri_rollup_table(kri_ground_truth: dict) -> str:
+    """
+    Generates a deterministic KRI status roll-up table from kri_ground_truth.
+    Appended to every board summary — not LLM-generated, never drifts.
+    Format: plain text table suitable for HTML rendering by dashboard_updater.
+    """
+    STATUS_ICON = {"breach": "🔴 BREACH", "amber": "🟡 AMBER", "ok": "🟢 OK"}
+    lines = [
+        "\n\nKRI STATUS ROLL-UP TABLE",
+        "─" * 80,
+        f"{'Domain':<12} {'KRI Name':<42} {'Current':>10} {'Amber':>10} {'Breach':>10} {'Status':<10}",
+        "─" * 80,
+    ]
+    domain_data = kri_ground_truth.get("dashboard_kris", {})
+    domain_order = [
+        ("Strategic",   "strategic_risks"),
+        ("Operational", "operational_risks"),
+        ("Financial",   "financial_risks"),
+        ("Compliance",  "compliance_risks"),
+    ]
+    for domain_label, domain_key in domain_order:
+        risk_groups = domain_data.get(domain_key, {})
+        if not risk_groups:
+            continue
+        first = True
+        for risk_id, kris in risk_groups.items():
+            for k in kris:
+                name = k.get("name", "")
+                val  = k.get("value")
+                unit = k.get("unit", "")
+                a_th = k.get("amber_threshold")
+                b_th = k.get("threshold")
+                st   = k.get("status", "ok")
+                val_str = f"{val}{unit}" if val is not None else "N/A"
+                a_str   = f"{a_th}{unit}" if a_th is not None else "—"
+                b_str   = f"{b_th}{unit}" if b_th is not None else "—"
+                d_label = domain_label if first else ""
+                lines.append(
+                    f"{d_label:<12} {name:<42} {val_str:>10} {a_str:>10} {b_str:>10} {STATUS_ICON.get(st, st):<10}"
+                )
+                first = False
+    lines.append("─" * 80)
+    return "\n".join(lines)
 
 
 def _run_board_synthesis(client, full_findings: str, exec_recs: dict,
