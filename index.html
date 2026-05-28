@@ -1252,8 +1252,12 @@ var DOMAINS={
          {n:'Export-restricted SKU count (ISG + IDG)',cur:'14 SKUs',a:'8 ISG / 10 IDG',r:'12 ISG / 15 IDG',tr:[4,6,8,9,12,14],ts:'br',
           ra:'Legal review of all affected SKUs. Differentiate ISG (AI servers, GPU infrastructure) from IDG (consumer/commercial PCs) — ISG restrictions eliminate market segments, IDG restrictions are commercially damaging but recoverable. Accelerate alternative component sourcing. Owner: General Counsel.',
           rr:'ISG SKU restrictions: suspend affected product lines, engage BIS counsel within 24h, notify Audit Committee within 48h. At 12+ restricted ISG SKUs, AI infrastructure business segment is materially impaired. Owner: CEO/GC.'}
+       ]},,
+         {n:'Geopolitical escalation signals (YTD)',cur:'5',a:'2',r:'3',tr:[0,1,1,2,3,5],ts:'br',
+          ra:'Strategy team to review all active geopolitical signals. Above amber threshold (2), export control exposure and supply chain concentration are elevated. CEO to brief Board Risk Committee. Owner: CSO.',
+          rr:'5 geopolitical signals YTD exceeds breach threshold of 3. Signals encompass export control tightening, tariff escalation, and geopolitical tension in key supply chain jurisdictions. CEO escalation. Board briefing within 5 days. Trade counsel review of all active signals. Owner: CEO/GC.'}
        ]},
-      {id:'S-02',name:'AI market disruption & competitive obsolescence',status:'ok',
+      {id:'S-02',name:'AI market disruption & competitive obsolescence',status:'am',
        metric:'AI-enabled product revenue growth YoY (%); R&D spend % of revenue',threshold:'AI growth >=25% YoY; R&D >=3.0% of revenue',owner:'CTO / Chief Strategy Officer',
        tolNote:'Thresholds calibrated to the company\'s actual R&D investment baseline (~USD 2B, ~3.5% of revenue FY2024). Amber at 3.0% reflects material retreat from current investment level. AI growth threshold of 25% reflects the organisation\'s commitment to AI as primary growth vector — at global AI hardware market growing 35-40% YoY, below 25% means losing share even at apparent growth.',
        kris:[
@@ -1262,7 +1266,10 @@ var DOMAINS={
           rr:'Below 18% growth in AI hardware market growing 35-40% YoY = material share loss. CEO strategy review. External benchmarking vs Dell, HP, HPE. Board update. Owner: CEO/CTO.'},
          {n:'R&D spend % of revenue',cur:'3.5%',a:'3.0%',r:'2.5%',tr:[3.2,3.3,3.4,3.4,3.5,3.5],ts:'ok',
           ra:'CFO/CTO joint review of R&D allocation priorities. Ensure SSG and ISG AI infrastructure programmes are adequately funded. Owner: CFO.',
-          rr:'Below 2.5% R&D on USD 57B revenue = USD 1.4B — structural underinvestment vs peers. Strategy committee review. Consider R&D reallocation from IDG commodity segments to ISG/SSG. Owner: CEO.'}
+          rr:'Below 2.5% R&D on USD 57B revenue = USD 1.4B — structural underinvestment vs peers. Strategy committee review. Consider R&D reallocation from IDG commodity segments to ISG/SSG. Owner: CEO.'}         {n:'Competitive threat signals (active)',cur:'3',a:'3',r:'5',tr:[1,1,2,2,3,3],ts:'am',
+          ra:'Strategy team to review 3 active competitive signals at amber threshold. Market position in AI PC and ISG segments is at risk. Accelerate AI roadmap execution and competitive response plan. Owner: CTO/CSO.',
+          rr:'5+ active competitive signals = competitive positioning crisis in a market growing 35–40% YoY. Below-threshold response risks irreversible share loss. Emergency strategy review. External benchmarking vs Dell, HP, HPE. Owner: CEO/CTO.'}
+       ]},
        ]},
       {id:'S-03',name:'M&A integration & portfolio strategy risk',status:'ok',
        metric:'Synergy delivery vs target by month 18 (%); pipeline acquisition DD coverage (%)',threshold:'Synergy delivery >=80% by month 18; DD coverage >=80% before deal close',owner:'CFO / Chief Strategy Officer',
@@ -1308,7 +1315,10 @@ var DOMAINS={
           rr:'OMS RTO >6h breaches the company\'s internal BCM standard and major customer SLA commitments. At USD 21M/hour OMS downtime cost at peak quarter, 6h represents the minimum exposure threshold from point of detection — ~USD 126M. Note: with MTTD at 264h, total incident cost is driven by MTTD + MTTR, not RTO alone; RTO governs the final restoration stage only. Last DR test 18 months ago — recovery capability unverified. Emergency DR programme. Board notification required. Owner: CEO/CTO.'},
          {n:'[Enabler — all chain stages] Patch compliance rate',cur:'71.0%',a:'90%',r:'80%',tr:[85.0,80.0,75.0,72.0,71.0,71.0],ts:'br',
           ra:'Patch compliance is the underlying enabler for all three chain stages: low compliance directly degrades detection (MTTD), response (MTTR), and recovery (RTO) simultaneously. CTO 30-day patch acceleration programme. Prioritise OMS, SAP, and e-commerce platform systems. Weekly compliance reporting to CISO. Owner: CTO.',
-          rr:'Patch emergency declared. Non-compliant systems isolated until remediated. At 71% compliance, 29% of systems remain exposed — extending detection, response, and recovery timelines across all three incident chain stages. Owner: CTO/CISO.'}
+          rr:'Patch emergency declared. Non-compliant systems isolated until remediated. At 71% compliance, 29% of systems remain exposed — extending detection, response, and recovery timelines across all three incident chain stages. Owner: CTO/CISO.'}         {n:'Critical vulnerabilities open >30 days',cur:'8',a:'5',r:'10',tr:[2,3,4,5,6,8],ts:'am',
+          ra:'CISO 30-day remediation sprint for open critical CVEs. Prioritise OMS, SAP, and e-commerce platforms. At 8 open CVEs >30 days, MTTD and MTTR exposure windows are extended — compounding the existing cyber breach period. Owner: CISO.',
+          rr:'10+ critical vulnerabilities open >30 days = systemic patch governance failure. Combined with current MTTD breach (264h), every unpatched critical system is an active exploitation vector. Emergency patching programme declared. Non-critical workloads deprioritised until remediated. Owner: CISO/CTO.'}
+       ]},
        ]},
       {id:'O-03',name:'Product quality & safety failure',status:'am',
        metric:'Field failure rate (%); recall readiness score (%)',threshold:'Field failure <0.03%; recall readiness >=85%',owner:'Chief Quality Officer / COO',
@@ -1319,7 +1329,10 @@ var DOMAINS={
           rr:'0.04% field failure at 60M units = 24,000 failing units — CPSC mandatory report territory. Estimated recall cost USD 150-400M. Product hold order. Safety investigation. CPSC notification within 24h. EU notification within 72h. Owner: CEO/CQO.'},
          {n:'Recall readiness score',cur:'72%',a:'80%',r:'70%',tr:[78.0,75.0,74.0,72.0,72.0,72.0],ts:'am',
           ra:'Quality team to update recall playbook for 180+ country distribution network. Score must be independently validated by Internal Audit — not self-assessed by quality team. Tabletop exercise within 60 days. Owner: CQO.',
-          rr:'Below 75% readiness, a recall across the company\'s 180+ country footprint cannot be executed within regulatory timelines. Recall programme escalated to COO. External logistics and regulatory specialist engaged within 30 days. Owner: COO.'}
+          rr:'Below 75% readiness, a recall across the company\'s 180+ country footprint cannot be executed within regulatory timelines. Recall programme escalated to COO. External logistics and regulatory specialist engaged within 30 days. Owner: COO.'}         {n:'Supplier quality rejection rate (%)',cur:'0.68%',a:'0.5%',r:'1.0%',tr:[0.3,0.35,0.4,0.5,0.6,0.68],ts:'am',
+          ra:'Chief Quality Officer to review supplier quality audits. Rejection rate trend (0.3%→0.68% over 6 periods) indicates systemic deterioration. Cross-reference with O-01 supplier distress flags — financially stressed suppliers may be reducing quality controls. Owner: CQO.',
+          rr:'1.0% rejection rate at 60M+ annual units = ~600,000 defective incoming components. Cross-domain signal: O-01 supplier distress flags are a likely root cause. Supplier audit programme and qualification of alternative sources required within 60 days. Owner: COO/CQO.'}
+       ]},
        ]},
       {id:'O-04',name:'Talent retention & key-person risk',status:'am',
        metric:'Critical open roles >60 days (count); SVP+ succession coverage (%); critical programme staffing — dual-source & SOC (%)',threshold:'Open critical roles <=5; SVP+ succession >=92%; programme staffing >=80%',owner:'CHRO',
@@ -1803,8 +1816,10 @@ var KRI_DATA = {
   // Strategic
   's01_odm_concentration': {cur:'68%', a:'50%', r:'55%', ts:'br', risk:'S-01'},
   's01_sku_restricted': {cur:'14', a:'8 ISG/10 IDG', r:'12 ISG/15 IDG', ts:'br', risk:'S-01'},
+  's01_geo_signals': {cur:'5', a:'2', r:'3', ts:'br', risk:'S-01'},
   's02_ai_growth': {cur:'+28%', a:'+25%', r:'+18%', ts:'ok', risk:'S-02'},
   's02_rd_spend': {cur:'3.5%', a:'3.0%', r:'2.5%', ts:'ok', risk:'S-02'},
+  's02_comp_signals': {cur:'3', a:'3', r:'5', ts:'am', risk:'S-02'},
   's03_synergy': {cur:'84%', a:'75%', r:'70%', ts:'ok', risk:'S-03'},
   's03_dd_coverage': {cur:'35%', a:'80%', r:'60%', ts:'br', risk:'S-03'},
   // Operational
@@ -1816,8 +1831,10 @@ var KRI_DATA = {
   'o02_mttr': {cur:'18 days', a:'14 days', r:'21 days', ts:'br', risk:'O-02'},
   'o02_patch': {cur:'71.0%', a:'90%', r:'80%', ts:'br', risk:'O-02'},
   'o02_rto': {cur:'6.0h', a:'4h', r:'6h', ts:'br', risk:'O-02'},
+  'o02_vulns': {cur:'8', a:'5', r:'10', ts:'am', risk:'O-02'},
   'o03_field_failure': {cur:'0.048%', a:'0.03%', r:'0.04%', ts:'br', risk:'O-03'},
   'o03_recall': {cur:'72%', a:'80%', r:'70%', ts:'br', risk:'O-03'},
+  'o03_supp_quality': {cur:'0.68%', a:'0.5%', r:'1.0%', ts:'am', risk:'O-03'},
   'o04_open_roles': {cur:'7', a:'3', r:'6', ts:'br', risk:'O-04'},
   'o04_succession': {cur:'72%', a:'80%', r:'70%', ts:'am', risk:'O-04'},
   'o04_prog_staffing': {cur:'48%', a:'80%', r:'60%', ts:'br', risk:'O-04'},
@@ -1841,8 +1858,8 @@ var KRI_DATA = {
 
 // ── Q3 DATA ENTRY PANEL ──────────────────────────────────────
 var Q3_FIELDS = [
-  {domain:'Strategic', color:'#e8c547', keys:['s01_odm_concentration','s01_sku_restricted','s02_ai_growth','s02_rd_spend','s03_synergy','s03_dd_coverage'], labels:['ODM/EMS PRC concentration','Restricted SKU count','AI revenue growth YoY','R&D spend % revenue','Synergy delivery vs target','Pipeline DD coverage']},
-  {domain:'Operational', color:'#f97316', keys:['o01_single_source','o01_inventory','o01_distress','o01_cyber_assess','o02_mttd','o02_mttr','o02_patch','o02_rto','o03_field_failure','o03_recall','o04_open_roles','o04_succession','o04_prog_staffing'], labels:['Single-source concentration','Inventory cover (weeks)','Supplier distress flags','Supplier cyber assess. %','MTTD (hours)','MTTR (days)','Patch compliance %','OMS RTO (hours)','Field failure rate','Recall readiness score','Critical open roles >60d','SVP+ succession %','Programme staffing %']},
+  {domain:'Strategic', color:'#e8c547', keys:['s01_odm_concentration','s01_sku_restricted','s01_geo_signals','s02_ai_growth','s02_rd_spend','s02_comp_signals','s03_synergy','s03_dd_coverage'], labels:['ODM/EMS PRC concentration','Restricted SKU count','Geopolitical signals (YTD)','AI revenue growth YoY','R&D spend % revenue','Competitive signals (active)','Synergy delivery vs target','Pipeline DD coverage']},
+  {domain:'Operational', color:'#f97316', keys:['o01_single_source','o01_inventory','o01_distress','o01_cyber_assess','o02_mttd','o02_mttr','o02_patch','o02_rto','o02_vulns','o03_field_failure','o03_recall','o03_supp_quality','o04_open_roles','o04_succession','o04_prog_staffing'], labels:['Single-source concentration','Inventory cover (weeks)','Supplier distress flags','Supplier cyber assess. %','MTTD (hours)','MTTR (days)','Patch compliance %','OMS RTO (hours)','Critical vulns open >30d','Field failure rate','Recall readiness score','Supplier quality rejection %','Critical open roles >60d','SVP+ succession %','Programme staffing %']},
   {domain:'Financial', color:'#3b82f6', keys:['f01_unhedged_fx','f01_hedge_ratio','f01_gross_margin','f02_cust_concentration','f02_bad_debt','f03_liquidity','f03_nd_ebitda','f03_maturity','f04_journal','f04_rev_rec'], labels:['Unhedged FX exposure','FX hedge ratio %','Gross margin vs target','Top customer ISG share %','Bad debt provision %','Liquidity headroom','Net-debt/EBITDA ratio','Debt maturity (months)','Journal anomalies','Revenue recog. adjustments']},
   {domain:'Compliance', color:'#a78bfa', keys:['c01_screening','c02_ai_act','c03_abac','c03_sb253'], labels:['Export screening coverage %','AI Act audit coverage %','ABAC coverage %','SB 253 readiness %']}
 ];
@@ -1915,8 +1932,8 @@ var agentsCompleted = {strategic:false, operational:false, financial:false, comp
 
 function getKRISummary(domain){
   var keys = {
-    strategic:['s01_odm_concentration','s01_sku_restricted','s02_ai_growth','s02_rd_spend','s03_synergy','s03_dd_coverage'],
-    operational:['o01_single_source','o01_inventory','o01_distress','o01_cyber_assess','o02_mttd','o02_mttr','o02_patch','o02_rto','o03_field_failure','o03_recall','o04_open_roles','o04_succession','o04_prog_staffing'],
+    strategic:['s01_odm_concentration','s01_sku_restricted','s01_geo_signals','s02_ai_growth','s02_rd_spend','s02_comp_signals','s03_synergy','s03_dd_coverage'],
+    operational:['o01_single_source','o01_inventory','o01_distress','o01_cyber_assess','o02_mttd','o02_mttr','o02_patch','o02_rto','o02_vulns','o03_field_failure','o03_recall','o03_supp_quality','o04_open_roles','o04_succession','o04_prog_staffing'],
     financial:['f01_unhedged_fx','f01_hedge_ratio','f01_gross_margin','f02_cust_concentration','f02_bad_debt','f03_liquidity','f03_nd_ebitda','f03_maturity','f04_journal','f04_rev_rec'],
     compliance:['c01_screening','c02_ai_act','c03_abac','c03_sb253']
   };
