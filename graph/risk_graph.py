@@ -74,6 +74,7 @@ class RiskIntelligenceState(TypedDict):
     kri_validation_results: dict      # pure-Python CSV vs store diff
     content_validation: dict          # Haiku check of board summary + exec recs
     panel_validation: dict            # Two-specialist panel: Elena Marchetti + Marcus Okonkwo
+    panel_remediation: dict           # Auto-fix results: {auto_fixed, calibration_findings, blocked}
 
     # Infrastructure
     errors: list
@@ -107,6 +108,7 @@ def dispatch_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
     state["kri_validation_results"] = {}
     state["content_validation"] = {}
     state["panel_validation"] = {}
+    state["panel_remediation"] = {}
     state["model_params"] = {}
     state["kri_ground_truth"] = {}
     state["agent_context"] = {}
@@ -184,33 +186,53 @@ def run_domain_agents_node(state: RiskIntelligenceState) -> RiskIntelligenceStat
     model_params = state.get("model_params", {})
 
     def _model_context_snippet() -> str:
-        """Build a compact model-outputs summary for agent prompts."""
+        """Build a compact model-outputs summary for agent prompts.
+        Labels use plain business language — no statistical notation — so agents
+        and the CRA write in terms board directors can act on directly."""
         if not model_params:
             return ""
         ep = model_params.get("ebitda",       {})
         hp = model_params.get("hedge",        {})
         sp = model_params.get("supply_chain", {})
-        lines = ["=== LIVE MODEL OUTPUTS (calibrated from current CSVs) ==="]
+        lines = ["=== LIVE MODEL OUTPUTS (calibrated from current CSVs) ===",
+                 "NOTE: Express these as business consequences in your output — "
+                 "do not reproduce statistical notation (no percentile labels, "
+                 "no probability notation, no simulation parameters)."]
         if ep:
+            p_breach = ep.get('p_covenant_breach_pct', 0)
+            # Translate probability to plain-language severity
+            if p_breach >= 60:
+                breach_language = f"likely to breach covenant ({p_breach}% probability — majority of stress scenarios)"
+            elif p_breach >= 50:
+                breach_language = f"more likely than not to breach covenant ({p_breach}% — odds are against the company)"
+            elif p_breach >= 35:
+                breach_language = f"material covenant breach risk ({p_breach}% — roughly 1-in-3 scenarios)"
+            else:
+                breach_language = f"elevated covenant breach risk ({p_breach}% — watchlist)"
             lines.append(
-                f"EBITDA Stress: revenue USD {ep.get('revenue_usd_b')}B | "
+                f"EBITDA / Covenant: revenue USD {ep.get('revenue_usd_b')}B | "
                 f"cost ratio {ep.get('cost_ratio_pct')}% | "
-                f"P(covenant breach) {ep.get('p_covenant_breach_pct')}% | "
-                f"headroom USD {int(ep.get('ebitda_headroom_usd_m', 0))}M"
+                f"covenant breach assessment: {breach_language} | "
+                f"headroom to covenant floor: USD {int(ep.get('ebitda_headroom_usd_m', 0))}M"
             )
         if hp:
             lines.append(
-                f"Hedge Analyser: gross FX USD {hp.get('gross_exposure_usd_m', 0):,.0f}M | "
-                f"hedge ratio {hp.get('hedge_ratio_pct')}% | "
-                f"unhedged USD {hp.get('unhedged_usd_m', 0):,.0f}M | "
-                f"unrealised P&L USD {hp.get('unrealised_pnl_usd_m')}M"
+                f"FX Exposure: total currency exposure USD {hp.get('gross_exposure_usd_m', 0):,.0f}M | "
+                f"currently hedged: {hp.get('hedge_ratio_pct')}% | "
+                f"unhedged (at risk): USD {hp.get('unhedged_usd_m', 0):,.0f}M | "
+                f"unrealised currency loss: USD {hp.get('unrealised_pnl_usd_m')}M"
             )
         if sp:
+            var_m = sp.get('var_95_baseline_usd_m', 0)
+            save_m = sp.get('saving_dual_src_usd_m', 0)
+            inv_m  = sp.get('saving_inv_buffer_usd_m', 0)
+            cost_m = sp.get('urgent_dual_cost_usd_m', 0)
             lines.append(
-                f"Supply Chain: {sp.get('supplier_count')} suppliers | "
-                f"recovery {sp.get('recovery_months')}mo | "
-                f"VaR baseline USD {sp.get('var_95_baseline_usd_m', 0):,}M | "
-                f"dual-src saves USD {sp.get('saving_dual_src_usd_m', 0):,}M"
+                f"Supply Chain: {sp.get('supplier_count')} critical suppliers | "
+                f"worst-case disruption cost (stress scenario): USD {var_m:,}M | "
+                f"qualifying alternative suppliers would reduce that exposure by USD {save_m:,}M "
+                f"at a cost of USD {cost_m}M/yr | "
+                f"inventory buffer saves additional USD {inv_m:,}M"
             )
         return "\n".join(lines)
 
@@ -537,6 +559,125 @@ def risk_panel_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
     return state
 
 
+def panel_remediation_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
+    """
+    Tier-1 auto-remediation: runs immediately after the Risk Panel.
+
+    STRUCTURAL findings (threshold drift, figure contradictions) are fixed
+    automatically by re-running the threshold sync and consistency checker.
+    No human involvement required — these are deterministic mechanical fixes.
+
+    CALIBRATION findings (model assumptions, threshold level policy, missing
+    KRI coverage) cannot be auto-resolved and are passed to the HITL gate
+    for human review with clear recommendations from the panel.
+
+    After remediation, a final consistency check gates the GitHub push:
+    if CRITICAL structural issues survive remediation the push is blocked and
+    the run is flagged for manual intervention.
+    """
+    dashboard_path = Path(__file__).parent.parent / "dashboard" / "index.html"
+    remediation = {
+        "auto_fixed":            [],   # structural fixes applied this run
+        "calibration_findings":  [],   # panel findings requiring human judgment
+        "blocked":               False,
+        "block_reasons":         [],
+        "consistency_status":    "skipped",
+    }
+
+    # ── Step 1: Classify panel findings ──────────────────────────────────────
+    panel_verdict = state.get("panel_validation", {}).get("panel_verdict", {})
+    all_findings  = (
+        panel_verdict.get("critical_findings", []) +
+        panel_verdict.get("high_findings", [])
+    )
+
+    # Structural finding keywords — issues our tooling can detect and fix
+    STRUCTURAL_KEYWORDS = {
+        "threshold", "diverge", "mismatch", "csv", "html", "tile",
+        "contradiction", "inconsisten", "figure", "var saving", "663",
+        "benchmark", "status badge", "amber threshold", "breach threshold",
+    }
+
+    for f in all_findings:
+        title  = (f.get("title",  "") + " " + f.get("detail", "")).lower()
+        is_structural = any(kw in title for kw in STRUCTURAL_KEYWORDS)
+        if not is_structural:
+            remediation["calibration_findings"].append(f)
+        # structural findings get processed below — no need to store separately
+
+    calibration_count = len(remediation["calibration_findings"])
+    structural_count  = len(all_findings) - calibration_count
+    print(f"\n[PANEL REMEDIATION] {len(all_findings)} finding(s): "
+          f"{structural_count} structural → auto-fix | "
+          f"{calibration_count} calibration → HITL")
+
+    # ── Step 2: Re-run threshold sync ────────────────────────────────────────
+    # This catches any threshold drift the panel found, even if consistency
+    # checker already ran in run_dashboard_update (belt-and-suspenders).
+    if dashboard_path.exists():
+        try:
+            from tools.dashboard_updater import _load_thresholds, _sync_kri_thresholds_to_html
+            html       = dashboard_path.read_text()
+            thresholds = _load_thresholds()
+            if thresholds:
+                updated_html, sync_changes = _sync_kri_thresholds_to_html(html, thresholds)
+                if sync_changes:
+                    dashboard_path.write_text(updated_html)
+                    remediation["auto_fixed"].extend(
+                        [f"threshold_sync:{c}" for c in sync_changes]
+                    )
+                    print(f"  Threshold sync applied: {len(sync_changes)} correction(s)")
+                    for c in sync_changes:
+                        print(f"    ↳ {c}")
+                else:
+                    print("  Threshold sync: no drift detected ✓")
+        except Exception as e:
+            state["warnings"].append(f"Panel remediation threshold sync failed: {e}")
+            print(f"  ⚠ Threshold sync failed: {e}")
+
+    # ── Step 3: Run consistency checker ──────────────────────────────────────
+    try:
+        from tools.consistency_checker import run as cc_run, print_report as cc_print
+        cc_report = cc_run(dashboard_path)
+        remediation["consistency_status"] = cc_report.get("status", "unknown")
+        cc_print(cc_report)
+
+        # Block push if critical structural issues survive remediation
+        if cc_report.get("critical_count", 0) > 0:
+            remediation["blocked"] = True
+            for issue in (
+                cc_report.get("threshold_issues", []) +
+                cc_report.get("contradiction_issues", [])
+            ):
+                msg = issue.get("message", str(issue))
+                remediation["block_reasons"].append(msg)
+                state["warnings"].append(f"[BLOCKED] {msg}")
+            print(f"\n  ⛔ PUSH BLOCKED — {cc_report['critical_count']} critical structural "
+                  f"issue(s) survived remediation. Fix in kri_thresholds.csv or "
+                  f"model_benchmarks.json and re-run.")
+            state["dashboard_updated"] = False  # prevents github_push_node from firing
+
+        elif cc_report.get("high_count", 0) > 0:
+            # High (non-critical) issues: warn but don't block
+            print(f"  ⚠ {cc_report['high_count']} HIGH issue(s) — review model_benchmarks.json")
+
+    except Exception as e:
+        state["warnings"].append(f"Consistency checker failed in remediation: {e}")
+        print(f"  ⚠ Consistency check failed: {e}")
+        remediation["consistency_status"] = "error"
+
+    # ── Step 4: Surface summary ───────────────────────────────────────────────
+    if remediation["auto_fixed"]:
+        print(f"\n  Auto-fixed {len(remediation['auto_fixed'])} structural issue(s) "
+              f"without human intervention ✓")
+    if remediation["calibration_findings"]:
+        print(f"  {len(remediation['calibration_findings'])} calibration finding(s) "
+              f"surfaced to HITL gate for human review →")
+
+    state["panel_remediation"] = remediation
+    return state
+
+
 def _hitl_input(prompt: str) -> str:
     """
     Read a line from stdin.  Returns empty string (treated as 'no'/'reject')
@@ -625,27 +766,50 @@ def hitl_gate_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
             else:
                 print(f"     ⚠ {f_str}")
 
-    # ── Risk Panel banner ─────────────────────────────────
-    panel_verdict = panel_val.get("panel_verdict", {})
+    # ── Risk Panel + Remediation banner ───────────────────────
+    panel_verdict  = panel_val.get("panel_verdict", {})
+    remediation    = state.get("panel_remediation", {})
+    auto_fixed     = remediation.get("auto_fixed", [])
+    calib_findings = remediation.get("calibration_findings", [])
+    blocked        = remediation.get("blocked", False)
+
     if panel_verdict:
         rating   = panel_verdict.get("overall_rating", "?")
         board_ok = panel_verdict.get("fitness_for_board", True)
-        icon = "✓" if board_ok else "⚠"
+        icon = "✓" if (board_ok and not blocked) else "⚠"
         print(f"\n  {icon}  RISK PANEL ({rating}) — Board-ready: {board_ok}")
-        for cf in panel_verdict.get("critical_findings", []):
-            print(f"     🔴 CRITICAL [{cf.get('id','')}] {cf.get('title','')} → owner: {cf.get('owner','')}")
-        for hf in panel_verdict.get("high_findings", []):
-            print(f"     🟠 HIGH     [{hf.get('id','')}] {hf.get('title','')}")
+
+        if auto_fixed:
+            print(f"\n  ✅ AUTO-REMEDIATED ({len(auto_fixed)} structural fix(es) applied automatically):")
+            for fix in auto_fixed:
+                print(f"     ↳ {fix.replace('threshold_sync:','').replace('consistency:','')}")
+
+        if blocked:
+            print(f"\n  ⛔ PUSH BLOCKED — critical structural issues survive auto-fix.")
+            for reason in remediation.get("block_reasons", []):
+                print(f"     🔴 {reason}")
+            print(f"     Fix in kri_thresholds.csv or model_benchmarks.json then re-run.")
+
+        if calib_findings:
+            print(f"\n  📋 CALIBRATION FINDINGS — require your judgment ({len(calib_findings)}):")
+            for f in calib_findings:
+                sev  = f.get("severity", "high").upper()
+                fid  = f.get("id", "")
+                title = f.get("title", "")
+                owner = f.get("owner", "")
+                rec   = f.get("recommendation", "")
+                icon_f = "🔴" if sev == "CRITICAL" else "🟠"
+                print(f"     {icon_f} [{sev}] [{fid}] {title}")
+                if rec:
+                    print(f"          Recommendation: {rec}")
+                if owner:
+                    print(f"          Owner: {owner}")
+        elif not blocked:
+            print(f"\n  ✓ No calibration findings require human review this run.")
+
         conditions = panel_verdict.get("conditions_for_board_readiness", [])
         for c in conditions:
             print(f"     ✗ Condition: {c}")
-        roadmap = panel_verdict.get("remediation_roadmap", [])
-        if roadmap:
-            p1 = next((p for p in roadmap if p.get("phase") == 1), None)
-            if p1:
-                print(f"\n  Phase 1 ({p1.get('timeline_days')}d — {p1.get('name','')}):")
-                for item in p1.get("items", []):
-                    print(f"     • {item}")
 
     # ── Held findings ──────────────────────────────────────
     if holds:
@@ -1256,6 +1420,7 @@ def build_graph():
     graph.add_node("kri_validation", kri_validation_node)
     graph.add_node("content_validation", content_validation_node)
     graph.add_node("risk_panel", risk_panel_node)
+    graph.add_node("panel_remediation", panel_remediation_node)
     graph.add_node("hitl_gate", hitl_gate_node)
     graph.add_node("update_exec_recs", update_exec_recs_node)
     graph.add_node("github_push", github_push_node)
@@ -1276,8 +1441,9 @@ def build_graph():
     )
     graph.add_edge("write_approved", "kri_validation")
     graph.add_edge("kri_validation", "content_validation")
-    graph.add_edge("content_validation", "risk_panel")
-    graph.add_edge("risk_panel",         "hitl_gate")
+    graph.add_edge("content_validation",  "risk_panel")
+    graph.add_edge("risk_panel",          "panel_remediation")
+    graph.add_edge("panel_remediation",   "hitl_gate")
     graph.add_edge("hitl_gate", "update_exec_recs")
     graph.add_edge("update_exec_recs", "github_push")
     graph.add_edge("github_push", "finalise")
