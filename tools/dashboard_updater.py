@@ -40,11 +40,12 @@ KRI_NAME_MAP = {
     "mttd_days":                          "Mean time to detect — MTTD (hours)",
     "mttr_days":                          "Mean time to respond — MTTR (days)",
     "patch_compliance_pct":               "Patch compliance rate",
-    # critical_vulns_open_gt30d has no dashboard tile in the chat HTML
+    "critical_vulns_open_gt30d":          "Critical vulnerabilities open >30 days",
     "it_rto_hours":                       "RTO — order management & fulfilment systems (hours)",
     # Operational — quality (O-03)
     "field_failure_rate_pct":             "Field failure rate",
     "recall_readiness_score_pct":         "Recall readiness score",
+    "supplier_quality_rejection_rate_pct": "Supplier quality rejection rate (%)",
     "safety_incidents_ytd":               "Confirmed product safety incidents YTD",
     # Operational — talent (O-04)
     "tech_attrition_rate_pct":            "Tech role attrition rate",
@@ -65,7 +66,9 @@ KRI_NAME_MAP = {
     # Financial — controls (F-04)
     "audit_findings_open":                "Open SOX significant deficiencies",
     # F-04: material_weakness_count — store-only, no dashboard tile
-    # Strategic (S-01, S-02, S-03) — signal counts are store-only (no dashboard tile)
+    # Strategic
+    "geopolitical_signal_count":          "Geopolitical escalation signals (YTD)",
+    "competitive_signals":                "Competitive threat signals (active)",
     "synergy_delivery_pct":               "Synergy delivery vs target",
     # Compliance — export & sanctions (C-01)
     "export_screening_coverage_pct":      "Export screening coverage rate",
@@ -94,6 +97,7 @@ KRI_FORMAT = {
     "it_rto_hours":                       lambda v: f"{v}h",
     "field_failure_rate_pct":             lambda v: f"{v}%",
     "recall_readiness_score_pct":         lambda v: f"{int(v)}%",
+    "supplier_quality_rejection_rate_pct": lambda v: f"{v}%",
     "safety_incidents_ytd":               lambda v: str(int(v)),
     "tech_attrition_rate_pct":            lambda v: f"{v}%",
     "critical_open_roles_gt60d":          lambda v: str(int(v)),
@@ -109,6 +113,8 @@ KRI_FORMAT = {
     "debt_maturity_runway_months":        lambda v: f"{int(v)} months",
     "audit_findings_open":                lambda v: str(int(v)),
     # Strategic
+    "geopolitical_signal_count":          lambda v: str(int(v)),
+    "competitive_signals":                lambda v: str(int(v)),
     "synergy_delivery_pct":               lambda v: f"{int(v)}%",
     # Compliance
     "export_screening_coverage_pct":      lambda v: f"{v}%",
@@ -131,10 +137,14 @@ KRI_DATA_KEY_MAP = {
     "o02_mttr":               "mttr_days",
     "o02_patch":              "patch_compliance_pct",
     "o02_rto":                "it_rto_hours",
+    "o02_vulns":              "critical_vulns_open_gt30d",
     "o03_field_failure":      "field_failure_rate_pct",
     "o03_recall":             "recall_readiness_score_pct",
+    "o03_supp_quality":       "supplier_quality_rejection_rate_pct",
     "o04_open_roles":         "critical_open_roles_gt60d",
     "o04_succession":         "svp_succession_coverage_pct",
+    "s01_geo_signals":        "geopolitical_signal_count",
+    "s02_comp_signals":       "competitive_signals",
     "s03_synergy":            "synergy_delivery_pct",
     "f01_unhedged_fx":        "unhedged_fx_exposure_usd_m",
     "f01_hedge_ratio":        "avg_hedge_ratio_pct",
@@ -163,6 +173,7 @@ THRESHOLD_FORMAT = {
     "it_rto_hours":                       lambda v: f"{v:g}h",
     "field_failure_rate_pct":             lambda v: f"{v}%",
     "recall_readiness_score_pct":         lambda v: f"{v:g}%",
+    "supplier_quality_rejection_rate_pct": lambda v: f"{v}%",
     "safety_incidents_ytd":               lambda v: str(int(v)),
     "tech_attrition_rate_pct":            lambda v: f"{v:g}%",
     "critical_open_roles_gt60d":          lambda v: str(int(v)),
@@ -175,6 +186,8 @@ THRESHOLD_FORMAT = {
     "liquidity_headroom_usd_b":           lambda v: f"USD {v}B",
     "debt_maturity_runway_months":        lambda v: f"{int(v)} months",
     "audit_findings_open":                lambda v: str(int(v)),
+    "geopolitical_signal_count":          lambda v: str(int(v)),
+    "competitive_signals":                lambda v: str(int(v)),
     "synergy_delivery_pct":               lambda v: f"{v:g}%",
     "export_screening_coverage_pct":      lambda v: f"{v:g}%",
     "confirmed_sanctions_violations_ytd": lambda v: str(int(v)),
@@ -266,6 +279,82 @@ def _sync_kri_thresholds_to_html(html: str, thresholds: dict) -> tuple[str, list
     return html, changes
 
 
+def _get_bench_value(benchmarks: dict, key_path: tuple):
+    obj = benchmarks
+    for k in key_path:
+        if not isinstance(obj, dict) or k not in obj:
+            return None
+        obj = obj[k]
+    return float(obj) if obj is not None else None
+
+
+def _sync_model_benchmarks_to_html(html: str) -> tuple[str, list[str]]:
+    """
+    Replace stale model benchmark figures in HTML with canonical values from
+    data/model_benchmarks.json.  Uses the same regex patterns as consistency_checker
+    so every HIGH benchmark issue is auto-corrected before the checker runs.
+
+    Returns (updated_html, list_of_change_descriptions).
+    """
+    if not BENCHMARKS_PATH.exists():
+        return html, []
+    try:
+        benchmarks = json.loads(BENCHMARKS_PATH.read_text())
+    except Exception:
+        return html, []
+
+    try:
+        from tools.consistency_checker import BENCHMARK_CHECKS
+    except ImportError:
+        return html, []
+
+    all_changes: list[str] = []
+
+    for chk in BENCHMARK_CHECKS:
+        canonical = _get_bench_value(benchmarks, chk["bench_key"])
+        if canonical is None:
+            continue
+        tol     = chk.get("tolerance", 5.0)
+        is_raw  = chk.get("is_raw", False)
+        pat     = re.compile(chk["pattern"], re.IGNORECASE | re.DOTALL)
+
+        parts: list[str] = []
+        last_end = 0
+        changed_this = False
+
+        for m in pat.finditer(html):
+            old_str = m.group(1)
+            old_val = float(old_str.replace(",", ""))
+            pct_diff = (abs(old_val - canonical) / canonical * 100
+                        if canonical != 0 else abs(old_val))
+
+            if pct_diff <= tol:
+                # Within tolerance — keep as-is, continue scanning
+                parts.append(html[last_end:m.end()])
+                last_end = m.end()
+                continue
+
+            # Format canonical value to same style as original
+            new_str = str(int(canonical)) if is_raw else f"{int(canonical):,}"
+
+            # Rebuild the full match with only the captured group swapped
+            full_match = m.group(0)
+            replaced   = full_match.replace(old_str, new_str, 1)
+            parts.append(html[last_end:m.start()])
+            parts.append(replaced)
+            last_end = m.end()
+            changed_this = True
+            all_changes.append(
+                f"{chk['label']}: {int(old_val):,}→{int(canonical):,}"
+            )
+
+        parts.append(html[last_end:])
+        if changed_this:
+            html = "".join(parts)
+
+    return html, all_changes
+
+
 EXEC_REC_IDS = {
     "bcm":          "ec-bcm",
     "ebitda":       "ec-mc",
@@ -291,11 +380,28 @@ def _trim_to_sentence(text: str, limit: int) -> str:
     return window + '…'
 
 
+def _check_js_balance(html: str) -> tuple[bool, str]:
+    """Return (ok, message) for JS brace/bracket balance in the main script block."""
+    scripts = list(re.finditer(r'<script[^>]*>(.*?)</script>', html, re.DOTALL))
+    if len(scripts) < 2:
+        return True, "no script block"
+    js = scripts[1].group(1)
+    diff_b  = js.count('{') - js.count('}')
+    diff_sq = js.count('[') - js.count(']')
+    if diff_b == 0 and diff_sq == 0:
+        return True, "ok"
+    return False, f"JS imbalanced: {{}} diff={diff_b}, [] diff={diff_sq}"
+
+
 def backup_dashboard(html_path):
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     backup_path = BACKUP_DIR / f"index_{ts}.html"
     shutil.copy2(html_path, backup_path)
+    # Warn immediately if the file being backed up is already structurally broken
+    ok, msg = _check_js_balance(html_path.read_text())
+    if not ok:
+        print(f"  ⚠ STRUCTURAL WARNING at backup: {msg} — file may cause page freeze")
     return backup_path
 
 
@@ -345,11 +451,17 @@ def run_dashboard_update(dashboard_path):
     changes = []
     total_updates = 0
     unmapped = []
+    fyi_skipped = []
 
     for bucket in DOMAIN_BUCKETS:
         for risk_id, risk in store.get(bucket, {}).items():
             kri_changes = 0
             for kri_name, kri_data in risk.get("kris", {}).items():
+                # FYI context metrics — archived, not part of the KRI framework.
+                # No dashboard tile; skip silently (no warning).
+                if kri_data.get("status") == "fyi":
+                    fyi_skipped.append(f"{risk_id}.{kri_name}")
+                    continue
                 if kri_name not in KRI_NAME_MAP:
                     unmapped.append(f"{risk_id}.{kri_name}")
                     continue
@@ -364,6 +476,8 @@ def run_dashboard_update(dashboard_path):
             if kri_changes > 0:
                 changes.append(f"{risk_id}: {kri_changes} KRI(s) updated")
 
+    if fyi_skipped:
+        print(f"  ℹ {len(fyi_skipped)} FYI context metric(s) skipped (archived, not KRIs): {fyi_skipped}")
     if unmapped:
         print(f"  ⚠ {len(unmapped)} store KRI(s) not in KRI_NAME_MAP — no tile updated: {unmapped}")
 
@@ -381,6 +495,18 @@ def run_dashboard_update(dashboard_path):
         total_updates += len(threshold_changes)
     else:
         print("  ⚠ Threshold sync skipped — kri_thresholds.csv not found")
+
+    # ── Benchmark sync: model_benchmarks.json → HTML text ────────────────────
+    # Auto-corrects exec rec / risk register / AI prompt text that drifted from
+    # the canonical simulation outputs (e.g. after MTBF or EBITDA recalibration).
+    html, bench_changes = _sync_model_benchmarks_to_html(html)
+    if bench_changes:
+        print(f"  Benchmark sync: {len(bench_changes)} figure(s) corrected from model_benchmarks.json")
+        for c in bench_changes:
+            print(f"    ↳ {c}")
+        total_updates += len(bench_changes)
+    else:
+        print("  Benchmark sync: all figures already match model_benchmarks.json ✓")
 
     # ── Write HTML if anything changed ───────────────────────────────────────
     if total_updates > 0:
