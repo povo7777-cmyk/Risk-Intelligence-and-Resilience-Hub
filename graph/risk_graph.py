@@ -76,6 +76,8 @@ class RiskIntelligenceState(TypedDict):
     content_validation: dict          # Haiku check of board summary + exec recs
     panel_validation: dict            # Two-specialist panel: Elena Marchetti + Marcus Okonkwo
     panel_remediation: dict           # Auto-fix results: {auto_fixed, calibration_findings, blocked}
+    board_summary_corrections: dict   # {applied, flags, reason} — Loop 1 feedback
+    panel_action_items: list          # calibration findings user elected to add to board actions — Loop 2
 
     # Infrastructure
     errors: list
@@ -110,6 +112,8 @@ def dispatch_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
     state["content_validation"] = {}
     state["panel_validation"] = {}
     state["panel_remediation"] = {}
+    state["board_summary_corrections"] = {}
+    state["panel_action_items"] = []
     state["model_params"] = {}
     state["kri_ground_truth"] = {}
     state["agent_context"] = {}
@@ -695,6 +699,137 @@ def panel_remediation_node(state: RiskIntelligenceState) -> RiskIntelligenceStat
     return state
 
 
+def board_summary_correction_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
+    """
+    Loop 1 — Validation feedback: corrects factual errors in the board summary.
+    Loop 2 (content accuracy only) — Panel feedback: fixes board summary text errors
+    identified as HIGH/CRITICAL content-accuracy findings by the Risk Panel.
+
+    Runs after panel_remediation, before hitl_gate, so the human sees the already-
+    corrected summary when they reach the HITL review. Calibration findings (model
+    methodology, threshold policy, VaR assumptions) are NOT handled here — those
+    stay in hitl_gate as before.
+
+    One LLM call per run, max. HITL approval required before any change is written.
+    """
+    import anthropic
+
+    board_summary = state.get("board_summary", "")
+    content_val   = state.get("content_validation", {})
+    panel_val     = state.get("panel_validation", {})
+    ci_mode       = state.get("ci_mode", False)
+
+    # ── 1. Validation agent FLAG entries (board_summary section) ─────────────
+    validation_flags = [
+        str(f)[5:].strip()                          # strip "FLAG:" prefix
+        for f in content_val.get("board_summary", {}).get("flags", [])
+        if str(f).strip().startswith("FLAG:")
+    ]
+
+    # ── 2. Panel content-accuracy findings ───────────────────────────────────
+    # "Content accuracy" = panel identified specific text in the board summary
+    # that contradicts the underlying data.  Calibration/model findings stay in
+    # hitl_gate and are not routed here.
+    CONTENT_ACCURACY_KW = {
+        "board states", "board claims", "summary states", "summary claims",
+        "states '", "claims '", 'states "', 'claims "',
+        "recount", "overstate", "understate", "misattribut",
+        "component-vs-aggregate", "confusion flagged",
+        "incorrect count", "miscounts", "wrong count",
+        "primary driver", "sub-component", "aggregate confusion",
+    }
+    panel_verdict = panel_val.get("panel_verdict", {})
+    all_panel = (
+        panel_verdict.get("critical_findings", []) +
+        panel_verdict.get("high_findings", [])
+    )
+    panel_content_flags = []
+    for f in all_panel:
+        combined = (f.get("title", "") + " " + f.get("detail", "")).lower()
+        if any(kw in combined for kw in CONTENT_ACCURACY_KW):
+            panel_content_flags.append(
+                f"{f.get('title', '')} — {f.get('detail', '')}"
+            )
+
+    all_flags = validation_flags + panel_content_flags
+
+    if not all_flags:
+        print("\n[BOARD SUMMARY CORRECTION] No content flags — skipping ✓")
+        state["board_summary_corrections"] = {
+            "applied": False, "flags": [], "reason": "no_flags"
+        }
+        return state
+
+    print(f"\n[BOARD SUMMARY CORRECTION] {len(all_flags)} content flag(s) queued for correction:")
+    for i, flag in enumerate(all_flags):
+        print(f"  {i+1}. {flag[:120]}{'...' if len(flag) > 120 else ''}")
+
+    # ── 3. LLM targeted correction pass ──────────────────────────────────────
+    flags_numbered = "\n".join(f"{i+1}. {flag}" for i, flag in enumerate(all_flags))
+    prompt = (
+        "You are correcting specific factual errors in a board risk summary.\n"
+        "Fix ONLY the numbered errors listed below — change NOTHING else.\n"
+        "Do not rephrase, restructure, or improve any other part of the text.\n"
+        "Do not add new content. Return ONLY the corrected summary; no preamble.\n\n"
+        f"ERRORS TO FIX:\n{flags_numbered}\n\n"
+        f"CURRENT BOARD SUMMARY:\n{board_summary}"
+    )
+
+    corrected_summary = None
+    try:
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        msg = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=8192,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        corrected_summary = msg.content[0].text.strip()
+        if _cost:
+            _cost.record(
+                "board_summary_correction", "claude-sonnet-4-5",
+                msg.usage.input_tokens, msg.usage.output_tokens,
+            )
+        print(f"  Correction draft ready ({len(corrected_summary)} chars)")
+    except Exception as e:
+        state["warnings"].append(f"Board summary correction LLM failed: {e}")
+        print(f"  ⚠ Correction LLM failed: {e} — skipping")
+        state["board_summary_corrections"] = {
+            "applied": False, "flags": all_flags, "reason": f"llm_error: {e}"
+        }
+        return state
+
+    # ── 4. HITL approval ──────────────────────────────────────────────────────
+    if ci_mode:
+        approved = True
+        print("  [CI] Auto-approving board summary correction")
+    else:
+        print(f"\n  Apply corrections to board summary? (yes/no): ", end="", flush=True)
+        response = _hitl_input("")
+        approved = (response == "yes")
+
+    if approved:
+        state["board_summary"] = corrected_summary
+        state["board_summary_corrections"] = {
+            "applied": True, "flags": all_flags, "reason": "approved"
+        }
+        try:
+            from tools.dashboard_updater import update_board_summary
+            dash = Path(__file__).parent.parent / "dashboard" / "index.html"
+            if dash.exists():
+                update_board_summary(dash, corrected_summary, state["run_id"])
+                print("  ✓ Board summary corrected and dashboard re-written")
+        except Exception as e:
+            state["warnings"].append(f"Board summary correction dashboard write failed: {e}")
+            print(f"  ⚠ State corrected but dashboard write failed: {e}")
+    else:
+        state["board_summary_corrections"] = {
+            "applied": False, "flags": all_flags, "reason": "rejected_by_user"
+        }
+        print("  Board summary correction declined — original retained, flags noted in HITL gate")
+
+    return state
+
+
 def _hitl_input(prompt: str) -> str:
     """
     Read a line from stdin.  Returns empty string (treated as 'no'/'reject')
@@ -810,8 +945,8 @@ def hitl_gate_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
         if calib_findings:
             print(f"\n  📋 CALIBRATION FINDINGS — require your judgment ({len(calib_findings)}):")
             for f in calib_findings:
-                sev  = f.get("severity", "high").upper()
-                fid  = f.get("id", "")
+                sev   = f.get("severity", "high").upper()
+                fid   = f.get("id", "")
                 title = f.get("title", "")
                 owner = f.get("owner", "")
                 rec   = f.get("recommendation", "")
@@ -821,6 +956,19 @@ def hitl_gate_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
                     print(f"          Recommendation: {rec}")
                 if owner:
                     print(f"          Owner: {owner}")
+
+                # Loop 2 — offer to add finding to board Risk Committee actions
+                if rec and not ci_mode:
+                    resp = _hitl_input(
+                        f"          Add [{fid}] recommendation to board actions? (yes/no): "
+                    )
+                    if resp == "yes":
+                        action_text = f"[{fid}] {title}: {rec}"
+                        state["panel_action_items"].append(action_text)
+                        print(f"          ✓ Queued for board summary — will append after exec rec update")
+                elif rec and ci_mode:
+                    # CI: do not auto-add calibration findings; they require human judgment
+                    pass
         elif not blocked:
             print(f"\n  ✓ No calibration findings require human review this run.")
 
@@ -958,22 +1106,50 @@ def hitl_gate_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
 
 
 def update_exec_recs_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
-    """Apply approved executive recommendation updates to dashboard HTML."""
-    from tools.dashboard_updater import update_exec_recommendations
-    approved = state.get("exec_rec_approved", {})
-    if not approved:
-        return state
-
+    """
+    Apply approved executive recommendation updates to dashboard HTML.
+    Also appends any panel calibration action items (Loop 2) that the user elected
+    to add during the HITL gate to the board summary's Risk Committee Recommended
+    Actions section.
+    """
+    from tools.dashboard_updater import update_exec_recommendations, update_board_summary
     dashboard_path = Path(__file__).parent.parent / "dashboard" / "index.html"
     if not dashboard_path.exists():
         return state
 
-    try:
-        changes = update_exec_recommendations(dashboard_path, approved)
-        print(f"\n[EXEC RECS] {changes} section(s) updated in dashboard")
-        state["dashboard_updated"] = True
-    except Exception as e:
-        state["errors"].append(f"Exec rec update failed: {e}")
+    # ── Exec rec updates (existing) ───────────────────────────────────────────
+    approved = state.get("exec_rec_approved", {})
+    if approved:
+        try:
+            changes = update_exec_recommendations(dashboard_path, approved)
+            print(f"\n[EXEC RECS] {changes} section(s) updated in dashboard")
+            state["dashboard_updated"] = True
+        except Exception as e:
+            state["errors"].append(f"Exec rec update failed: {e}")
+
+    # ── Panel action items → board summary (Loop 2) ───────────────────────────
+    panel_actions = state.get("panel_action_items", [])
+    if panel_actions:
+        board_summary = state.get("board_summary", "")
+        MARKER = "\n\nRISK COMMITTEE RECOMMENDED ACTIONS:"
+        if MARKER in board_summary:
+            # Find existing actions and append new ones after the last bullet
+            additions = "\n" + "\n".join(f"  • {a}" for a in panel_actions)
+            board_summary = board_summary + additions
+        else:
+            # No existing actions section — create one
+            board_summary += (
+                MARKER + "\n" +
+                "\n".join(f"  • {a}" for a in panel_actions)
+            )
+        state["board_summary"] = board_summary
+        try:
+            update_board_summary(dashboard_path, board_summary, state["run_id"])
+            print(f"\n[EXEC RECS] {len(panel_actions)} panel action(s) added to board summary")
+            state["dashboard_updated"] = True
+        except Exception as e:
+            state["warnings"].append(f"Panel action board summary write failed: {e}")
+            print(f"  ⚠ Panel actions written to state but dashboard write failed: {e}")
 
     return state
 
@@ -1849,43 +2025,45 @@ def build_graph():
     """Assemble and compile the LangGraph state graph."""
     graph = StateGraph(RiskIntelligenceState)
 
-    graph.add_node("dispatch",           dispatch_node)
-    graph.add_node("kri_data_layer",     kri_data_layer_node)
-    graph.add_node("model_calibration",  model_calibration_node)
-    graph.add_node("run_agents",         run_domain_agents_node)
-    graph.add_node("synthesis", chief_risk_synthesis_node)
-    graph.add_node("write_approved", write_approved_node)
-    graph.add_node("kri_validation", kri_validation_node)
-    graph.add_node("content_validation", content_validation_node)
-    graph.add_node("risk_panel", risk_panel_node)
-    graph.add_node("panel_remediation", panel_remediation_node)
-    graph.add_node("hitl_gate", hitl_gate_node)
-    graph.add_node("update_exec_recs", update_exec_recs_node)
-    graph.add_node("github_push", github_push_node)
-    graph.add_node("finalise", finalise_node)
+    graph.add_node("dispatch",                  dispatch_node)
+    graph.add_node("kri_data_layer",            kri_data_layer_node)
+    graph.add_node("model_calibration",         model_calibration_node)
+    graph.add_node("run_agents",                run_domain_agents_node)
+    graph.add_node("synthesis",                 chief_risk_synthesis_node)
+    graph.add_node("write_approved",            write_approved_node)
+    graph.add_node("kri_validation",            kri_validation_node)
+    graph.add_node("content_validation",        content_validation_node)
+    graph.add_node("risk_panel",                risk_panel_node)
+    graph.add_node("panel_remediation",         panel_remediation_node)
+    graph.add_node("board_summary_correction",  board_summary_correction_node)  # Loop 1+2
+    graph.add_node("hitl_gate",                 hitl_gate_node)
+    graph.add_node("update_exec_recs",          update_exec_recs_node)
+    graph.add_node("github_push",               github_push_node)
+    graph.add_node("finalise",                  finalise_node)
 
     graph.set_entry_point("dispatch")
-    graph.add_edge("dispatch",          "kri_data_layer")
-    graph.add_edge("kri_data_layer",    "model_calibration")
-    graph.add_edge("model_calibration", "run_agents")
-    graph.add_edge("run_agents", "synthesis")
+    graph.add_edge("dispatch",                 "kri_data_layer")
+    graph.add_edge("kri_data_layer",           "model_calibration")
+    graph.add_edge("model_calibration",        "run_agents")
+    graph.add_edge("run_agents",               "synthesis")
     graph.add_conditional_edges(
         "synthesis",
         permission_router,
         {
             "write_approved": "write_approved",
-            "hitl_gate": "content_validation",
+            "hitl_gate":      "content_validation",
         }
     )
-    graph.add_edge("write_approved", "kri_validation")
-    graph.add_edge("kri_validation", "content_validation")
-    graph.add_edge("content_validation",  "risk_panel")
-    graph.add_edge("risk_panel",          "panel_remediation")
-    graph.add_edge("panel_remediation",   "hitl_gate")
-    graph.add_edge("hitl_gate", "update_exec_recs")
-    graph.add_edge("update_exec_recs", "github_push")
-    graph.add_edge("github_push", "finalise")
-    graph.add_edge("finalise", END)
+    graph.add_edge("write_approved",           "kri_validation")
+    graph.add_edge("kri_validation",           "content_validation")
+    graph.add_edge("content_validation",       "risk_panel")
+    graph.add_edge("risk_panel",               "panel_remediation")
+    graph.add_edge("panel_remediation",        "board_summary_correction")  # ← Loop 1+2
+    graph.add_edge("board_summary_correction", "hitl_gate")
+    graph.add_edge("hitl_gate",                "update_exec_recs")
+    graph.add_edge("update_exec_recs",         "github_push")
+    graph.add_edge("github_push",              "finalise")
+    graph.add_edge("finalise",                 END)
 
     checkpointer = MemorySaver()
     return graph.compile(checkpointer=checkpointer)
