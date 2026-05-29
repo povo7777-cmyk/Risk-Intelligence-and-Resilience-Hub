@@ -38,6 +38,7 @@ class RiskIntelligenceState(TypedDict):
     # KRI data layer — computed from CSVs BEFORE agents run
     kri_ground_truth: dict   # dashboard_kris + summary, written to store + dashboard
     agent_context:    dict   # additional signals per risk_id, passed to Chief Risk Agent
+    qoq_deltas:       dict   # quarter-on-quarter KRI movements (current vs prior period)
 
     # Model calibration — live parameters derived from CSVs, used by agents + panel
     model_params: dict       # {ebitda:{...}, hedge:{...}, supply_chain:{...}}
@@ -112,6 +113,7 @@ def dispatch_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
     state["model_params"] = {}
     state["kri_ground_truth"] = {}
     state["agent_context"] = {}
+    state["qoq_deltas"] = {}
     state["errors"] = []
     state["warnings"] = []
     return state
@@ -131,6 +133,7 @@ def kri_data_layer_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
         result = run_data_layer()
         state["kri_ground_truth"] = result
         state["agent_context"]    = result.get("agent_context", {})
+        state["qoq_deltas"]       = result.get("qoq_deltas", {})
         summary = result.get("summary", {})
         print(f"  Dashboard KRIs written to store: {summary.get('total_kris', 0)} KRIs, "
               f"{summary.get('breach_count', 0)} breach(es), {summary.get('amber_count', 0)} amber(s)")
@@ -364,13 +367,22 @@ def chief_risk_synthesis_node(state: RiskIntelligenceState) -> RiskIntelligenceS
     state["exec_rec_drafts"] = exec_recs
 
     # ── Step 3: Board summary — synthesised for senior management ──
-    # Full agent context (no truncation) + exec recs → board synthesis.
-    # The board summary IS the synthesis; it is not a domain narrative list.
-    # Falls back to assembled narratives if the LLM call fails.
+    # Architecture: RISK POSTURE is generated deterministically (no LLM);
+    # KEY RISK DRIVERS, CROSS-DOMAIN CONNECTIONS, and QUARTER-ON-QUARTER
+    # MOVEMENT are LLM-synthesised from agent findings + exec recs.
+    # This eliminates the primary hallucination surface (wrong counts, status upgrades).
     print(f"  [BOARD SYNTHESIS] Synthesising for senior management audience...")
-    full_findings    = _build_findings_summary(state)
-    kri_count_facts  = _build_kri_count_facts(sf, of, ff, cf)
-    board_summary = _run_board_synthesis(
+    full_findings      = _build_findings_summary(state)
+    kri_count_facts    = _build_kri_count_facts(sf, of, ff, cf)
+    kri_gt             = state.get("kri_ground_truth", {})
+    kri_status_truth   = _build_kri_status_ground_truth(kri_gt)
+    qoq_deltas         = state.get("qoq_deltas", {})
+    qoq_fact_block     = _build_qoq_fact_block(qoq_deltas)
+    risk_posture_facts = _build_risk_posture_facts(
+        sf, of, ff, cf, compound_scenarios, systemic
+    )
+    risk_posture_text  = _render_risk_posture(client, risk_posture_facts, cost)
+    synthesis_sections = _run_board_synthesis(
         client=client,
         full_findings=full_findings,
         exec_recs=exec_recs,
@@ -378,10 +390,12 @@ def chief_risk_synthesis_node(state: RiskIntelligenceState) -> RiskIntelligenceS
         compound_scenarios=compound_scenarios,
         systemic=systemic,
         kri_count_facts=kri_count_facts,
+        kri_status_truth=kri_status_truth,
+        qoq_fact_block=qoq_fact_block,
         cost=cost,
     )
 
-    if not board_summary:
+    if not synthesis_sections:
         # Fallback: assembled narratives — never leave board_summary empty
         print(f"  [BOARD SYNTHESIS] LLM failed — falling back to assembled narratives")
         state["warnings"].append("Board synthesis LLM failed — using assembled fallback")
@@ -389,7 +403,10 @@ def chief_risk_synthesis_node(state: RiskIntelligenceState) -> RiskIntelligenceS
             sf, of, ff, cf, rf, ef, compound_scenarios, systemic, state
         )
     else:
-        print(f"  [BOARD SYNTHESIS] {len(board_summary)} chars")
+        # Deterministic RISK POSTURE + LLM synthesis sections
+        board_summary = risk_posture_text + "\n\n" + synthesis_sections
+        print(f"  [BOARD SYNTHESIS] {len(board_summary)} chars "
+              f"(RISK POSTURE: deterministic, synthesis: LLM)")
 
     # Append committee actions as a standing section at the end
     if committee_actions:
@@ -397,7 +414,7 @@ def chief_risk_synthesis_node(state: RiskIntelligenceState) -> RiskIntelligenceS
                          "\n".join(f"  • {a}" for a in committee_actions)
 
     # Append deterministic KRI roll-up table — always appended, never LLM-generated
-    kri_gt = state.get("kri_ground_truth", {})
+    # kri_gt already computed above for status ground truth injection
     if kri_gt:
         board_summary += _build_kri_rollup_table(kri_gt)
 
@@ -1129,18 +1146,15 @@ def _build_kri_count_facts(sf, of, ff, cf) -> str:
     )
 
 
-def _build_kri_rollup_table(kri_ground_truth: dict) -> str:
+def _build_kri_status_ground_truth(kri_ground_truth: dict) -> str:
     """
-    Generates a deterministic KRI status roll-up table from kri_ground_truth.
-    Appended to every board summary — not LLM-generated, never drifts.
-    Format: plain text table suitable for HTML rendering by dashboard_updater.
+    Build a flat, verbatim list of every KRI with its exact status from the data layer.
+    Injected into board synthesis input — the LLM must not contradict these statuses.
+    Source: kri_ground_truth["dashboard_kris"] written deterministically from CSVs.
     """
-    STATUS_ICON = {"breach": "🔴 BREACH", "amber": "🟡 AMBER", "ok": "🟢 OK"}
     lines = [
-        "\n\nKRI STATUS ROLL-UP TABLE",
-        "─" * 80,
-        f"{'Domain':<12} {'KRI Name':<42} {'Current':>10} {'Amber':>10} {'Breach':>10} {'Status':<10}",
-        "─" * 80,
+        "KRI STATUS GROUND TRUTH — verbatim statuses from source data "
+        "(do NOT upgrade, downgrade, or misreport these in the narrative):"
     ]
     domain_data = kri_ground_truth.get("dashboard_kris", {})
     domain_order = [
@@ -1153,37 +1167,407 @@ def _build_kri_rollup_table(kri_ground_truth: dict) -> str:
         risk_groups = domain_data.get(domain_key, {})
         if not risk_groups:
             continue
-        first = True
         for risk_id, kris in risk_groups.items():
             for k in kris:
                 name = k.get("name", "")
                 val  = k.get("value")
                 unit = k.get("unit", "")
-                a_th = k.get("amber_threshold")
-                b_th = k.get("threshold")
-                st   = k.get("status", "ok")
+                st   = k.get("status", "ok").upper()
+                val_str = f"{val}{unit}" if val is not None else "N/A"
+                lines.append(f"  {risk_id} / {name} = {val_str} → {st}")
+    if len(lines) == 1:
+        lines.append("  (kri_ground_truth unavailable — run full pipeline)")
+    return "\n".join(lines)
+
+
+# Domain-level executive owners for deterministic RISK POSTURE
+_DOMAIN_OWNERS = {
+    "Strategic":   "Chief Executive Officer",
+    "Operational": "COO / CISO / CHRO (by sub-domain)",
+    "Financial":   "Chief Financial Officer",
+    "Compliance":  "Chief Compliance Officer / General Counsel",
+}
+
+
+def _build_risk_posture_facts(sf, of, ff, cf, compound_scenarios, systemic) -> dict:
+    """
+    Compute all RISK POSTURE facts deterministically from agent outputs.
+    Returns a structured dict — the single source of truth for RISK POSTURE content.
+    No LLM involved; these facts are locked before any rendering step.
+    """
+    domain_data = [
+        ("Strategic",   sf),
+        ("Operational", of),
+        ("Financial",   ff),
+        ("Compliance",  cf),
+    ]
+    total_b = sum((f or {}).get("breach_count", 0) for _, f in domain_data)
+    total_a = sum((f or {}).get("amber_count",  0) for _, f in domain_data)
+    domains_in_breach = [
+        {
+            "name":      lbl,
+            "breaches":  f.get("breach_count", 0),
+            "ambers":    f.get("amber_count",  0),
+            "owner":     _DOMAIN_OWNERS.get(lbl, "Executive management"),
+        }
+        for lbl, f in domain_data if f and f.get("breach_count", 0) > 0
+    ]
+    amber_only_domains = [
+        lbl for lbl, f in domain_data
+        if f and f.get("breach_count", 0) == 0 and f.get("amber_count", 0) > 0
+    ]
+    escalated = [lbl for lbl, f in domain_data if f and f.get("escalation_required")]
+    # Collect escalation reasons from each agent — used to prevent fabricated explanations
+    escalation_reasons = {}
+    for lbl, f in domain_data:
+        if f and f.get("escalation_required"):
+            reasons = f.get("escalation_reasons", [])
+            if reasons:
+                escalation_reasons[lbl] = reasons[:2]  # cap at 2 per domain
+
+    return {
+        "total_breaches":       total_b,
+        "total_ambers":         total_a,
+        "domains_in_breach":    domains_in_breach,
+        "amber_only_domains":   amber_only_domains,
+        "escalated_domains":    escalated,
+        "escalation_reasons":   escalation_reasons,
+        "systemic_flag":        systemic,
+        "compound_scenarios":   compound_scenarios or [],
+    }
+
+
+def _render_risk_posture_fallback(facts: dict) -> str:
+    """
+    Deterministic plain-text rendering of RISK POSTURE facts.
+    Used when the Haiku LLM call fails — guarantees the section is never empty.
+    """
+    lines = []
+    total_b = facts["total_breaches"]
+    total_a = facts["total_ambers"]
+    domains_in_breach = facts["domains_in_breach"]
+    n_breach_domains = len(domains_in_breach)
+
+    if total_b == 0:
+        lines.append(
+            f"The organisation records no KRI breaches this period "
+            f"and {total_a} amber warning(s)."
+        )
+    elif n_breach_domains == 1:
+        d = domains_in_breach[0]
+        lines.append(
+            f"The organisation records {total_b} KRI breach(es) in the "
+            f"{d['name']} domain and {total_a} amber warning(s) across all domains."
+        )
+    else:
+        lines.append(
+            f"The organisation records {total_b} KRI breach(es) across "
+            f"{n_breach_domains} domain(s) and {total_a} amber warning(s) this period."
+        )
+
+    for d in domains_in_breach:
+        lines.append(
+            f"{d['name']}: {d['breaches']} breach(es), {d['ambers']} amber(s) "
+            f"— accountable executive: {d['owner']}."
+        )
+
+    if facts["amber_only_domains"]:
+        lines.append(
+            "Amber warnings only (no breach): "
+            + ", ".join(facts["amber_only_domains"]) + "."
+        )
+
+    if facts["escalated_domains"]:
+        lines.append("Escalation required: " + ", ".join(facts["escalated_domains"]) + ".")
+    else:
+        lines.append("No domain escalation required this period.")
+
+    if facts["systemic_flag"]:
+        lines.append(
+            "Systemic risk flag: three or more domains are simultaneously in breach."
+        )
+
+    if facts["compound_scenarios"]:
+        lines.append(
+            "Active compound scenario(s): "
+            + "; ".join(facts["compound_scenarios"]) + "."
+        )
+
+    return "RISK POSTURE\n\n" + " ".join(lines)
+
+
+def _render_risk_posture(client, facts: dict, cost) -> str:
+    """
+    Render RISK POSTURE as board-quality prose using Claude Haiku.
+
+    Architecture: data-locked LLM rendering.
+    - Facts are pre-computed deterministically (counts, domains, escalation status).
+    - The LLM's only job is to express those exact facts in natural board language.
+    - It cannot add, remove, or change any fact — the input is the entire fact set.
+    - max_tokens=500 (one paragraph).
+    - Falls back to _render_risk_posture_fallback() if the call fails.
+    """
+    # Build the locked fact sheet the LLM must render verbatim
+    total_b = facts["total_breaches"]
+    total_a = facts["total_ambers"]
+    domains_in_breach = facts["domains_in_breach"]
+    amber_only = facts["amber_only_domains"]
+    escalated  = facts["escalated_domains"]
+
+    fact_lines = [
+        f"- Total KRI breaches: {total_b}",
+        f"- Total amber warnings: {total_a}",
+        f"- Number of domains in breach: {len(domains_in_breach)}",
+    ]
+    for d in domains_in_breach:
+        fact_lines.append(
+            f"- {d['name']} domain: {d['breaches']} breach(es), "
+            f"{d['ambers']} amber(s) — accountable executive: {d['owner']}"
+        )
+    if amber_only:
+        fact_lines.append(
+            f"- Domains with amber warnings only (no breach): {', '.join(amber_only)}"
+        )
+    escalation_reasons = facts.get("escalation_reasons", {})
+    if escalated:
+        for dom in escalated:
+            reasons = escalation_reasons.get(dom, [])
+            reason_txt = "; ".join(reasons) if reasons else "KRI breach threshold exceeded"
+            fact_lines.append(f"- Escalation required — {dom}: {reason_txt}")
+    else:
+        fact_lines.append("- Escalation required: none this period")
+    if facts["systemic_flag"]:
+        fact_lines.append(
+            "- Systemic risk flag: YES — three or more domains simultaneously in breach"
+        )
+    for cs in facts["compound_scenarios"]:
+        fact_lines.append(f"- Active compound scenario: {cs}")
+
+    fact_sheet = "\n".join(fact_lines)
+
+    system = (
+        "You are the Chief Risk Officer writing the opening paragraph of a board-level "
+        "risk summary. You receive a locked fact sheet. Your only job is to render those "
+        "exact facts as a single, fluent paragraph of board-quality prose. "
+        "Rules: (1) Every fact in the sheet must appear in your paragraph — do not omit any. "
+        "(2) Do not introduce any fact not in the sheet — no KRI names, no specific values, "
+        "no domain commentary beyond what is listed. "
+        "(3) Use authoritative, declarative language appropriate for board directors. "
+        "(4) No bullet points, no headers, no markdown. One paragraph only. "
+        "(5) Begin with the breach count headline. End with the escalation or systemic status."
+    )
+
+    user = (
+        "Render this fact sheet as one board-quality paragraph:\n\n"
+        + fact_sheet
+    )
+
+    try:
+        response = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=500,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        text = response.content[0].text.strip()
+        if cost:
+            cost.record("cra_risk_posture",
+                        response.usage.input_tokens,
+                        response.usage.output_tokens)
+        if len(text) < 60:
+            raise ValueError("Response too short — falling back")
+        return "RISK POSTURE\n\n" + text
+    except Exception as e:
+        print(f"  [RISK POSTURE] Haiku render failed ({e}) — using deterministic fallback")
+        return _render_risk_posture_fallback(facts)
+
+
+def _build_kri_rollup_table(kri_ground_truth: dict) -> str:
+    """
+    Generates a deterministic KRI status roll-up HTML table from kri_ground_truth.
+    Appended to every board summary — not LLM-generated, never drifts.
+    Wrapped in sentinel comments so _format_board_summary can extract and render it
+    as a proper <table> element (not plain ASCII dumped into prose text).
+    """
+    STATUS_CFG = {
+        "breach": ("#c0392b", "BREACH"),
+        "amber":  ("#e67e22", "AMBER"),
+        "ok":     ("#27ae60", "OK"),
+        "fyi":    ("#7f8c8d", "FYI"),
+    }
+    domain_data = kri_ground_truth.get("dashboard_kris", {})
+    domain_order = [
+        ("Strategic",   "strategic_risks"),
+        ("Operational", "operational_risks"),
+        ("Financial",   "financial_risks"),
+        ("Compliance",  "compliance_risks"),
+    ]
+    rows = []
+    for domain_label, domain_key in domain_order:
+        risk_groups = domain_data.get(domain_key, {})
+        if not risk_groups:
+            continue
+        first = True
+        for risk_id, kris in risk_groups.items():
+            for k in kris:
+                name  = k.get("name", "")
+                val   = k.get("value")
+                unit  = k.get("unit", "")
+                a_th  = k.get("amber_threshold")
+                b_th  = k.get("threshold")
+                st    = k.get("status", "ok")
                 val_str = f"{val}{unit}" if val is not None else "N/A"
                 a_str   = f"{a_th}{unit}" if a_th is not None else "—"
                 b_str   = f"{b_th}{unit}" if b_th is not None else "—"
-                d_label = domain_label if first else ""
-                lines.append(
-                    f"{d_label:<12} {name:<42} {val_str:>10} {a_str:>10} {b_str:>10} {STATUS_ICON.get(st, st):<10}"
+                color, badge = STATUS_CFG.get(st, ("#7f8c8d", st.upper()))
+                row_bg = (
+                    "background:rgba(192,57,43,0.07);" if st == "breach"
+                    else "background:rgba(230,126,34,0.05);" if st == "amber"
+                    else ""
+                )
+                d_cell = (
+                    f'<td style="font-size:11px;font-weight:700;color:var(--txt);'
+                    f'padding:5px 8px;white-space:nowrap;vertical-align:top">{domain_label}</td>'
+                    if first else
+                    '<td style="padding:5px 8px"></td>'
+                )
+                rows.append(
+                    f'<tr style="{row_bg}border-bottom:1px solid rgba(255,255,255,0.05)">'
+                    f'{d_cell}'
+                    f'<td style="font-size:11px;color:var(--txt-m);padding:5px 8px;'
+                    f'font-family:\'DM Mono\',monospace">{name}</td>'
+                    f'<td style="font-size:11px;color:var(--txt);padding:5px 8px;'
+                    f'text-align:right;font-variant-numeric:tabular-nums">{val_str}</td>'
+                    f'<td style="font-size:11px;color:#e67e22;padding:5px 8px;'
+                    f'text-align:right;font-variant-numeric:tabular-nums">{a_str}</td>'
+                    f'<td style="font-size:11px;color:#c0392b;padding:5px 8px;'
+                    f'text-align:right;font-variant-numeric:tabular-nums">{b_str}</td>'
+                    f'<td style="padding:5px 8px;text-align:center">'
+                    f'<span style="font-size:10px;font-weight:700;color:{color};'
+                    f'padding:2px 6px;border-radius:3px;white-space:nowrap;'
+                    f'background:rgba(0,0,0,0.18)">{badge}</span></td>'
+                    f'</tr>'
                 )
                 first = False
-    lines.append("─" * 80)
+
+    thead = (
+        '<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.18)">'
+        '<th style="font-size:10px;font-weight:600;color:var(--txt-m);text-align:left;'
+        'padding:4px 8px;letter-spacing:.05em;text-transform:uppercase">Domain</th>'
+        '<th style="font-size:10px;font-weight:600;color:var(--txt-m);text-align:left;'
+        'padding:4px 8px;letter-spacing:.05em;text-transform:uppercase">KRI</th>'
+        '<th style="font-size:10px;font-weight:600;color:var(--txt-m);text-align:right;'
+        'padding:4px 8px;letter-spacing:.05em;text-transform:uppercase">Current</th>'
+        '<th style="font-size:10px;font-weight:600;color:#e67e22;text-align:right;'
+        'padding:4px 8px;letter-spacing:.05em;text-transform:uppercase">Amber</th>'
+        '<th style="font-size:10px;font-weight:600;color:#c0392b;text-align:right;'
+        'padding:4px 8px;letter-spacing:.05em;text-transform:uppercase">Breach</th>'
+        '<th style="font-size:10px;font-weight:600;color:var(--txt-m);text-align:center;'
+        'padding:4px 8px;letter-spacing:.05em;text-transform:uppercase">Status</th>'
+        '</tr></thead>'
+    )
+    table_html = (
+        f'<table style="width:100%;border-collapse:collapse">'
+        f'{thead}<tbody>{"".join(rows)}</tbody></table>'
+    )
+    return '\n\n<!--KRI-ROLLUP-START-->\n' + table_html + '\n<!--KRI-ROLLUP-END-->'
+
+
+def _build_qoq_fact_block(qoq_deltas: dict) -> str:
+    """
+    Build a data-locked fact sheet for the QUARTER-ON-QUARTER MOVEMENT section.
+    The LLM must base its QoQ narrative ONLY on these verified deltas —
+    no invented prior-period values, no fabricated comparisons.
+
+    If no prior period data exists, returns a sentinel that tells the LLM to
+    limit the QoQ section to current-period trend signals only.
+    """
+    if not qoq_deltas or not qoq_deltas.get("available"):
+        reason = qoq_deltas.get("reason", "prior period data not available") if qoq_deltas else "QoQ not computed"
+        return (
+            "QoQ MOVEMENT FACT SHEET — DATA-LOCKED (do not add values not shown here):\n"
+            f"  Status: {reason}\n"
+            "  Instruction: No prior-period comparison is available. Write the QUARTER-ON-QUARTER\n"
+            "  MOVEMENT paragraph using ONLY the trend_direction signals from domain agents\n"
+            "  (deteriorating/improving/flat). Do NOT invent specific prior-period values."
+        )
+
+    period_cur = qoq_deltas.get("period_current", "Current")
+    period_pri = qoq_deltas.get("period_prior",   "Prior")
+    summary    = qoq_deltas.get("summary", {})
+    dom_cause  = qoq_deltas.get("dominant_cause", "unknown")
+    primary    = qoq_deltas.get("primary_kri")
+    det        = qoq_deltas.get("deteriorating", [])
+    imp        = qoq_deltas.get("improving",     [])
+    new_br     = summary.get("new_breaches", [])
+    cleared    = summary.get("cleared_breaches", [])
+
+    lines = [
+        f"QoQ MOVEMENT FACT SHEET — DATA-LOCKED ({period_pri} → {period_cur})",
+        f"  Comparison period: {period_pri} (prior) → {period_cur} (current)",
+        f"  KRIs compared: {summary.get('total_compared', 0)} | "
+        f"Deteriorating: {summary.get('deteriorating_count', 0)} | "
+        f"Improving: {summary.get('improving_count', 0)} | "
+        f"Stable: {summary.get('stable_count', 0)}",
+        f"  Dominant cause of movement: {dom_cause.replace('_', ' ').upper()}",
+        f"  Primary decision point (if reversed, most reduces residual risk): {primary or 'none identified'}",
+    ]
+
+    if new_br:
+        lines.append(f"  New breaches this period: " +
+                     ", ".join(f"{r}/{k}" for r, k in new_br))
+    if cleared:
+        lines.append(f"  Breaches cleared this period: " +
+                     ", ".join(f"{r}/{k}" for r, k in cleared))
+
+    if det:
+        lines.append("  DETERIORATING KRIs (use these exact values — no others):")
+        for m in det:
+            lines.append(
+                f"    {m['risk_id']}/{m['kri_name']}: "
+                f"{m['prior_value']} → {m['current_value']} "
+                f"({m['prior_status']} → {m['current_status']})"
+            )
+
+    if imp:
+        lines.append("  IMPROVING KRIs:")
+        for m in imp:
+            lines.append(
+                f"    {m['risk_id']}/{m['kri_name']}: "
+                f"{m['prior_value']} → {m['current_value']} "
+                f"({m['prior_status']} → {m['current_status']})"
+            )
+
+    lines += [
+        "",
+        "  INSTRUCTION: Your QUARTER-ON-QUARTER MOVEMENT paragraph MUST:",
+        "  (1) Use ONLY the values shown above — do not introduce any other prior-period numbers.",
+        "  (2) State whether aggregate residual risk rose, held flat, or fell — based on the "
+        "counts above.",
+        "  (3) Name the dominant cause (CONTROL WEAKENING or INHERENT RISK GROWTH) using the "
+        "label above.",
+        "  (4) Name the primary decision point KRI shown above as the board's primary lever.",
+        "  (5) Translate all values into plain business language — no statistical terms.",
+    ]
+
     return "\n".join(lines)
 
 
 def _run_board_synthesis(client, full_findings: str, exec_recs: dict,
                          committee_actions: list, compound_scenarios: list,
-                         systemic: bool, kri_count_facts: str, cost) -> str:
+                         systemic: bool, kri_count_facts: str,
+                         kri_status_truth: str, qoq_fact_block: str, cost) -> str:
     """
     Step 3 — Board-level synthesis for senior management.
 
-    Receives the complete agent findings (no truncation) plus the exec recs
-    already drafted in Step 2. The board summary IS the synthesis — not a
-    domain narrative inventory. The LLM may only reference facts present in
-    the inputs. Returns plain text or empty string on failure.
+    The LLM generates ONLY the three synthesis sections:
+      KEY RISK DRIVERS, CROSS-DOMAIN CONNECTIONS, QUARTER-ON-QUARTER MOVEMENT.
+
+    RISK POSTURE is generated deterministically by _build_risk_posture_deterministic()
+    and prepended by the caller. This eliminates the single biggest source of
+    hallucination (wrong counts, upgraded KRI statuses).
+
+    Returns the three synthesis sections as plain text, or empty string on failure.
     """
     prompt_path = Path(__file__).parent.parent / "prompts" / "cra_synthesis_v1.txt"
     if not prompt_path.exists():
@@ -1208,8 +1592,16 @@ def _run_board_synthesis(client, full_findings: str, exec_recs: dict,
 
     # Full agent findings — no truncation, no field filtering
     user_message = (
-        # Inject verified KRI counts first — LLM must use these, not recount
+        # KRI counts and verbatim status ground truth injected first —
+        # LLM must reference these, not recount or override them.
         kri_count_facts
+        + "\n\n"
+        + kri_status_truth
+        + "\n\n"
+        + "─" * 60
+        + "\n\n"
+        # Data-locked QoQ fact sheet — prevents fabrication of prior-period values
+        + qoq_fact_block
         + "\n\n"
         + "─" * 60
         + "\n\n"
@@ -1220,8 +1612,9 @@ def _run_board_synthesis(client, full_findings: str, exec_recs: dict,
         + "\n\n"
         + recs_text
         + "\n\n"
-        + "Write the board-level risk summary using only the facts above. "
-          "Use the KRI COUNTS exactly as stated at the top — do not recount."
+        + "NOTE: RISK POSTURE has already been written deterministically and will be "
+          "prepended to your output. Do NOT write a RISK POSTURE section. "
+          "Begin your output directly with KEY RISK DRIVERS."
     )
 
     try:
