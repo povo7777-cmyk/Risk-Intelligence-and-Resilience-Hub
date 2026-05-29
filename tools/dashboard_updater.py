@@ -576,8 +576,22 @@ def _format_board_summary(text: str) -> str:
 
     Also tolerates stray markdown (## headers, # title lines, • bullets) that the
     LLM sometimes emits despite being asked for plain text.
+
+    The KRI STATUS ROLL-UP TABLE is appended as sentinel-wrapped HTML by
+    _build_kri_rollup_table(). Extract it before section processing and re-append
+    as a properly styled section at the end — never let it bleed into prose sections.
     """
     import re
+
+    # ── Step 0: extract pre-rendered KRI rollup HTML (not LLM text) ────────────
+    kri_rollup_html = ""
+    rollup_m = re.search(
+        r'\n\n<!--KRI-ROLLUP-START-->\n(.*?)\n<!--KRI-ROLLUP-END-->',
+        text, re.DOTALL
+    )
+    if rollup_m:
+        kri_rollup_html = rollup_m.group(1)
+        text = text[:rollup_m.start()] + text[rollup_m.end():]
 
     # ── Step 1: strip any leading markdown title line (# BOARD RISK SUMMARY …) ──
     text = re.sub(r'^#[^\n]*\n?', '', text.strip())
@@ -680,6 +694,18 @@ def _format_board_summary(text: str) -> str:
             f'{label.title()}</div>'
             f'{_render_section_body(label, body)}'
             f'</div>'
+        )
+
+    # ── Append KRI roll-up table as its own styled section ──────────────────────
+    if kri_rollup_html:
+        parts.append(
+            '<div style="margin-top:0.55rem;padding:0.5rem 0.6rem 0.5rem 0.7rem;'
+            'border-left:3px solid var(--txt-m);background:rgba(0,0,0,0.02)">'
+            '<div style="font-size:10px;font-weight:700;color:var(--txt-m);'
+            'text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">'
+            'KRI Status Roll-Up</div>'
+            + kri_rollup_html +
+            '</div>'
         )
 
     return ''.join(parts)
