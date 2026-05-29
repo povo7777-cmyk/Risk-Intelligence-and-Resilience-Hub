@@ -877,7 +877,12 @@ DO NOT raise model-KRI integration as a finding.
         if msg.stop_reason == "max_tokens":
             print("    ⚠ Elena response hit max_tokens — attempting JSON repair")
             raw_text = _repair_truncated_json(raw_text)
-        elena_result = json.loads(raw_text)
+        try:
+            elena_result = json.loads(raw_text)
+        except json.JSONDecodeError:
+            print("    ⚠ Elena JSON malformed — attempting repair")
+            raw_text = _repair_truncated_json(raw_text)
+            elena_result = json.loads(raw_text)
         n_findings = len(elena_result.get("findings", []))
         rating = elena_result.get("overall_framework_rating", "?")
         print(f"    → {n_findings} findings | Framework rating: {rating}")
@@ -907,7 +912,12 @@ DO NOT raise model-KRI integration as a finding.
         if msg.stop_reason == "max_tokens":
             print("    ⚠ Marcus response hit max_tokens — attempting JSON repair")
             raw_text = _repair_truncated_json(raw_text)
-        marcus_result = json.loads(raw_text)
+        try:
+            marcus_result = json.loads(raw_text)
+        except json.JSONDecodeError:
+            print("    ⚠ Marcus JSON malformed — attempting repair")
+            raw_text = _repair_truncated_json(raw_text)
+            marcus_result = json.loads(raw_text)
         n_findings = len(marcus_result.get("findings", []))
         rating = marcus_result.get("overall_model_suite_rating", "?")
         print(f"    → {n_findings} findings | Model suite rating: {rating}")
@@ -936,7 +946,7 @@ Produce the joint panel verdict JSON.
 """
         msg = client.messages.create(
             model=MODEL,
-            max_tokens=6000,
+            max_tokens=8192,
             system=PANEL_SYSTEM,
             messages=[{"role": "user", "content": panel_input}],
         )
@@ -944,7 +954,15 @@ Produce the joint panel verdict JSON.
         token_usage["output_tokens"] += msg.usage.output_tokens
         raw_text = re.sub(r'^```(?:json)?\s*', '', msg.content[0].text.strip())
         raw_text = re.sub(r'\s*```$', '', raw_text)
-        panel_result = json.loads(raw_text)
+        if msg.stop_reason == "max_tokens":
+            print("    ⚠ Panel chair response hit max_tokens — attempting JSON repair")
+            raw_text = _repair_truncated_json(raw_text)
+        try:
+            panel_result = json.loads(raw_text)
+        except json.JSONDecodeError:
+            print("    ⚠ Panel chair JSON malformed — attempting repair")
+            raw_text = _repair_truncated_json(raw_text)
+            panel_result = json.loads(raw_text)
         rating     = panel_result.get("overall_rating", "?")
         board_ok   = panel_result.get("fitness_for_board", "?")
         crit_count = len(panel_result.get("critical_findings", []))
