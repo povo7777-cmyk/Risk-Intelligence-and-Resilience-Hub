@@ -37,11 +37,11 @@ KRI_NAME_MAP = {
     "supplier_distress_flags":            "Supplier financial distress flags",
     "supplier_cyber_resilience_assess_pct": "Single-source supplier cyber resilience assessment coverage",
     # Operational — cyber (O-02)
-    "mttd_days":                          "Mean time to detect — MTTD (hours)",
-    "mttr_days":                          "Mean time to respond — MTTR (days)",
-    "patch_compliance_pct":               "Patch compliance rate",
+    "mttd_days":                          "[Step 1 — Detection] Mean time to detect — MTTD (hours)",
+    "mttr_days":                          "[Step 2 — Response] Mean time to respond — MTTR (days)",
+    "patch_compliance_pct":               "[Enabler — all chain stages] Patch compliance rate",
     "critical_vulns_open_gt30d":          "Critical vulnerabilities open >30 days",
-    "it_rto_hours":                       "RTO — order management & fulfilment systems (hours)",
+    "it_rto_hours":                       "[Step 3 — Recovery] RTO — order management & fulfilment systems (hours)",
     # Operational — quality (O-03)
     "field_failure_rate_pct":             "Field failure rate",
     "recall_readiness_score_pct":         "Recall readiness score",
@@ -52,7 +52,7 @@ KRI_NAME_MAP = {
     "critical_open_roles_gt60d":          "Critical open roles >60 days",
     "svp_succession_coverage_pct":        "SVP+ succession coverage (%)",
     # Financial — FX & treasury (F-01)
-    "unhedged_fx_exposure_usd_m":         "Unhedged FX exposure",
+    "unhedged_fx_exposure_usd_m":         "Unhedged FX exposure (USD M)",
     "avg_hedge_ratio_pct":                "FX hedge ratio (% of exposure hedged)",
     # F-01: unrealised_pnl_usd_m — store-only, no dashboard tile
     # Financial — receivables (F-02)
