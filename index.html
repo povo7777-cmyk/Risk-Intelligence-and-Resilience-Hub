@@ -1032,7 +1032,7 @@ Compliance   export_screening_coverage_pct                   96.0%      98.0%   
   <div class="pg-hd"><h2>Supply chain resilience stress test &mdash; O-01</h2><p>Monte Carlo operational loss model: supplier failure (Poisson) &times; demand shock (log-normal) &times; recovery lead-time. Toggle mitigations to quantify financial impact.</p></div>
   <div style="background:#0a1a0a;border:1px solid #153515;border-radius:10px;padding:.8rem 1.1rem;margin-bottom:1rem;display:flex;align-items:flex-start;gap:10px">
     <i class="ti ti-chart-dots" style="color:#22c55e;font-size:16px;margin-top:1px;flex-shrink:0"></i>
-    <div style="font-size:12px;color:#86efac;line-height:1.6"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e">Validated benchmarks (Python simulation, N=5,000):</strong> Baseline VaR 95%: <strong>USD 2,605M</strong>. Dual-source programme (USD 14.4M/yr incremental cost): saves <strong>USD 377M</strong> VaR. Inventory buffer (USD 7.7M/yr carrying cost): saves <strong>USD 302M</strong>. Both together: saves <strong>USD 627M</strong> &mdash; 28&times; return on mitigation investment.</div>
+    <div style="font-size:12px;color:#86efac;line-height:1.6"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e"><strong style="color:#22c55e">Validated benchmarks (Python simulation, N=5,000):</strong> Baseline VaR 95%: <strong>USD 2,298M</strong>. Dual-source programme (USD 14.4M/yr incremental cost): saves <strong>USD 415M</strong> VaR. Inventory buffer (USD 7.7M/yr carrying cost): saves <strong>USD 220M</strong>. Both together: saves <strong>USD 523M</strong> &mdash; 28&times; return on mitigation investment.</div>
   </div>
   <div class="info"><strong>What this models:</strong> Each simulation draws a supplier failure event (Poisson arrival), a demand shock severity, and a recovery lead-time. Revenue loss = lost production &times; price + emergency sourcing cost. Concurrent demand shock amplifies losses.</div>
   <div class="three">
@@ -1089,7 +1089,7 @@ Compliance   export_screening_coverage_pct                   96.0%      98.0%   
       <div class="exec-hd"><div class="exec-ic"><i class="ti ti-podium"></i></div><h3>Executive recommendation &mdash; supply chain resilience</h3></div>
       <p>Chief Operating Officer and VP Supply Chain to remediate single-source concentration breach (62.6% vs. 50% threshold) and inventory cover breach (3.9 weeks vs. 4.0 weeks) for supplier Quanta, which represents 1.6 billion annual spend and shows financial health score of 61. Quanta has zero cyber resilience assessment despite being sole-source, and quality rejection rate of 1.2% is in breach — if Quanta experiences financial distress or cyber incident, the company has no alternate source and sub-4-week inventory buffer. COO to present dual-source roadmap and require completion of cyber assessment for all suppliers above 500 million annual spend within 90 days.</p>
       <div class="exec-acts">
-        <div class="exec-act"><div class="exec-n">01</div><div class="exec-t">Approve dual-source programme</div><div class="exec-b">Owner: CPO. Board to approve USD 15M/yr dual-source investment. Validated Python simulation (N=5,000): dual-source saves USD 377M VaR 95% &mdash; a 26&times; return on investment. O-01 is at red breach; this is the primary structural fix.</div></div>
+        <div class="exec-act"><div class="exec-n">01</div><div class="exec-t">Approve dual-source programme</div><div class="exec-b">Owner: CPO. Board to approve USD 15M/yr dual-source investment. Validated Python simulation (N=5,000): dual-source saves USD 415M VaR 95% &mdash; a 26&times; return on investment. O-01 is at red breach; this is the primary structural fix.</div></div>
         <div class="exec-act"><div class="exec-n">02</div><div class="exec-t">Build 12-week safety stock</div><div class="exec-b">Owner: COO. Approve USD 8M/yr carrying cost for strategic inventory buffer. Fastest to implement; absorbs 60% of short disruptions without production impact.</div></div>
         <div class="exec-act"><div class="exec-n">03</div><div class="exec-t">Add supply chain disruption insurance</div><div class="exec-b">Owner: CFO. USD 5M/yr premium covers 25% of tail loss &mdash; natural add-on once Actions 01 and 02 are in place. Do not substitute for structural mitigations.</div></div>
         <div class="exec-act"><div class="exec-n">04</div><div class="exec-t">Board ask &mdash; immediate</div><div class="exec-b">Board is requested to approve USD 15M/yr dual-source programme (Action 01) and note that O-01 is at red breach. Board stress-test to include the compound supplier failure + demand shock scenario, presenting CVaR &mdash; not expected loss &mdash; as the capital adequacy basis. Owner: CRO.</div></div>
@@ -1242,11 +1242,10 @@ var DOMAINS={
        kris:[
          {n:'ODM/EMS concentration in PRC-jurisdiction facilities',cur:'68%',a:'50%',r:'55%',tr:[72,70,68,65,68,68],ts:'br',
           ra:'Chief Procurement Officer to accelerate ODM partner diversification to Mexico, India, Hungary facilities. Weekly progress to CEO. Owner: CPO.',
-          rr:'Supply Chain Resilience model: at 50% PRC ODM concentration, one regulatory event affects >50% assembly capacity. Run Supply Chain simulator — increasing effective MTBF via geographic diversification reduces VaR 95% by ~USD 377M (validated Python simulation, N=5,000). Emergency supply chain steering committee. Board update within 5 days. Owner: CEO/COO.'},
+          rr:'Supply Chain Resilience model: at 50% PRC ODM concentration, one regulatory event affects >50% assembly capacity. Run Supply Chain simulator — increasing effective MTBF via geographic diversification reduces VaR 95% by ~USD 415M (validated Python simulation, N=5,000). Emergency supply chain steering committee. Board update within 5 days. Owner: CEO/COO.'},
          {n:'Export-restricted SKU count (ISG + IDG)',cur:'14 SKUs',a:'8 ISG / 10 IDG',r:'12 ISG / 15 IDG',tr:[4,6,8,9,12,14],ts:'br',
           ra:'Legal review of all affected SKUs. Differentiate ISG (AI servers, GPU infrastructure) from IDG (consumer/commercial PCs) — ISG restrictions eliminate market segments, IDG restrictions are commercially damaging but recoverable. Accelerate alternative component sourcing. Owner: General Counsel.',
-          rr:'ISG SKU restrictions: suspend affected product lines, engage BIS counsel within 24h, notify Audit Committee within 48h. At 12+ restricted ISG SKUs, AI infrastructure business segment is materially impaired. Owner: CEO/GC.'}
-       ]},,
+          rr:'ISG SKU restrictions: suspend affected product lines, engage BIS counsel within 24h, notify Audit Committee within 48h. At 12+ restricted ISG SKUs, AI infrastructure business segment is materially impaired. Owner: CEO/GC.'},
          {n:'Geopolitical escalation signals (YTD)',cur:'5',a:'2',r:'3',tr:[0,1,1,2,3,5],ts:'br',
           ra:'Strategy team to review all active geopolitical signals. Above amber threshold (2), export control exposure and supply chain concentration are elevated. CEO to brief Board Risk Committee. Owner: CSO.',
           rr:'5 geopolitical signals YTD exceeds breach threshold of 3. Signals encompass export control tightening, tariff escalation, and geopolitical tension in key supply chain jurisdictions. CEO escalation. Board briefing within 5 days. Trade counsel review of all active signals. Owner: CEO/GC.'}
@@ -1285,8 +1284,8 @@ var DOMAINS={
        tolNote:'Thresholds anchored to Supply Chain Resilience Stress Test VaR model: at 55% single-source, one failure event = ~USD 660M revenue at risk. Inventory cover amber at 6 weeks = minimum buffer vs 18-week TSMC lead time. One distress flag at a single-source supplier triggers amber immediately — the company\'s 2022-2023 PC downcycle demonstrated how quickly ODM partner financial stress propagates to production.',
        kris:[
          {n:'Single-source concentration',cur:'62.6%',a:'40%',r:'50%',tr:[58.0,60.0,62.0,65.0,68.0,62.6],ts:'br',
-          ra:'Procurement to qualify alternative supplier within 90 days. Supply Chain Resilience model: dual-source programme (USD 14.4M/yr) reduces VaR 95% by USD 377M — a 26× return (validated Python simulation, N=5,000). Run simulator with reduced single-source % to quantify. Owner: CPO.',
-          rr:'At >50% single-source, one failure event affects >USD 660M revenue. Supply Chain model: activate dual-source toggle — shows USD 377M VaR improvement and 60% absorption of short disruptions. Emergency programme approval required. Board update within 5 days. Owner: COO/CPO.'},
+          ra:'Procurement to qualify alternative supplier within 90 days. Supply Chain Resilience model: dual-source programme (USD 14.4M/yr) reduces VaR 95% by USD 415M — a 29× return (validated Python simulation, N=5,000). Run simulator with reduced single-source % to quantify. Owner: CPO.',
+          rr:'At >50% single-source, one failure event affects >USD 660M revenue. Supply Chain model: activate dual-source toggle — shows USD 415M VaR improvement and 60% absorption of short disruptions. Emergency programme approval required. Board update within 5 days. Owner: COO/CPO.'},
          {n:'Inventory cover (weeks)',cur:'3.9wk',a:'6wk',r:'4wk',tr:[6.0,6.0,5.0,5.0,3.9,3.9],ts:'br',
           ra:'Procurement to rebuild safety stock to 6-week minimum. Supply Chain model: strategic inventory buffer toggle shows 60% absorption of short disruptions — at USD 12B revenue at risk, 6-week buffer prevents ~USD 420M disruption losses in 60% of scenarios. Owner: CPO.',
           rr:'4 weeks cover vs 18-week TSMC lead time = zero buffer for any disruption. Supply Chain model: run inventory buffer scenario — shows recovery from current VaR baseline. COO authorised to use premium sourcing immediately. Owner: COO.'},
@@ -1309,10 +1308,10 @@ var DOMAINS={
           rr:'OMS RTO >6h breaches the company\'s internal BCM standard and major customer SLA commitments. At USD 21M/hour OMS downtime cost at peak quarter, 6h represents the minimum exposure threshold from point of detection — ~USD 126M. Note: with MTTD at 264h, total incident cost is driven by MTTD + MTTR, not RTO alone; RTO governs the final restoration stage only. Last DR test 18 months ago — recovery capability unverified. Emergency DR programme. Board notification required. Owner: CEO/CTO.'},
          {n:'[Enabler — all chain stages] Patch compliance rate',cur:'71.0%',a:'90%',r:'80%',tr:[85.0,80.0,75.0,72.0,71.0,71.0],ts:'br',
           ra:'Patch compliance is the underlying enabler for all three chain stages: low compliance directly degrades detection (MTTD), response (MTTR), and recovery (RTO) simultaneously. CTO 30-day patch acceleration programme. Prioritise OMS, SAP, and e-commerce platform systems. Weekly compliance reporting to CISO. Owner: CTO.',
-          rr:'Patch emergency declared. Non-compliant systems isolated until remediated. At 71% compliance, 29% of systems remain exposed — extending detection, response, and recovery timelines across all three incident chain stages. Owner: CTO/CISO.'}         {n:'Critical vulnerabilities open >30 days',cur:'8',a:'5',r:'10',tr:[2,3,4,5,6,8],ts:'am',
+          rr:'Patch emergency declared. Non-compliant systems isolated until remediated. At 71% compliance, 29% of systems remain exposed — extending detection, response, and recovery timelines across all three incident chain stages. Owner: CTO/CISO.'},
+         {n:'Critical vulnerabilities open >30 days',cur:'8',a:'5',r:'10',tr:[2,3,4,5,6,8],ts:'am',
           ra:'CISO 30-day remediation sprint for open critical CVEs. Prioritise OMS, SAP, and e-commerce platforms. At 8 open CVEs >30 days, MTTD and MTTR exposure windows are extended — compounding the existing cyber breach period. Owner: CISO.',
           rr:'10+ critical vulnerabilities open >30 days = systemic patch governance failure. Combined with current MTTD breach (264h), every unpatched critical system is an active exploitation vector. Emergency patching programme declared. Non-critical workloads deprioritised until remediated. Owner: CISO/CTO.'}
-       ]},
        ]},
       {id:'O-03',name:'Product quality & safety failure',status:'am',
        metric:'Field failure rate (%); recall readiness score (%)',threshold:'Field failure <0.03%; recall readiness >=85%',owner:'Chief Quality Officer / COO',
@@ -1323,10 +1322,10 @@ var DOMAINS={
           rr:'0.04% field failure at 60M units = 24,000 failing units — CPSC mandatory report territory. Estimated recall cost USD 150-400M. Product hold order. Safety investigation. CPSC notification within 24h. EU notification within 72h. Owner: CEO/CQO.'},
          {n:'Recall readiness score',cur:'72%',a:'80%',r:'70%',tr:[78.0,75.0,74.0,72.0,72.0,72.0],ts:'am',
           ra:'Quality team to update recall playbook for 180+ country distribution network. Score must be independently validated by Internal Audit — not self-assessed by quality team. Tabletop exercise within 60 days. Owner: CQO.',
-          rr:'Below 75% readiness, a recall across the company\'s 180+ country footprint cannot be executed within regulatory timelines. Recall programme escalated to COO. External logistics and regulatory specialist engaged within 30 days. Owner: COO.'}         {n:'Supplier quality rejection rate (%)',cur:'0.68%',a:'0.5%',r:'1.0%',tr:[0.3,0.35,0.4,0.5,0.6,0.68],ts:'am',
+          rr:'Below 75% readiness, a recall across the company\'s 180+ country footprint cannot be executed within regulatory timelines. Recall programme escalated to COO. External logistics and regulatory specialist engaged within 30 days. Owner: COO.'},
+         {n:'Supplier quality rejection rate (%)',cur:'0.68%',a:'0.5%',r:'1.0%',tr:[0.3,0.35,0.4,0.5,0.6,0.68],ts:'am',
           ra:'Chief Quality Officer to review supplier quality audits. Rejection rate trend (0.3%→0.68% over 6 periods) indicates systemic deterioration. Cross-reference with O-01 supplier distress flags — financially stressed suppliers may be reducing quality controls. Owner: CQO.',
           rr:'1.0% rejection rate at 60M+ annual units = ~600,000 defective incoming components. Cross-domain signal: O-01 supplier distress flags are a likely root cause. Supplier audit programme and qualification of alternative sources required within 60 days. Owner: COO/CQO.'}
-       ]},
        ]},
       {id:'O-04',name:'Talent retention & key-person risk',status:'am',
        metric:'Critical open roles >60 days (count); SVP+ succession coverage (%); critical programme staffing — dual-source & SOC (%)',threshold:'Open critical roles <=5; SVP+ succession >=92%; programme staffing >=80%',owner:'CHRO',
@@ -1339,7 +1338,7 @@ var DOMAINS={
           ra:'CHRO to identify succession gaps. Below 92% means at least one SVP role has no documented successor during elevated operational risk period. CEO succession gap (Yang Yuanqing) should be explicitly documented and reviewed by Board Governance Committee. Owner: CHRO.',
           rr:'Below 85% succession coverage during concurrent O-01/O-02 breach period. CEO succession gap at this risk posture = HKEx corporate governance disclosure obligation. CEO review of leadership pipeline. Board Governance Committee notified. Owner: CEO/CHRO.'},
          {n:'Critical programme staffing — dual-source & SOC (%)',cur:'48%',a:'80%',r:'60%',tr:[90.0,85.0,75.0,65.0,55.0,48.0],ts:'br',
-          ra:'COO review of programme resourcing. Below 80%: Supply Chain model dual-source toggle cannot be activated (programme not executing), meaning validated VaR saving of USD 377M is not being captured. Interim resourcing options assessed. Owner: COO.',
+          ra:'COO review of programme resourcing. Below 80%: Supply Chain model dual-source toggle cannot be activated (programme not executing), meaning validated VaR saving of USD 415M is not being captured. Interim resourcing options assessed. Owner: COO.',
           rr:'Below 60% staffing: Supply Chain Resilience model — neither dual-source nor SOC enhancement can execute. VaR 95% remains at ~USD 800M-1.2B baseline vs ~USD 700M-1.1B mitigated. Direct CEO escalation. Board notification that primary O-01 and O-02 remediation programmes are at risk. Owner: CEO/COO.'}
        ]}
     ]},
@@ -1798,10 +1797,10 @@ function runOP(){
 //   VaR 95% unhedged: USD 7,613M | at 46%: USD 7,533M | at 60%: USD 7,533M
 //   P(rev <80% base) unhedged: 26.8% | at 60%: 28.2%
 // Supply Chain — Validated Python simulation (N=5,000):
-//   Baseline VaR 95%: USD 2,605M
-//   Dual-source only: saves USD 377M VaR (26x ROI on USD 14.4M/yr)
-//   Inventory buffer only: saves USD 302M VaR (39x ROI on USD 7.7M/yr)
-//   Both mitigations: saves USD 627M VaR combined
+//   Baseline VaR 95%: USD 2,298M
+//   Dual-source only: saves USD 415M VaR (26x ROI on USD 14.4M/yr)
+//   Inventory buffer only: saves USD 220M VaR (39x ROI on USD 7.7M/yr)
+//   Both mitigations: saves USD 523M VaR combined
 // ════════════════════════════════════════════════════════════
 
 // ── KRI DATA STORE ──────────────────────────────────────────
@@ -1961,7 +1960,7 @@ var AGENT_PROMPTS = {
   },
   operational: function(){
     var m = getModelOutputs();
-    return 'You are a senior operations and technology risk specialist reviewing the operational risk domain for the Risk Committee. Use ONLY the data provided.\n\nCURRENT KRI VALUES:\n'+getKRISummary('operational')+'\n\nSUPPLY CHAIN MODEL OUTPUT (live):\n'+m.supplychain+'\nValidated Python simulation benchmarks (N=5,000): Baseline VaR 95% ~USD 2,605M. Dual-source programme (USD 14.4M/yr) reduces VaR by ~USD 377M (26× ROI). Inventory buffer (USD 7.7M/yr) reduces VaR by ~USD 302M. Both together: ~USD 627M saving.\n\nCONTEXT: O-02 MTTD of 264 hours makes 4h OMS RTO mathematically impossible. O-04 talent gaps directly prevent O-01 and O-02 remediation. The company faces MLPS 2.0 dual-reporting obligation.\n\nGenerate a concise Risk Committee management recommendation: (1) most urgent finding with financial impact quantification, (2) model-backed supply chain action with USD saving, (3) talent-to-risk linkage. Maximum 280 words.';
+    return 'You are a senior operations and technology risk specialist reviewing the operational risk domain for the Risk Committee. Use ONLY the data provided.\n\nCURRENT KRI VALUES:\n'+getKRISummary('operational')+'\n\nSUPPLY CHAIN MODEL OUTPUT (live):\n'+m.supplychain+'\nValidated Python simulation benchmarks (N=5,000): Baseline VaR 95% ~USD 2,298M. Dual-source programme (USD 14.4M/yr) reduces VaR by ~USD 415M (29× ROI). Inventory buffer (USD 7.7M/yr) reduces VaR by ~USD 220M. Both together: ~USD 523M saving.\n\nCONTEXT: O-02 MTTD of 264 hours makes 4h OMS RTO mathematically impossible. O-04 talent gaps directly prevent O-01 and O-02 remediation. The company faces MLPS 2.0 dual-reporting obligation.\n\nGenerate a concise Risk Committee management recommendation: (1) most urgent finding with financial impact quantification, (2) model-backed supply chain action with USD saving, (3) talent-to-risk linkage. Maximum 280 words.';
   },
   financial: function(){
     var m = getModelOutputs();
