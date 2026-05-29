@@ -66,8 +66,10 @@ KRI_NAME_MAP = {
     # Financial — controls (F-04)
     "audit_findings_open":                "Open SOX significant deficiencies",
     # F-04: material_weakness_count — store-only, no dashboard tile
-    # Strategic
+    # Strategic — S-01
     "geopolitical_signal_count":          "Geopolitical escalation signals (YTD)",
+    "odm_ems_prc_concentration_pct":      "ODM/EMS concentration in PRC-jurisdiction (%)",
+    # Strategic — S-02, S-03
     "competitive_signals":                "Competitive threat signals (active)",
     "synergy_delivery_pct":               "Synergy delivery vs target",
     # Compliance — export & sanctions (C-01)
