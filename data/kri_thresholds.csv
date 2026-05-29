@@ -1,12 +1,12 @@
 risk_id,kri_name,amber_threshold,breach_threshold,direction,unit,description
 S-01,geopolitical_signal_count,2,3,higher_worse,count,Number of geopolitical signals detected in market intelligence this period
+S-01,odm_ems_prc_concentration_pct,40,50,higher_worse,%,ODM/EMS manufacturing spend in PRC-jurisdiction facilities as % of total ODM/EMS spend
 S-02,competitive_signals,3,5,higher_worse,count,Number of AI competitive signals detected this period
 S-03,synergy_delivery_pct,75,70,lower_worse,%,M&A synergy delivery vs plan
 O-01,single_source_concentration,40,50,higher_worse,%,Single supplier concentration as % of category spend
 O-01,inventory_cover_weeks,6,4,lower_worse,weeks,Minimum inventory cover across critical SKUs
 O-01,supplier_distress_flags,1,3,higher_worse,count,Suppliers flagged for financial/operational distress
 O-02,mttd_days,7,10,higher_worse,days,Mean time to detect a security incident
-O-02,mttr_days,14,21,higher_worse,days,Mean time to respond and contain a security incident
 O-02,patch_compliance_pct,90,80,lower_worse,%,Percentage of systems with current security patch applied
 O-02,critical_vulns_open_gt30d,5,10,higher_worse,count,Critical vulnerabilities open more than 30 days
 O-02,it_rto_hours,4,6,higher_worse,hours,Recovery time objective for order management system
@@ -16,10 +16,10 @@ O-03,safety_incidents_ytd,1,3,higher_worse,count,Confirmed product safety incide
 O-04,tech_attrition_rate_pct,12,18,higher_worse,%,Annualised attrition rate in Engineering and IT
 O-04,critical_open_roles_gt60d,3,6,higher_worse,count,Critical roles unfilled beyond 60 days
 O-04,svp_succession_coverage_pct,80,70,lower_worse,%,SVP-level roles with documented succession plan
-F-01,unhedged_fx_exposure_usd_m,350,500,higher_worse,USD_M,Unhedged FX exposure in USD millions
+F-01,unhedged_fx_exposure_usd_m,4000,5000,higher_worse,USD_M,Unhedged FX exposure in USD millions
 F-01,avg_hedge_ratio_pct,60,45,lower_worse,%,Average hedge ratio across all material FX exposures
 F-02,top_customer_concentration_pct,20,25,higher_worse,%,Top customer as % of total revenue
-F-02,bad_debt_provision_pct,0.70,0.80,higher_worse,%,Bad debt provision as % of total accounts receivable
+F-02,bad_debt_provision_pct,0.55,0.70,higher_worse,%,Bad debt provision as % of total accounts receivable
 F-03,net_debt_ebitda_ratio,2.5,3.0,higher_worse,ratio,Net debt to EBITDA ratio
 F-03,liquidity_headroom_usd_b,1.2,0.9,lower_worse,USD_B,Available liquidity headroom in USD billions
 F-03,debt_maturity_runway_months,12,6,lower_worse,months,Months until next material debt maturity
@@ -27,7 +27,6 @@ F-04,audit_findings_open,2,5,higher_worse,count,High-severity internal audit fin
 C-01,export_screening_coverage_pct,98,95,lower_worse,%,Export control screening coverage rate
 C-01,confirmed_sanctions_violations_ytd,0,1,higher_worse,count,Confirmed sanctions violations year to date
 C-02,ai_audit_coverage_pct,95,90,lower_worse,%,AI systems with completed conformity assessment
-C-02,gdpr_dsr_resolution_rate_pct,95,90,lower_worse,%,GDPR data subject request resolution rate
 C-03,third_party_abac_coverage_pct,100,95,lower_worse,%,Third-party anti-bribery and corruption coverage
-C-03,csrd_scope3_disclosure_pct,80,70,lower_worse,%,CSRD Scope 3 emissions disclosure completeness
 O-01,supplier_cyber_resilience_assess_pct,80,50,lower_worse,%,Single-source supplier cyber resilience assessment coverage
+O-03,supplier_quality_rejection_rate_pct,0.5,1.0,higher_worse,%,Supplier quality rejection rate as % of units received
