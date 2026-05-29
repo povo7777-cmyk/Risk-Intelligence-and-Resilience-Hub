@@ -413,11 +413,6 @@ def chief_risk_synthesis_node(state: RiskIntelligenceState) -> RiskIntelligenceS
         board_summary += "\n\nRISK COMMITTEE RECOMMENDED ACTIONS:\n" + \
                          "\n".join(f"  • {a}" for a in committee_actions)
 
-    # Append deterministic KRI roll-up table — always appended, never LLM-generated
-    # kri_gt already computed above for status ground truth injection
-    if kri_gt:
-        board_summary += _build_kri_rollup_table(kri_gt)
-
     state["board_summary"] = board_summary
 
     # Write to dashboard
