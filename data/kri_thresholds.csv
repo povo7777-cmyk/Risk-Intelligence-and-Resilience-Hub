@@ -25,7 +25,7 @@ F-03,liquidity_headroom_usd_b,1.2,0.9,lower_worse,USD_B,Available liquidity head
 F-03,debt_maturity_runway_months,12,6,lower_worse,months,Months until next material debt maturity
 F-04,audit_findings_open,2,5,higher_worse,count,High-severity internal audit findings open (SOX scope)
 C-01,export_screening_coverage_pct,98,95,lower_worse,%,Export control screening coverage rate
-C-01,confirmed_sanctions_violations_ytd,0,1,higher_worse,count,Confirmed sanctions violations year to date
+C-01,confirmed_sanctions_violations_ytd,0.5,1,higher_worse,count,Confirmed sanctions violations year to date
 C-02,ai_audit_coverage_pct,95,90,lower_worse,%,AI systems with completed conformity assessment
 C-03,third_party_abac_coverage_pct,100,95,lower_worse,%,Third-party anti-bribery and corruption coverage
 O-01,supplier_cyber_resilience_assess_pct,80,50,lower_worse,%,Single-source supplier cyber resilience assessment coverage
