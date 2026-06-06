@@ -905,9 +905,33 @@ input[type=range]{width:100%;accent-color:var(--navy)}
 <!-- MONTE CARLO -->
 <div id="pg-mc" class="pg">
   <div class="pg-hd"><h2>EBITDA stress simulator</h2><p>EBITDA distribution under simultaneous FX shock + demand compression. Calibrated to company profile: ~4% EBITDA margin, 96% total cost ratio, USD 170M covenant headroom. Linked to F-01 &amp; S-01. 5,000 simulations &middot; 3-year horizon.</p></div>
-  <div style="background:#1a0808;border:1px solid #3a1515;border-radius:10px;padding:.8rem 1.1rem;margin-bottom:1rem;display:flex;align-items:flex-start;gap:10px">
-    <i class="ti ti-alert-triangle" style="color:#ef4444;font-size:16px;margin-top:1px;flex-shrink:0"></i>
-    <div style="font-size:12px;color:#fca5a5;line-height:1.6"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444"><strong style="color:#ef4444">Validated finding (Python simulation, N=5,000, seed=42):</strong> At current defaults (96.0% cost ratio, USD 57.0B revenue, 12.0% volatility), P(covenant breach) = <strong style="color:#ef4444">44.2%</strong>. A +1pp cost increase raises this to <strong>80.3%</strong>. Top customer loss raises it to <strong>51.7%</strong>. Covenant headroom: <strong>USD 152M</strong> only.</div>
+  <div style="background:#1a0808;border:1px solid #3a1515;border-radius:10px;padding:1rem 1.2rem;margin-bottom:1rem">
+    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:0.85rem">
+      <i class="ti ti-alert-triangle" style="color:#ef4444;font-size:16px;margin-top:2px;flex-shrink:0"></i>
+      <div style="font-size:13px;font-weight:600;color:#ef4444;line-height:1.55">Under current conditions, there is a <strong>44% chance of breaching a bank covenant</strong> — a trigger that could allow lenders to demand early debt repayment. A single cost increase or major customer loss pushes this above 50%.</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.6rem;margin-bottom:0.8rem">
+      <div style="background:#2a0a0a;border:1px solid #4a1515;border-radius:7px;padding:0.65rem 0.8rem;text-align:center">
+        <div style="font-size:10px;color:#fca5a5;margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Base case today</div>
+        <div style="font-size:24px;font-weight:700;color:#ef4444;line-height:1">44.2%</div>
+        <div style="font-size:10px;color:rgba(252,165,165,.6);margin-top:4px">covenant breach probability</div>
+      </div>
+      <div style="background:#2a0a0a;border:1px solid #4a1515;border-radius:7px;padding:0.65rem 0.8rem;text-align:center">
+        <div style="font-size:10px;color:#fca5a5;margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">If costs rise 1%</div>
+        <div style="font-size:24px;font-weight:700;color:#ef4444;line-height:1">80.3%</div>
+        <div style="font-size:10px;color:rgba(252,165,165,.6);margin-top:4px">covenant breach probability</div>
+      </div>
+      <div style="background:#2a0a0a;border:1px solid #4a1515;border-radius:7px;padding:0.65rem 0.8rem;text-align:center">
+        <div style="font-size:10px;color:#fca5a5;margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">If top customer lost</div>
+        <div style="font-size:24px;font-weight:700;color:#ef4444;line-height:1">51.7%</div>
+        <div style="font-size:10px;color:rgba(252,165,165,.6);margin-top:4px">covenant breach probability</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:8px;padding:0.5rem 0.8rem;background:rgba(239,68,68,0.08);border-radius:6px;margin-bottom:0.6rem">
+      <i class="ti ti-shield-exclamation" style="color:#fca5a5;font-size:13px;flex-shrink:0;margin-top:1px"></i>
+      <div style="font-size:12px;color:#fca5a5;line-height:1.55"><strong style="color:#ef4444">Safety buffer remaining: USD 152M.</strong> This is how much EBITDA can decline before the Net Debt / EBITDA ratio hits the 3.0× bank limit. The scenarios above demonstrate how quickly that buffer can be consumed.</div>
+    </div>
+    <div style="font-size:10px;color:rgba(252,165,165,.4);line-height:1.5">Validated · Python simulation · N=5,000 · seed=42 · Inputs: 96.0% cost ratio, USD 57.0B revenue, 12.0% volatility</div>
   </div>
   <div class="info"><strong>What this models:</strong> Each simulation draws a random price path (log-normal with drift + volatility), a demand year, and a random cost variance. EBITDA = revenue &minus; costs. Adjust sliders to stress-test assumptions.</div>
   <div class="three">
