@@ -1555,13 +1555,13 @@ def _render_risk_posture_fallback(facts: dict) -> str:
 
 def _render_risk_posture(client, facts: dict, cost) -> str:
     """
-    Render RISK POSTURE as board-quality prose using Claude Haiku.
+    Render RISK POSTURE as board-quality prose using Claude Sonnet.
 
     Architecture: data-locked LLM rendering.
     - Facts are pre-computed deterministically (counts, domains, escalation status).
-    - The LLM's only job is to express those exact facts in natural board language.
+    - The LLM's only job is to express those exact facts in clear board language.
     - It cannot add, remove, or change any fact — the input is the entire fact set.
-    - max_tokens=500 (one paragraph).
+    - max_tokens=1500 — sufficient for 2-3 short paragraphs covering all facts.
     - Falls back to _render_risk_posture_fallback() if the call fails.
     """
     # Build the locked fact sheet the LLM must render verbatim
@@ -1603,26 +1603,30 @@ def _render_risk_posture(client, facts: dict, cost) -> str:
     fact_sheet = "\n".join(fact_lines)
 
     system = (
-        "You are the Chief Risk Officer writing the opening paragraph of a board-level "
-        "risk summary. You receive a locked fact sheet. Your only job is to render those "
-        "exact facts as a single, fluent paragraph of board-quality prose. "
-        "Rules: (1) Every fact in the sheet must appear in your paragraph — do not omit any. "
-        "(2) Do not introduce any fact not in the sheet — no KRI names, no specific values, "
-        "no domain commentary beyond what is listed. "
-        "(3) Use authoritative, declarative language appropriate for board directors. "
-        "(4) No bullet points, no headers, no markdown. One paragraph only. "
-        "(5) Begin with the breach count headline. End with the escalation or systemic status."
+        "You are the Chief Risk Officer writing the RISK POSTURE section of a board risk summary.\n"
+        "You receive a locked fact sheet. Render every fact as clear, readable board prose.\n\n"
+        "STYLE RULES — follow strictly:\n"
+        "(1) SHORT SENTENCES. Maximum 20 words per sentence. No semicolons to chain clauses.\n"
+        "(2) TWO OR THREE PARAGRAPHS:\n"
+        "    Para 1 — Headline verdict: total breach count, number of domains affected, amber count.\n"
+        "    Para 2 — Domain accountability: one sentence per domain in breach, named executive owner. "
+        "Escalation status.\n"
+        "    Para 3 — Only if systemic risk or compound scenarios are present; otherwise omit.\n"
+        "(3) Every fact in the sheet must appear — omit nothing.\n"
+        "(4) Do not introduce any fact not in the sheet.\n"
+        "(5) No bullet points, no headers, no markdown.\n"
+        "(6) Write for a board director reading this in 30 seconds. Clarity over density."
     )
 
     user = (
-        "Render this fact sheet as one board-quality paragraph:\n\n"
+        "Render this fact sheet as 2–3 short, readable paragraphs of board prose:\n\n"
         + fact_sheet
     )
 
     try:
         response = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=500,
+            model="claude-sonnet-4-5",
+            max_tokens=1500,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
@@ -1635,7 +1639,7 @@ def _render_risk_posture(client, facts: dict, cost) -> str:
             raise ValueError("Response too short — falling back")
         return "RISK POSTURE\n\n" + text
     except Exception as e:
-        print(f"  [RISK POSTURE] Haiku render failed ({e}) — using deterministic fallback")
+        print(f"  [RISK POSTURE] Sonnet render failed ({e}) — using deterministic fallback")
         return _render_risk_posture_fallback(facts)
 
 
