@@ -2,7 +2,7 @@ risk_id,kri_name,amber_threshold,breach_threshold,direction,unit,description
 S-01,geopolitical_signal_count,2,3,higher_worse,count,Number of geopolitical signals detected in market intelligence this period
 S-01,odm_ems_prc_concentration_pct,40,50,higher_worse,%,ODM/EMS manufacturing spend in PRC-jurisdiction facilities as % of total ODM/EMS spend
 S-02,competitive_signals,3,5,higher_worse,count,Number of AI competitive signals detected this period
-S-03,synergy_delivery_pct,75,70,lower_worse,%,M&A synergy delivery vs plan
+S-03,synergy_delivery_pct,75,60,lower_worse,%,M&A synergy delivery vs plan
 O-01,single_source_concentration,40,50,higher_worse,%,Single supplier concentration as % of category spend
 O-01,inventory_cover_weeks,6,4,lower_worse,weeks,Minimum inventory cover across critical SKUs
 O-01,supplier_distress_flags,1,3,higher_worse,count,Suppliers flagged for financial/operational distress
@@ -29,4 +29,5 @@ C-01,confirmed_sanctions_violations_ytd,0.5,1,higher_worse,count,Confirmed sanct
 C-02,ai_audit_coverage_pct,95,90,lower_worse,%,AI systems with completed conformity assessment
 C-03,third_party_abac_coverage_pct,100,95,lower_worse,%,Third-party anti-bribery and corruption coverage
 O-01,supplier_cyber_resilience_assess_pct,80,50,lower_worse,%,Single-source supplier cyber resilience assessment coverage
+O-01,geo_concentration_pct,65,75,higher_worse,%,Taiwan + China combined supply chain spend as % of total
 O-03,supplier_quality_rejection_rate_pct,0.5,1.0,higher_worse,%,Supplier quality rejection rate as % of units received
