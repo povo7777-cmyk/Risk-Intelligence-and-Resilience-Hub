@@ -1,5 +1,5 @@
 """
-strategic_agent.py — Strategic Risk Agent (Claude Haiku 4.5)
+strategic_agent.py — Strategic Risk Agent (Claude Sonnet 4.6)
 Owns: S-01 Geopolitical & trade, S-02 AI disruption, S-03 M&A integration
 Data: market_intelligence.csv, ma_pipeline.csv
 """
@@ -67,7 +67,7 @@ def run(kri_data: dict | None = None) -> dict:
     If None, computes KRI values from CSVs directly (standalone / test mode).
     """
     print(f"\n{'='*60}")
-    print("[Strategic Agent] Starting — Claude Haiku 4.5")
+    print("[Strategic Agent] Starting — Claude Sonnet 4.6")
     print(f"{'='*60}")
 
     # Always read CSVs for narrative context (signal titles, pipeline details)
@@ -139,7 +139,7 @@ Provide a structured assessment:
 6. ESCALATION (yes/no — only yes if a KRI status is breach)
 Direct language."""
 
-    print("  Calling Claude Haiku 4.5...")
+    print("  Calling Claude Sonnet 4.6...")
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
     msg = client.messages.create(
         model="claude-sonnet-4-6",
