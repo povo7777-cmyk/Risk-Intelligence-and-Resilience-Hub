@@ -41,6 +41,15 @@ def _read_csv(name: str) -> list[dict]:
         return list(csv.DictReader(f))
 
 
+def _latest_rows(rows: list[dict]) -> list[dict]:
+    """Return only the rows belonging to the most recent date in the list."""
+    dates = sorted(set(r.get("date", "") for r in rows if r.get("date")), reverse=True)
+    if not dates:
+        return rows
+    latest = dates[0]
+    return [r for r in rows if r.get("date") == latest]
+
+
 def _randn() -> float:
     """Box–Muller standard normal sample."""
     u1, u2 = random.random(), random.random()
@@ -61,24 +70,42 @@ def _percentile(arr: list[float], p: float) -> float:
 
 def calibrate_ebitda(raw: dict) -> dict:
     """
-    Derive EBITDA model parameters from financial_summary.csv and
-    covenant_tracker.csv, then run the Monte Carlo simulation.
+    Derive EBITDA model parameters from financial_summary.csv,
+    covenant_tracker.csv, and treasury_positions.csv (FX cost pass-through).
+
+    FX cost pass-through: unhedged Cost-type FX positions (JPY/KRW) create
+    COGS variability. If the dollar weakens, these cost exposures become more
+    expensive in USD terms — a direct EBITDA headwind. This effect is modelled
+    as an additive EBITDA shock proportional to FX volatility × unhedged cost
+    exposure, and is visible as a model parameter for future reference.
 
     Returns a dict of params + simulation outputs.
     """
-    fin = raw.get("financial_summary", [])
+    fin = _latest_rows(raw.get("financial_summary", []))
     latest = fin[-1] if fin else {}
 
-    # Core parameters — fall back to Lenovo Q2 FY26 defaults
+    # Core parameters — read from financial_summary.csv; fall back to governance defaults
     revenue_b    = float(latest.get("revenue_usd_b",    57.0))
     cost_ratio   = float(latest.get("cost_ratio_pct",   96.0))
     ebitda_b     = float(latest.get("ebitda_usd_b",      2.28))
-    volatility   = float(latest.get("revenue_volatility_pct", 12.0))   # % p.a. — from financial_summary.csv; falls back to 12.0
+    volatility   = float(latest.get("revenue_volatility_pct", 12.0))   # % p.a.
     drift        = 0.0
     demand_var   = 12.0   # demand variability %
 
+    # ── FX cost pass-through — derived from treasury_positions.csv ────────────
+    # Cost-type positions (e.g. JPY/KRW component/manufacturing costs): if the
+    # dollar weakens vs these currencies, COGS rises → EBITDA shrinks.
+    # We compute the unhedged portion of Cost-type exposures to size this risk.
+    treasury = _latest_rows(raw.get("treasury", []))
+    cost_rows = [r for r in treasury if r.get("exposure_type", "").lower() == "cost"]
+    fx_cost_gross_usd_m  = sum(float(r.get("gross_exposure_usd_m", 0)) for r in cost_rows)
+    fx_cost_hedged_usd_m = sum(float(r.get("hedged_amount_usd_m",  0)) for r in cost_rows)
+    fx_cost_unhedged_usd_m = round(fx_cost_gross_usd_m - fx_cost_hedged_usd_m, 0)
+    # FX volatility for cost positions — same source as hedge analyser
+    fx_vol_pct = float(latest.get("fx_volatility_realised_pct", 9.0))
+
     # Covenant floor from tracker
-    cov_rows = raw.get("covenant_tracker", [])
+    cov_rows = _latest_rows(raw.get("covenant_tracker", []))
     cov5 = next((r for r in cov_rows if r.get("covenant_id") == "COV005"), None)
     cov1 = next((r for r in cov_rows if r.get("covenant_id") == "COV001"), None)
 
@@ -89,8 +116,7 @@ def calibrate_ebitda(raw: dict) -> dict:
     net_debt_ebitda_ceil = float(cov1["threshold"]) if cov1 else 3.0
 
     # Implied net debt from financial summary
-    fin_latest = fin[-1] if fin else {}
-    net_debt_b = float(fin_latest.get("net_debt_usd_b", 6.384))
+    net_debt_b = float(latest.get("net_debt_usd_b", 6.384))
     # EBITDA headroom = binding constraint (minimum of COV001 and COV005)
     # COV005: EBITDA floor — headroom = ebitda - floor
     headroom_cov5_m = (ebitda_b - cov_floor_b) * 1000
@@ -116,6 +142,10 @@ def calibrate_ebitda(raw: dict) -> dict:
     cost_up1pp_breach = []
     top_cust_loss_breach = []
 
+    # FX cost pass-through: unhedged cost exposure in USD B (used in MC below)
+    fx_cost_b = fx_cost_unhedged_usd_m / 1000
+    fx_vl     = fx_vol_pct / 100
+
     for i in range(N_SIMS):
         # Price path (1-year horizon, 3 steps)
         p = base_price
@@ -124,8 +154,15 @@ def calibrate_ebitda(raw: dict) -> dict:
         # Revenue with demand variability
         rev = rev_b * (p / 100) * (1 + (demand_var / 100) * _randn())
         rev = max(rev, 0)
-        # EBITDA = revenue × (1 - cost_ratio) + noise
-        ebitda = rev * (1 - cr) + 0.05 * rev * _randn()
+        # FX cost pass-through shock: unhedged Cost exposure × FX move
+        # A positive FX shock (USD weakens) increases costs → reduces EBITDA
+        fx_cost_shock = fx_cost_b * fx_vl * _randn()
+        # EBITDA margin noise: ±0.5pp margin variation (operational variability).
+        # Uses margin-relative noise so std dev ≈ rev × 0.005 ≈ USD 285M at base revenue.
+        # Previous formula (0.05 × rev) produced std dev USD 2.85B — 125% of EBITDA —
+        # which dominated the simulation and generated implausible P5 EBITDA of −USD 2.5B.
+        margin_noise = 0.005 * _randn()
+        ebitda = rev * (1 - cr + margin_noise) - fx_cost_shock
         ebitda_sims.append(ebitda)
 
         # Breach checks
@@ -135,13 +172,13 @@ def calibrate_ebitda(raw: dict) -> dict:
         cov5_breach.append(int(breaches_cov5))
         cov1_breach.append(int(breaches_cov5 or breaches_cov1))
 
-        # +1pp cost sensitivity
-        ebitda_c1 = rev * (1 - (cr + 0.01)) + 0.05 * rev * _randn()
+        # +1pp cost sensitivity (same margin noise draw for comparability)
+        ebitda_c1 = rev * (1 - (cr + 0.01) + margin_noise) - fx_cost_shock
         cost_up1pp_breach.append(int(ebitda_c1 < cov_floor_b or
                                      (net_debt_b / ebitda_c1 if ebitda_c1 > 0 else 99) > net_debt_ebitda_ceil))
 
-        # Top customer loss (remove ~22% of ISG revenue ≈ 5% of total)
-        ebitda_cl = (rev * 0.95) * (1 - cr) + 0.05 * (rev * 0.95) * _randn()
+        # Top customer loss (remove ~22% of ISG revenue ≈ 5% of total; same noise draw)
+        ebitda_cl = (rev * 0.95) * (1 - cr + margin_noise) - fx_cost_shock
         top_cust_loss_breach.append(int(ebitda_cl < cov_floor_b or
                                         (net_debt_b / ebitda_cl if ebitda_cl > 0 else 99) > net_debt_ebitda_ceil))
 
@@ -154,6 +191,27 @@ def calibrate_ebitda(raw: dict) -> dict:
                               max(1, sum(1 for e in ebitda_sims
                                          if e <= _percentile(ebitda_sims, 5))) * 1000, 0)
 
+    # ── COV006 breach: bad debt provision covenant (Trade-Finance, test 2026-06-30) ──
+    # If COV006 is in active breach, estimate cure cost = excess provision above
+    # the covenant threshold × total AR. This charge would hit EBITDA if recognised.
+    cov6 = next((r for r in cov_rows if r.get("covenant_id") == "COV006"), None)
+    cov006_breach = bool(cov6 and float(cov6.get("headroom", 0)) < 0)
+    cov006_cure_cost_usd_m = 0.0
+    cov006_next_test_date  = cov6["next_test_date"] if cov6 else ""
+    cov006_current_pct     = float(cov6["current_value"]) if cov6 else 0.0
+    cov006_threshold_pct   = float(cov6["threshold"])     if cov6 else 0.80
+    if cov006_breach:
+        ar = _latest_rows(raw.get("ar_aging", []))
+        total_ar_m = sum(
+            float(r.get("current_usd_m", 0)) + float(r.get("overdue_90d_usd_m", 0))
+            for r in ar
+        )
+        bad_debt_m = sum(float(r.get("bad_debt_provision_usd_m", 0)) for r in ar)
+        cure_target_m = total_ar_m * cov006_threshold_pct / 100
+        cov006_cure_cost_usd_m = round(max(bad_debt_m - cure_target_m, 0), 0)
+    # Post-cure headroom = headroom net of COV006 cure charge (worst-case: full expensing)
+    ebitda_headroom_post_cure_m = round(ebitda_headroom_m - cov006_cure_cost_usd_m, 0)
+
     return {
         # Slider parameters
         "revenue_usd_b":   round(revenue_b, 1),
@@ -164,6 +222,21 @@ def calibrate_ebitda(raw: dict) -> dict:
         # Covenant
         "covenant_floor_usd_b":     round(cov_floor_b, 2),
         "ebitda_headroom_usd_m":    ebitda_headroom_m,
+        # COV006 active breach — cure cost reduces practical EBITDA headroom
+        "cov006_breach":                cov006_breach,
+        "cov006_cure_cost_usd_m":       cov006_cure_cost_usd_m,
+        "cov006_next_test_date":        cov006_next_test_date,
+        "cov006_current_pct":           cov006_current_pct,
+        "cov006_threshold_pct":         cov006_threshold_pct,
+        "ebitda_headroom_post_cure_usd_m": ebitda_headroom_post_cure_m,
+        # FX cost pass-through — derived from treasury_positions.csv Cost-type rows
+        # Represents the unhedged JPY/KRW COGS exposure that creates EBITDA volatility
+        # when the dollar moves against manufacturing-cost currencies.
+        # This parameter is included for model transparency and future CFO reporting.
+        "fx_cost_gross_usd_m":      round(fx_cost_gross_usd_m, 0),
+        "fx_cost_hedged_usd_m":     round(fx_cost_hedged_usd_m, 0),
+        "fx_cost_unhedged_usd_m":   fx_cost_unhedged_usd_m,
+        "fx_vol_pct":               round(fx_vol_pct, 1),
         # Simulation outputs
         "p_covenant_breach_pct":    p_breach,
         "p_breach_cost_up1pp_pct":  p_cost_up1pp,
@@ -179,9 +252,14 @@ def calibrate_ebitda(raw: dict) -> dict:
 def calibrate_hedge(raw: dict) -> dict:
     """
     Derive hedge analyser parameters from treasury_positions.csv.
-    Re-run the hedge VaR simulation.
+    Re-run the hedge VaR simulation using separate volatility parameters for
+    FX (Revenue + Cost positions) vs Commodity (DRAM/NAND) positions.
+
+    Panel recommendation (M-03): FX vol ~9% p.a. vs Commodity vol ~32% p.a.
+    Mixing them with a single parameter understates commodity VaR by ~3×.
+    Both parameters are sourced from financial_summary.csv.
     """
-    treasury = raw.get("treasury", [])
+    treasury = _latest_rows(raw.get("treasury", []))
     if not treasury:
         return {}
 
@@ -206,12 +284,27 @@ def calibrate_hedge(raw: dict) -> dict:
     else:
         avg_spot, avg_forward = 95, 100
 
-    # Volatility: use a sector-calibrated default (FX vol ~ 12-18% p.a.)
-    volatility = 18.0
+    # Separate volatility parameters by asset class (M-03 panel recommendation):
+    # FX positions (Revenue + Cost): realised FX vol from financial_summary.csv
+    # Commodity positions (DRAM/NAND): separate commodity vol — semiconductor memory
+    # is highly cyclical (25-40% p.a.) and must not be blended with FX vol
+    fin_for_vol = _latest_rows(raw.get("financial_summary", []))
+    fin_vol_row = fin_for_vol[-1] if fin_for_vol else {}
+    fx_vol_pct       = float(fin_vol_row.get("fx_volatility_realised_pct",        9.0))
+    commodity_vol_pct = float(fin_vol_row.get("commodity_volatility_realised_pct", 32.0))
 
-    # ── Monte Carlo ─────────────────────────────────────────────────────────
+    # Separate gross/unhedged amounts by asset class for transparency
+    fx_rows   = [r for r in treasury if r.get("exposure_type", "") in ("Revenue", "Cost")]
+    com_rows  = [r for r in treasury if r.get("exposure_type", "") == "Commodity"]
+    fx_gross_m   = sum(float(r["gross_exposure_usd_m"]) for r in fx_rows)
+    com_gross_m  = sum(float(r["gross_exposure_usd_m"]) for r in com_rows)
+    fx_hedged_m  = sum(float(r["hedged_amount_usd_m"])  for r in fx_rows)
+    com_hedged_m = sum(float(r["hedged_amount_usd_m"])  for r in com_rows)
+
+    # ── Monte Carlo — per-position volatility routing ────────────────────────
+    # Each position uses its own volatility class; shocks are drawn independently.
+    # FX positions use fx_vol_pct; Commodity positions use commodity_vol_pct.
     random.seed(SEED)
-    vl = volatility / 100
     hr = hedge_ratio / 100
     sp = avg_spot if avg_spot > 0 else 95
     fp = avg_forward if avg_forward > 0 else 100
@@ -219,26 +312,65 @@ def calibrate_hedge(raw: dict) -> dict:
 
     uh_sims, hd_sims = [], []
     for _ in range(N_SIMS):
-        total_uh = 0
-        total_hd = 0
-        p = sp
-        for _ in range(3):
-            p = p * math.exp(-0.5 * vl * vl + vl * _randn())
-            av = gross_b * (p / 100) * (1 + 0.12 * _randn())
-            hv = min(gross_b * (fp / 100) * hr, av)
-            total_uh += av * 1000
-            total_hd += (hv * 1000 + (av - min(gross_b * (fp / 100) * hr, av)) * 1000 - hc)
-        uh_sims.append(total_uh / 3)
-        hd_sims.append(total_hd / 3)
+        sim_uh = 0.0
+        sim_hd = 0.0
+
+        # FX positions
+        if fx_gross_m > 0:
+            fx_vl = fx_vol_pct / 100
+            fx_g  = fx_gross_m / 1000      # USD B
+            fx_h  = fx_hedged_m / fx_gross_m  # hedge ratio for FX positions
+            p = sp
+            for _ in range(3):
+                p = p * math.exp(-0.5 * fx_vl * fx_vl + fx_vl * _randn())
+                av = fx_g * (p / 100) * (1 + 0.12 * _randn())
+                sim_uh += av * 1000
+                # Hedged fraction locked at forward rate; unhedged fraction floats with spot.
+                # av = fx_g * (p/100) * demand_factor, so hedging replaces (p/100) with (fp/100)
+                # for the hedged share: av_hd = av * (fx_h*(fp/p) + (1-fx_h))
+                p_safe = max(p, 1.0)
+                sim_hd += av * (fx_h * (fp / p_safe) + (1.0 - fx_h)) * 1000
+            sim_uh /= 3
+            sim_hd = sim_hd / 3 - hc
+
+        # Commodity positions — higher volatility, no forward rate reference
+        if com_gross_m > 0:
+            com_vl = commodity_vol_pct / 100
+            com_g  = com_gross_m / 1000    # USD B
+            com_h  = com_hedged_m / com_gross_m  # hedge ratio for commodity positions
+            p_com  = 100.0
+            com_uh = 0.0
+            com_hd = 0.0
+            for _ in range(3):
+                p_com = p_com * math.exp(-0.5 * com_vl * com_vl + com_vl * _randn())
+                av = com_g * (p_com / 100) * (1 + 0.15 * _randn())  # 15% demand vol
+                com_uh += av * 1000
+                # Hedged fraction locked at base price (100); unhedged fraction floats with spot.
+                # Same decomposition as FX: replace (p_com/100) with 1.0 for hedged share.
+                p_com_safe = max(p_com, 1.0)
+                com_hd += av * (com_h * (100.0 / p_com_safe) + (1.0 - com_h)) * 1000
+            sim_uh += com_uh / 3
+            sim_hd += com_hd / 3
+
+        uh_sims.append(sim_uh)
+        hd_sims.append(sim_hd)
 
     # 80% revenue base threshold for P(revenue < 80% base)
     base_80 = gross_b * 0.80 * 1000
 
-    var_uh   = round(_percentile(uh_sims, 5))
-    var_hd   = round(_percentile(hd_sims, 5))
+    # VaR expressed as loss from mean (standard VaR convention):
+    #   VaR_unhedged > VaR_hedged correctly shows hedge reduces loss risk.
+    #   Raw 5th-percentile revenue would make hedged VaR appear higher than unhedged
+    #   (inverted) because the hedge raises the revenue floor — not a risk increase.
+    mean_uh = sum(uh_sims) / N_SIMS
+    mean_hd = sum(hd_sims) / N_SIMS
+    p5_uh   = _percentile(uh_sims, 5)
+    p5_hd   = _percentile(hd_sims, 5)
+    var_uh   = round(mean_uh - p5_uh)   # loss from mean at P5 — positive = risk
+    var_hd   = round(mean_hd - p5_hd)   # loss from mean at P5 — positive = risk
     p_uh_80  = round(sum(1 for v in uh_sims if v < base_80) / N_SIMS * 100, 1)
     p_hd_80  = round(sum(1 for v in hd_sims if v < base_80) / N_SIMS * 100, 1)
-    var_impr = round(var_hd - var_uh)
+    var_impr = round(var_uh - var_hd)   # positive = hedge reduces VaR loss
 
     return {
         # Slider parameters
@@ -252,7 +384,15 @@ def calibrate_hedge(raw: dict) -> dict:
         "hedge_cost_usd_m":       int(round(hedge_cost_m / 10) * 10),  # nearest 10
         "avg_spot":               avg_spot,
         "avg_forward":            avg_forward,
-        "volatility_pct":         volatility,
+        # Separate volatility parameters (M-03)
+        "fx_vol_pct":             fx_vol_pct,
+        "commodity_vol_pct":      commodity_vol_pct,
+        "volatility_pct":         fx_vol_pct,    # retained for backward compat (FX-only slider)
+        # Asset class breakdown
+        "fx_gross_usd_m":         round(fx_gross_m, 0),
+        "fx_hedged_usd_m":        round(fx_hedged_m, 0),
+        "commodity_gross_usd_m":  round(com_gross_m, 0),
+        "commodity_hedged_usd_m": round(com_hedged_m, 0),
         # Simulation outputs
         "var_95_unhedged_usd_m":  var_uh,
         "var_95_hedged_usd_m":    var_hd,
@@ -270,7 +410,7 @@ def calibrate_supply_chain(raw: dict) -> dict:
     Derive supply chain model parameters from erp_supply_chain.csv and
     market_intelligence.csv. Re-run the Poisson failure simulation.
     """
-    sc = raw.get("supply_chain", [])
+    sc = _latest_rows(raw.get("supply_chain", []))
     if not sc:
         return {}
 
@@ -288,12 +428,13 @@ def calibrate_supply_chain(raw: dict) -> dict:
     # Revenue at risk — single-source spend as share of company COGS × total revenue.
     # Logic: single-source components form X% of COGS; if they fail, X% of revenue
     # cannot ship. Uses company gross margin from financial_summary to derive COGS.
-    fin_rows = raw.get("financial_summary", [])
+    fin_rows = _latest_rows(raw.get("financial_summary", []))
     fin_latest_sc = fin_rows[-1] if fin_rows else {}
     rev_b           = float(fin_latest_sc.get("revenue_usd_b",     57.0))
     gross_margin_pct = float(fin_latest_sc.get("gross_margin_pct", 12.5))
 
-    company_cogs_m  = rev_b * 1000 * (1 - gross_margin_pct / 100)
+    cost_ratio_pct  = float(fin_latest_sc.get("cost_ratio_pct",  96.0))
+    company_cogs_m  = rev_b * 1000 * (cost_ratio_pct / 100)
     single_spend_m  = sum(float(r["our_spend_usd_m"]) for r in single_src)
 
     # Cap at 30% of revenue (conservative upper bound — not all spend = unique revenue)
@@ -309,43 +450,59 @@ def calibrate_supply_chain(raw: dict) -> dict:
     high_sev_geo  = [r for r in geo_signals if r.get("severity", "").lower() == "high"]
     demand_shock_prob = min(10 + len(geo_signals) * 4 + len(high_sev_geo) * 3, 60)  # base 10% + signal count
     demand_shock_impact = 15.0   # % impact — calibrated to sector history
-    impact_vol = 8.0
+    impact_vol = float(fin_latest_sc.get("supply_chain_demand_shock_vol_pct", 8.0))  # % — read from financial_summary.csv
 
     # Emergency sourcing premium — from market conditions
     emerg_premium = 25   # % — standard industry benchmark
 
-    # MTBF — use mean financial health score as a proxy
-    # Lower health score → shorter MTBF
-    mean_health = sum(float(r["financial_health_score"]) for r in sc) / len(sc)
-    # Map health score (0-100) → MTBF (2-15 years): MTBF = 2 + 13*(health/100)
-    mtbf_years = round(2 + 13 * (mean_health / 100), 0)
+    # MTBF — supplier-specific, calibrated from financial_health_score and single-source flag
+    # Each supplier gets its own MTBF: lower health → shorter MTBF → higher failure probability
+    # This ensures distressed single-source suppliers (health <65) are not masked by healthy ones
+    # Quadratic decay: MTBF = 15 × (health/100)^2, floored at 2yr
+    #   health=100 → 15yr (P≈6.5%/yr)   health=65 → 6.3yr (P≈14.5%/yr)
+    #   health=50  →  3.75yr (P≈23.5%)  health=30 → capped 2yr (P≈39%/yr)
+    # Quadratic is more realistic than linear: near-distress suppliers face
+    # disproportionately higher disruption probability (financial stress is non-linear).
+    def _health_to_mtbf(health_score: float) -> float:
+        return max(2.0, 15.0 * (health_score / 100.0) ** 2)
+
+    supplier_mtbfs = [_health_to_mtbf(float(r["financial_health_score"])) for r in sc]
+    supplier_spends = [float(r["our_spend_usd_m"]) for r in sc]
+    total_spend = sum(supplier_spends) or 1.0
+
+    # Spend-weighted MTBF — reported in model params for transparency
+    mtbf_years = round(
+        sum(m * s for m, s in zip(supplier_mtbfs, supplier_spends)) / total_spend, 0
+    )
     mtbf_years = max(2, min(15, int(mtbf_years)))
 
     # ── Monte Carlo (Poisson failure model) ──────────────────────────────────
     random.seed(SEED)
     fl  = supplier_count
-    mt  = mtbf_years
     rc  = recovery_months
     ec  = emerg_premium / 100
     rv  = rev_at_risk_b
     dp  = demand_shock_prob / 100
     di  = demand_shock_impact / 100
     dv  = impact_vol / 100
+    _rec_var_base = float(fin_latest_sc.get("supply_chain_recovery_variability_pct", 30.0)) / 100
 
     def _run_sim(dual_source: bool = False, inventory_buffer: bool = False) -> list[float]:
         results = []
-        _mt = mt * 1.8 if dual_source else mt   # dual-source extends effective MTBF
         _rv = rv * 0.85 if inventory_buffer else rv  # buffer reduces effective exposure
         for _ in range(N_SIMS):
             annual_loss = 0.0
-            for s in range(fl):
-                # Poisson failure probability
-                fail_prob = 1 - math.exp(-1.0 / _mt)
+            for s, s_mtbf in enumerate(supplier_mtbfs):
+                # Supplier-specific failure probability from individual MTBF
+                _s_mt = s_mtbf * 1.8 if dual_source else s_mtbf
+                fail_prob = 1 - math.exp(-1.0 / _s_mt)
                 if random.random() < fail_prob:
-                    # Recovery time impact
-                    impact_months = rc * (1 + 0.3 * _randn())
+                    # Recovery time impact — variability read from financial_summary.csv
+                    impact_months = rc * (1 + _rec_var_base * _randn())
                     impact_months = max(1, impact_months)
-                    recovery_cost = (_rv / fl) * (impact_months / 12) * (1 + ec)
+                    # Spend-weighted impact: larger spend = larger disruption cost
+                    spend_weight = supplier_spends[s] / total_spend
+                    recovery_cost = _rv * spend_weight * (impact_months / 12) * (1 + ec)
                     annual_loss += recovery_cost
             # Demand shock
             if random.random() < dp:
@@ -642,6 +799,116 @@ def update_html_models(dashboard_path: Path, params: dict) -> tuple[bool, list[s
                 f"dual-src saves {save_dual:,}M, roi={roi_both}×"
             )
 
+    # ── Supply chain exec-action and risk-event cards ─────────────────────────
+    # These hardcoded HTML cards reference VaR/ROI values and must stay in sync
+    if sp:
+        var_base  = sp.get("var_95_baseline_usd_m",  2509)
+        save_dual = sp.get("saving_dual_src_usd_m",   663)
+        roi_dual  = sp.get("roi_dual_src_x",           48)
+        dual_cost = sp.get("urgent_dual_cost_usd_m",   15)
+
+        # Exec action 01: "dual-source saves USD NNNm VaR 95% — a XX× return"
+        exec_pattern = re.compile(
+            r'(dual-source saves USD )[\d,]+(M VaR 95% &mdash; a )[\d]+'
+            r'(&times; return on investment)'
+        )
+        exec_replacement = rf'\g<1>{save_dual:,}\g<2>{roi_dual}\g<3>'
+        new_html, n = exec_pattern.subn(exec_replacement, html)
+        if n:
+            html = new_html
+            changes.append(f"Supply chain exec-action VaR: {save_dual:,}M / {roi_dual}×")
+
+        # Risk event ra/rr strings: "reduces VaR 95% by USD NNNm — a XX× return"
+        risk_ra_pattern = re.compile(
+            r'(dual-source programme \(USD )[\d.]+?(M/yr\) reduces VaR 95% by USD )[\d,]+'
+            r'(M — a )[\d]+(× return)'
+        )
+        risk_ra_repl = rf'\g<1>{dual_cost:.1f}\g<2>{save_dual:,}\g<3>{roi_dual}\g<4>'
+        new_html, n = risk_ra_pattern.subn(risk_ra_repl, html)
+        if n:
+            html = new_html
+            changes.append(f"Supply chain risk-event ra VaR: {save_dual:,}M")
+
+        # Risk event rr: "shows USD NNNm VaR improvement"
+        risk_rr_pattern = re.compile(
+            r'(dual-source toggle — shows USD )[\d,]+(M VaR improvement)'
+        )
+        new_html, n = risk_rr_pattern.subn(rf'\g<1>{save_dual:,}\g<2>', html)
+        if n:
+            html = new_html
+
+        # Programme staffing ra: "validated VaR saving of USD NNNm"
+        staffing_pattern = re.compile(
+            r'(validated VaR saving of USD )[\d,]+(M is not being captured)'
+        )
+        new_html, n = staffing_pattern.subn(rf'\g<1>{save_dual:,}\g<2>', html)
+        if n:
+            html = new_html
+            changes.append(f"Supply chain staffing VaR ref: {save_dual:,}M")
+
+        # Geographic diversification rr: "reduces VaR 95% by ~USD NNNm"
+        geo_pattern = re.compile(
+            r'(geographic diversification reduces VaR 95% by ~USD )[\d,]+(M)'
+        )
+        new_html, n = geo_pattern.subn(rf'\g<1>{save_dual:,}\g<2>', html)
+        if n:
+            html = new_html
+
+    # ── Supply chain JS comment block ────────────────────────────────────────
+    # Updates the human-readable comment used by the consistency checker scan
+    if sp:
+        var_base  = sp.get("var_95_baseline_usd_m",  2509)
+        save_dual = sp.get("saving_dual_src_usd_m",   663)
+        save_inv  = sp.get("saving_inv_buff_usd_m",   584)
+        save_both = sp.get("saving_both_usd_m",      1199)
+        roi_dual  = sp.get("roi_dual_src_x",           48)
+        roi_inv   = sp.get("roi_inv_buff_x",           48)
+        dual_cost = sp.get("urgent_dual_cost_usd_m",   15)
+        inv_cost  = sp.get("inv_buffer_cost_usd_m",     8)
+
+        new_comment = (
+            f"// Supply Chain — Validated Python simulation (N=5,000):\n"
+            f"//   Baseline VaR 95%: USD {var_base:,}M\n"
+            f"//   Dual-source only: saves USD {save_dual:,}M VaR ({roi_dual}x ROI on USD {dual_cost:.1f}M/yr)\n"
+            f"//   Inventory buffer only: saves USD {save_inv:,}M VaR ({roi_inv}x ROI on USD {inv_cost:.1f}M/yr)\n"
+            f"//   Both mitigations: saves USD {save_both:,}M VaR combined"
+        )
+        comment_pattern = re.compile(
+            r'// Supply Chain — Validated Python simulation.*?//   Both mitigations: saves USD [\d,]+M VaR combined',
+            re.DOTALL
+        )
+        new_html, n = comment_pattern.subn(new_comment, html)
+        if n:
+            html = new_html
+            changes.append(f"Supply chain JS comment: VaR={var_base:,}M")
+
+    # ── Supply chain JS prompt string ─────────────────────────────────────────
+    # Updates the LLM prompt used by the Risk Committee panel in the dashboard
+    if sp:
+        var_base  = sp.get("var_95_baseline_usd_m",  2509)
+        save_dual = sp.get("saving_dual_src_usd_m",   663)
+        save_inv  = sp.get("saving_inv_buff_usd_m",   584)
+        save_both = sp.get("saving_both_usd_m",      1199)
+        roi_dual  = sp.get("roi_dual_src_x",           48)
+        dual_cost = sp.get("urgent_dual_cost_usd_m",   15)
+        inv_cost  = sp.get("inv_buffer_cost_usd_m",     8)
+
+        new_prompt_bench = (
+            f"Validated Python simulation benchmarks (N=5,000): "
+            f"Baseline VaR 95% ~USD {var_base:,}M. "
+            f"Dual-source programme (USD {dual_cost:.1f}M/yr) reduces VaR by ~USD {save_dual:,}M ({roi_dual}× ROI). "
+            f"Inventory buffer (USD {inv_cost:.1f}M/yr) reduces VaR by ~USD {save_inv:,}M. "
+            f"Both together: ~USD {save_both:,}M saving."
+        )
+        prompt_pattern = re.compile(
+            r'Validated Python simulation benchmarks \(N=5,000\): '
+            r'Baseline VaR 95% ~USD [\d,]+M\..*?Both together: ~USD [\d,]+M saving\.'
+        )
+        new_html, n = prompt_pattern.subn(new_prompt_bench, html)
+        if n:
+            html = new_html
+            changes.append(f"Supply chain JS prompt benchmark: VaR={var_base:,}M")
+
     if changes:
         dashboard_path.write_text(html)
 
@@ -679,6 +946,7 @@ def run_calibration(dashboard_path: Path | None = None) -> dict:
         "supply_chain":      _read_csv("erp_supply_chain.csv"),
         "covenant_tracker":  _read_csv("covenant_tracker.csv"),
         "market_intel":      _read_csv("market_intelligence.csv"),
+        "ar_aging":          _read_csv("ar_aging.csv"),
     }
 
     # Calibrate each model
