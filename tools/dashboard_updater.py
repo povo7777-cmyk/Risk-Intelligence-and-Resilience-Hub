@@ -722,12 +722,60 @@ def _render_section_body(label: str, body: str) -> str:
         return ''.join(cards)
 
     elif 'RISK POSTURE' in label.upper():
-        # ── Risk Posture: single dense paragraph ──────────────────────────────
-        # This section is deliberately compact — it's the opening verdict and
-        # reads well as one block.
-        return (
-            f'<div style="font-size:12.5px;color:var(--txt);line-height:1.6">{body}</div>'
-        )
+        # ── Risk Posture: domain-split rendering ──────────────────────────────
+        # If the body contains STRATEGIC/OPERATIONAL/FINANCIAL/COMPLIANCE labels,
+        # render each as a mini-section with domain colour. Otherwise fall back to
+        # sentence-level rows so it's still scannable.
+        import re as _re
+        DOMAIN_COLOURS = {
+            'STRATEGIC':   '#e8c547',
+            'OPERATIONAL': '#f97316',
+            'FINANCIAL':   '#3b82f6',
+            'COMPLIANCE':  '#a78bfa',
+        }
+        domain_pattern = r'(?i)\b(STRATEGIC|OPERATIONAL|FINANCIAL|COMPLIANCE)\s*:'
+        if _re.search(domain_pattern, body):
+            chunks = _re.split(domain_pattern, body)
+            # chunks: [overview_text, domain_name, domain_text, domain_name, domain_text, ...]
+            overview = chunks[0].strip()
+            html_parts = []
+            if overview:
+                html_parts.append(
+                    f'<div style="font-size:12.5px;color:var(--txt);line-height:1.6;'
+                    f'margin-bottom:0.65rem">{overview}</div>'
+                )
+            for i in range(1, len(chunks) - 1, 2):
+                dname = chunks[i].upper()
+                dtext = chunks[i + 1].strip() if i + 1 < len(chunks) else ''
+                dcolor = DOMAIN_COLOURS.get(dname, '#7f8c8d')
+                is_last = (i + 2 >= len(chunks) - 1)
+                html_parts.append(
+                    f'<div style="{"" if is_last else "margin-bottom:0.45rem;"}'
+                    f'padding:0.35rem 0.55rem 0.35rem 0.65rem;'
+                    f'border-left:2px solid {dcolor};background:rgba(0,0,0,0.015)">'
+                    f'<div style="font-size:10px;font-weight:700;color:{dcolor};'
+                    f'text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">{dname.title()}</div>'
+                    f'<div style="font-size:12.5px;color:var(--txt);line-height:1.55">{dtext}</div>'
+                    f'</div>'
+                )
+            return ''.join(html_parts)
+        else:
+            # No domain labels — use sentence-level rows so it's at least scannable
+            sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', body.strip())
+            sentences = [s.strip() for s in sentences if s.strip()]
+            if len(sentences) <= 1:
+                return f'<div style="font-size:12.5px;color:var(--txt);line-height:1.6">{body}</div>'
+            rows = []
+            for idx, sentence in enumerate(sentences):
+                if sentence and sentence[-1] not in '.!?':
+                    sentence += '.'
+                is_last = (idx == len(sentences) - 1)
+                rows.append(
+                    f'<div style="font-size:12.5px;color:var(--txt);line-height:1.55;'
+                    f'{"" if is_last else "margin-bottom:0.38rem;padding-bottom:0.38rem;border-bottom:1px solid rgba(0,0,0,0.05);"}'
+                    f'">{sentence}</div>'
+                )
+            return ''.join(rows)
 
     else:
         # ── Sentence-level rows ────────────────────────────────────────────────
