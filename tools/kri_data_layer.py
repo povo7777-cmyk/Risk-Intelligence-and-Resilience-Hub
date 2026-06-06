@@ -109,6 +109,15 @@ def _compute_operational() -> dict:
     inv   = sc["min_inventory_weeks"]
     dist  = float(sc["supplier_distress_flags"])
 
+    # EM-04: Geographic concentration — Taiwan + China combined supply chain spend
+    sc_raw = read_csv_latest("erp_supply_chain.csv")
+    _total_sc_spend = sum(float(r.get("our_spend_usd_m", 0)) for r in sc_raw)
+    _taiwan_china_spend = sum(
+        float(r.get("our_spend_usd_m", 0)) for r in sc_raw
+        if r.get("country") in ("Taiwan", "China")
+    )
+    geo_conc = round(_taiwan_china_spend / _total_sc_spend * 100, 1) if _total_sc_spend else 0.0
+
     mttd         = cy["mttd_days"]
     patch        = cy["patch_compliance_pct"]
     vulns        = float(cy["critical_vulns_open_gt30d"])
@@ -130,6 +139,7 @@ def _compute_operational() -> dict:
             _kri("inventory_cover_weeks",                inv,          "weeks", _status(inv,          "inventory_cover_weeks")),
             _kri("supplier_distress_flags",              dist,         "count", _status(dist,         "supplier_distress_flags")),
             _kri("supplier_cyber_resilience_assess_pct", cyber_assess, "%",     _status(cyber_assess, "supplier_cyber_resilience_assess_pct")),
+            _kri("geo_concentration_pct",                geo_conc,     "%",     _status(geo_conc,     "geo_concentration_pct")),
         ],
         "O-02": [
             _kri("mttd_days",                 mttd,  "days",  _status(mttd,  "mttd_days")),
@@ -312,11 +322,32 @@ def _compute_agent_context() -> dict:
     """
     ctx = {}
 
-    # F-01: unrealised FX P&L (treasury_positions.csv — current period)
+    # F-01: FX P&L + explicit Revenue vs Cost pair breakdown (EM-05 fix)
     try:
         tr = read_csv_latest("treasury_positions.csv")
         pnl = round(sum(float(r.get("unrealised_pnl_usd_m", 0)) for r in tr), 1)
-        ctx["F-01"] = {"unrealised_pnl_usd_m": pnl}
+        total_unhedged = round(sum(
+            float(r.get("gross_exposure_usd_m", 0)) - float(r.get("hedged_amount_usd_m", 0))
+            for r in tr
+        ), 0)
+        rev_rows = [r for r in tr if r.get("exposure_type") == "Revenue"]
+        rev_unhedged = sorted(
+            [
+                (r["currency_pair"], round(float(r["gross_exposure_usd_m"]) - float(r["hedged_amount_usd_m"]), 0))
+                for r in rev_rows
+            ],
+            key=lambda x: x[1], reverse=True
+        )
+        total_rev_unhedged = sum(v for _, v in rev_unhedged)
+        ctx["F-01"] = {
+            "unrealised_pnl_usd_m": pnl,
+            "primary_unhedged_revenue_pair": rev_unhedged[0][0] if rev_unhedged else "N/A",
+            "primary_unhedged_revenue_usd_m": rev_unhedged[0][1] if rev_unhedged else 0,
+            "revenue_unhedged_pairs": rev_unhedged,
+            "total_revenue_unhedged_usd_m": total_rev_unhedged,
+            "revenue_pct_of_total_unhedged": round(total_rev_unhedged / total_unhedged * 100, 1) if total_unhedged else 0,
+            "note": "Revenue pairs only — KRW is a Cost exposure and must NOT be cited as priority Revenue pair",
+        }
     except Exception:
         ctx["F-01"] = {}
 
