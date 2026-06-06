@@ -786,7 +786,7 @@ def board_summary_correction_node(state: RiskIntelligenceState) -> RiskIntellige
         corrected_summary = msg.content[0].text.strip()
         if _cost:
             _cost.record(
-                "board_summary_correction", "claude-sonnet-4-5",
+                "board_summary_correction",
                 msg.usage.input_tokens, msg.usage.output_tokens,
             )
         print(f"  Correction draft ready ({len(corrected_summary)} chars)")
