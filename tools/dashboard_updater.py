@@ -576,10 +576,6 @@ def _format_board_summary(text: str) -> str:
 
     Also tolerates stray markdown (## headers, # title lines, • bullets) that the
     LLM sometimes emits despite being asked for plain text.
-
-    The KRI STATUS ROLL-UP TABLE is appended as sentinel-wrapped HTML by
-    _build_kri_rollup_table(). Extract it before section processing and re-append
-    as a properly styled section at the end — never let it bleed into prose sections.
     """
     import re
 
