@@ -338,7 +338,7 @@ def chief_risk_synthesis_node(state: RiskIntelligenceState) -> RiskIntelligenceS
     cost  = _cost
 
     print(f"\n[CHIEF RISK AGENT] Starting — permissions, exec recs, board synthesis...")
-    if audit: audit.agent_started("chief_risk", "claude-sonnet-4-5")
+    if audit: audit.agent_started("chief_risk", "claude-sonnet-4-6")
 
     sf = state.get("strategic_findings")
     of = state.get("operational_findings")
@@ -779,7 +779,7 @@ def board_summary_correction_node(state: RiskIntelligenceState) -> RiskIntellige
     try:
         client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
         msg = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-sonnet-4-6",
             max_tokens=8192,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -1192,7 +1192,7 @@ def update_exec_recs_node(state: RiskIntelligenceState) -> RiskIntelligenceState
                 f"RAW ACTIONS:\n{raw_list}"
             )
             _resp = _client.messages.create(
-                model="claude-haiku-4-5",
+                model="claude-sonnet-4-6",
                 max_tokens=512,
                 messages=[{"role": "user", "content": prose_prompt}],
             )
@@ -1352,7 +1352,7 @@ def _draft_exec_recs(client, sf, of, ff, cf, compound_scenarios,
 
     try:
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-sonnet-4-6",
             max_tokens=8192,
             system=system_prompt,
             messages=[{"role": "user", "content": kri_input}],
@@ -1625,7 +1625,7 @@ def _render_risk_posture(client, facts: dict, cost) -> str:
 
     try:
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-sonnet-4-6",
             max_tokens=1500,
             system=system,
             messages=[{"role": "user", "content": user}],
@@ -1789,7 +1789,7 @@ def _run_board_synthesis(client, full_findings: str, exec_recs: dict,
 
     try:
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-sonnet-4-6",
             max_tokens=8192,
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
