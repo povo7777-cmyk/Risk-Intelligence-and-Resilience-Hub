@@ -715,7 +715,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
         <div class="dl-days dl-green">Sep 26</div>
         <div class="dl-info">
           <div class="dl-title">September 26 — Full BCM tabletop exercise</div>
-          <div class="dl-sub">OT/SCADA BCP must be documented first &middot; ISO 22301 obligation</div>
+          <div class="dl-sub">Cloud platform &amp; core ERP BCP must be documented first &middot; ISO 22301 obligation</div>
         </div>
         <div class="dl-risk">BCM</div>
       </div>
@@ -856,7 +856,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
         <thead><tr><th>Disruption scenario</th><th>Trigger risk</th><th>Services affected</th><th>Max tolerable disruption</th><th>Financial impact/day</th><th>RAG</th></tr></thead>
         <tbody>
           <tr><td>Order management system total outage</td><td><span class="bx dom-o">O-02</span></td><td>Order processing, fulfilment, e-commerce</td><td>6 hours</td><td>USD 15&ndash;21M</td><td><span class="rag rag-r"></span></td></tr>
-          <tr><td>OT/SCADA system compromise</td><td><span class="bx dom-o">O-02</span></td><td>Asset dispatch, grid</td><td>2 hours</td><td>USD 5&ndash;15M</td><td><span class="rag rag-r"></span></td></tr>
+          <tr><td>Cloud platform / core ERP failure</td><td><span class="bx dom-o">O-02</span></td><td>Finance, HR, procurement, operations</td><td>4 hours</td><td>USD 8&ndash;18M</td><td><span class="rag rag-r"></span></td></tr>
           <tr><td>Supply chain halt &gt;2 weeks</td><td><span class="bx dom-o">O-01</span></td><td>Manufacturing, fulfilment</td><td>72 hours</td><td>USD 8&ndash;20M</td><td><span class="rag rag-r"></span></td></tr>
           <tr><td>Regulatory reporting failure</td><td><span class="bx dom-c">C-01</span></td><td>Compliance, legal</td><td>24 hours</td><td>USD 1&ndash;5M fine</td><td><span class="rag rag-a"></span></td></tr>
           <tr><td>Treasury system failure</td><td><span class="bx dom-f">F-03</span></td><td>Liquidity, collateral</td><td>8 hours</td><td>USD 2&ndash;6M</td><td><span class="rag rag-a"></span></td></tr>
@@ -871,7 +871,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
       <table class="rt" style="table-layout:auto">
         <thead><tr><th>Gap</th><th>ISO clause</th><th>Priority</th><th>Owner</th><th>Target</th><th>Status</th></tr></thead>
         <tbody>
-          <tr><td>OT/SCADA BCP not documented</td><td>8.4</td><td><span class="bx bc">Critical</span></td><td>CISO</td><td>Q3 2026</td><td><span class="bx bm">In progress</span></td></tr>
+          <tr><td>Cloud platform &amp; core ERP resilience BCP not documented</td><td>8.4</td><td><span class="bx bc">Critical</span></td><td>CISO</td><td>Q3 2026</td><td><span class="bx bm">In progress</span></td></tr>
           <tr><td>No full DR test of IT failover in 18 months</td><td>8.5</td><td><span class="bx bc">Critical</span></td><td>CTO</td><td>Q3 2026</td><td><span class="bx bm">Planned</span></td></tr>
           <tr><td>Supplier BCM requirements absent from contracts</td><td>8.4.3</td><td><span class="bx bh">High</span></td><td>Procurement</td><td>Q4 2026</td><td><span class="bx bg">Not started</span></td></tr>
           <tr><td>No crisis communication plan for staff</td><td>7.4</td><td><span class="bx bh">High</span></td><td>HR</td><td>Q4 2026</td><td><span class="bx bm">In progress</span></td></tr>
@@ -892,7 +892,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
       <div class="exec-hd"><div class="exec-ic"><i class="ti ti-podium"></i></div><h3>Executive recommendation &mdash; business continuity</h3></div>
       <p>The CISO must treat the current cyber detection and recovery posture as operationally inadequate: mean time to detect a cyber incident has reached 11 days against a 10-day threshold, patch compliance has fallen to 71% against an 80% threshold, and IT recovery time is exactly at the 6-hour limit with no headroom. The compounding pressure from IT-Operations attrition — reflected in 7 critical roles open beyond 60 days — is a plausible driver of the vulnerability backlog and detection lag, and the CISO should treat staffing gaps in security and IT operations as a first-order control risk. The CRO owns the BCM programme and must ensure that recovery capability is tested and validated given that the organisation is operating at its recovery time limit, not within it.</p>
       <div class="exec-acts">
-        <div class="exec-act"><div class="exec-n">01</div><div class="exec-t">Document OT/SCADA BCP by Q3 2026</div><div class="exec-b">Owner: CISO. DORA Articles 17&ndash;18 and NIS2 Article 21(2)(c) obligation. Prerequisite for the September tabletop exercise.</div></div>
+        <div class="exec-act"><div class="exec-n">01</div><div class="exec-t">Document cloud platform &amp; core ERP resilience BCP by Q3 2026</div><div class="exec-b">Owner: CISO. DORA Articles 17&ndash;18 and NIS2 Article 21(2)(c) obligation. Prerequisite for the September tabletop exercise.</div></div>
         <div class="exec-act"><div class="exec-n">02</div><div class="exec-t">Execute IT DR test in Q3 2026</div><div class="exec-b">Owner: CTO. Validate 4h RTO target. Last test was 18 months ago &mdash; current capability is unverified.</div></div>
         <div class="exec-act"><div class="exec-n">03</div><div class="exec-t">Embed BCM in all Tier-1 supplier contracts</div><div class="exec-b">Owner: Procurement. ISO 22301 clause 8.4.3. Add at next contract renewal for all critical suppliers.</div></div>
         <div class="exec-act"><div class="exec-n">04</div><div class="exec-t">Board ask &mdash; Q3 2026</div><div class="exec-b">Board is requested to: (1) note the two critical BCM gaps, (2) direct management to close both by Q3 2026, and (3) receive a progress update at next Board Risk Committee. DORA Articles 17&ndash;18 and NIS2 Article 21(2)(c) create personal director liability where BCM obligations are not demonstrably met. Owner: Head of ERM.</div></div>
