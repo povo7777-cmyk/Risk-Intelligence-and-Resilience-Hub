@@ -1,6 +1,6 @@
 """
 agents/compliance_agent.py — C-01 to C-03
-Uses Claude Sonnet 4.5.
+Uses Claude Sonnet 4.6.
 Primary specialization: obligation mapping and gap analysis.
 """
 
@@ -42,7 +42,7 @@ def run(kri_data: dict | None = None) -> dict:
     If None, computes KRI values from CSVs directly (standalone / test mode).
     """
     print(f"\n{'='*60}")
-    print("[Compliance Agent] Starting — Claude Sonnet 4.5")
+    print("[Compliance Agent] Starting — Claude Sonnet 4.6")
     print(f"{'='*60}")
 
     system_prompt = PROMPT_PATH.read_text()
@@ -179,7 +179,7 @@ Return the full JSON per the output format in your instructions."""
     token_usage = {"input_tokens": 0, "output_tokens": 0}
     try:
         from tools.json_parser import parse_llm_json
-        print("  Calling Claude Sonnet 4.5 for compliance assessment...")
+        print("  Calling Claude Sonnet 4.6 for compliance assessment...")
         raw, token_usage = _call_claude(system_prompt, user_prompt)
         parsed, parse_err = parse_llm_json(raw)
         if parsed:
