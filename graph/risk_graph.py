@@ -1482,6 +1482,12 @@ def _build_risk_posture_facts(sf, of, ff, cf, compound_scenarios, systemic) -> d
             if reasons:
                 escalation_reasons[lbl] = reasons[:2]  # cap at 2 per domain
 
+    # Per-domain narrative snippet (first 300 chars) — used to anchor domain sub-sections
+    domain_narratives = {}
+    for lbl, f in domain_data:
+        if f and f.get("narrative"):
+            domain_narratives[lbl] = f["narrative"][:300].strip()
+
     return {
         "total_breaches":       total_b,
         "total_ambers":         total_a,
@@ -1491,6 +1497,7 @@ def _build_risk_posture_facts(sf, of, ff, cf, compound_scenarios, systemic) -> d
         "escalation_reasons":   escalation_reasons,
         "systemic_flag":        systemic,
         "compound_scenarios":   compound_scenarios or [],
+        "domain_narratives":    domain_narratives,
     }
 
 
@@ -1522,35 +1529,34 @@ def _render_risk_posture_fallback(facts: dict) -> str:
             f"{n_breach_domains} domain(s) and {total_a} amber warning(s) this period."
         )
 
-    for d in domains_in_breach:
-        lines.append(
-            f"{d['name']}: {d['breaches']} breach(es), {d['ambers']} amber(s) "
-            f"— accountable executive: {d['owner']}."
-        )
-
-    if facts["amber_only_domains"]:
-        lines.append(
-            "Amber warnings only (no breach): "
-            + ", ".join(facts["amber_only_domains"]) + "."
-        )
-
-    if facts["escalated_domains"]:
-        lines.append("Escalation required: " + ", ".join(facts["escalated_domains"]) + ".")
-    else:
-        lines.append("No domain escalation required this period.")
-
     if facts["systemic_flag"]:
         lines.append(
             "Systemic risk flag: three or more domains are simultaneously in breach."
         )
-
     if facts["compound_scenarios"]:
         lines.append(
             "Active compound scenario(s): "
             + "; ".join(facts["compound_scenarios"]) + "."
         )
 
-    return "RISK POSTURE\n\n" + " ".join(lines)
+    # Domain sub-sections
+    domain_narratives = facts.get("domain_narratives", {})
+    all_domain_names = ["Strategic", "Operational", "Financial", "Compliance"]
+    breach_names = {d["name"] for d in domains_in_breach}
+    amber_only_names = set(facts.get("amber_only_domains", []))
+    for dname in all_domain_names:
+        d_info = next((d for d in domains_in_breach if d["name"] == dname), None)
+        snippet = domain_narratives.get(dname, "")
+        if d_info:
+            status = f"{d_info['breaches']} breach(es), {d_info['ambers']} amber(s) — {d_info['owner']}."
+        elif dname in amber_only_names:
+            status = "No breach; amber warnings active."
+        else:
+            status = "Within tolerance this period."
+        text = f"{status} {snippet}" if snippet else status
+        lines.append(f"{dname.upper()}: {text}")
+
+    return "RISK POSTURE\n\n" + " ".join(lines[:2]) + "\n" + "\n".join(lines[2:])
 
 
 def _render_risk_posture(client, facts: dict, cost) -> str:
@@ -1600,26 +1606,37 @@ def _render_risk_posture(client, facts: dict, cost) -> str:
     for cs in facts["compound_scenarios"]:
         fact_lines.append(f"- Active compound scenario: {cs}")
 
+    # Domain narrative snippets — anchor per-domain content
+    domain_narratives = facts.get("domain_narratives", {})
+    for lbl in ["Strategic", "Operational", "Financial", "Compliance"]:
+        snippet = domain_narratives.get(lbl, "")
+        if snippet:
+            fact_lines.append(f"- {lbl} domain agent summary (use only this — do not embellish): {snippet}")
+
     fact_sheet = "\n".join(fact_lines)
 
     system = (
         "You are the Chief Risk Officer writing the RISK POSTURE section of a board risk summary.\n"
         "You receive a locked fact sheet. Render every fact as clear, readable board prose.\n\n"
-        "STYLE RULES — follow strictly:\n"
-        "(1) SHORT SENTENCES. Maximum 20 words per sentence. No semicolons to chain clauses.\n"
-        "(2) TWO OR THREE PARAGRAPHS:\n"
-        "    Para 1 — Headline verdict: total breach count, number of domains affected, amber count.\n"
-        "    Para 2 — Domain accountability: one sentence per domain in breach, named executive owner. "
-        "Escalation status.\n"
-        "    Para 3 — Only if systemic risk or compound scenarios are present; otherwise omit.\n"
-        "(3) Every fact in the sheet must appear — omit nothing.\n"
-        "(4) Do not introduce any fact not in the sheet.\n"
-        "(5) No bullet points, no headers, no markdown.\n"
-        "(6) Write for a board director reading this in 30 seconds. Clarity over density."
+        "REQUIRED OUTPUT FORMAT — follow exactly:\n"
+        "1. One opening sentence: headline verdict (total breaches, domains in breach, amber count).\n"
+        "   If systemic risk flag is YES, add one sentence noting concurrent domain breach.\n"
+        "2. Then four domain sub-sections, each starting with its label on the same line:\n"
+        "   STRATEGIC: [1–2 sentences covering this domain's status, breaches/ambers, accountable executive]\n"
+        "   OPERATIONAL: [1–2 sentences]\n"
+        "   FINANCIAL: [1–2 sentences]\n"
+        "   COMPLIANCE: [1–2 sentences]\n"
+        "   If a domain has no breach and no amber, write one sentence noting it is within tolerance.\n\n"
+        "STYLE RULES:\n"
+        "(1) Maximum 25 words per sentence.\n"
+        "(2) Every fact in the sheet must appear — omit nothing.\n"
+        "(3) Do not introduce any fact not in the sheet.\n"
+        "(4) No bullet points, no markdown, no extra headers beyond the domain labels.\n"
+        "(5) Write for a board director reading this in 45 seconds."
     )
 
     user = (
-        "Render this fact sheet as 2–3 short, readable paragraphs of board prose:\n\n"
+        "Render this fact sheet using the required domain-split format:\n\n"
         + fact_sheet
     )
 
