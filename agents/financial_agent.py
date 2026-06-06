@@ -217,6 +217,16 @@ def run(kri_data: dict | None = None) -> dict:
         for r in audit_rows if any(t in r.get("audit_type","") for t in ["SOX","Internal"])
     )
 
+    # ── MO-04: Compute explicit USD EBITDA headroom to prevent LLM misreading COV001 ratio headroom ──
+    _cov1 = covenant_status.get("COV001", {})
+    _cov5 = covenant_status.get("COV005", {})
+    _ebitda_b = float(_cov5.get("value", 2.28))
+    _nd_ratio = float(_cov1.get("value", net_debt_ebitda))
+    _nd_ceil  = float(_cov1.get("threshold", 3.0))
+    _net_debt_b = round(_nd_ratio * _ebitda_b, 3)
+    _ebitda_floor_b = round(_net_debt_b / _nd_ceil, 3) if _nd_ceil else 0
+    _ebitda_headroom_m = round((_ebitda_b - _ebitda_floor_b) * 1000)
+
     user_prompt = f"""F-01 FX & COMMODITY POSITIONS (all rows from treasury_positions.csv):
 {tr_lines}
   Totals: unhedged=${unhedged_fx}M, avg_hedge={avg_hedge_ratio}%, total_unrealised_pnl=${unrealised_pnl}M
@@ -229,6 +239,13 @@ F-02 AR AGING (all rows from ar_aging.csv):
 
 F-03 COVENANTS (all rows from covenant_tracker.csv):
 {cov_lines}
+
+⚠ CRITICAL — EBITDA HEADROOM IN USD TERMS (computed from covenant data):
+  Net Debt = COV001 ratio {_nd_ratio}x × EBITDA {_ebitda_b}B = USD {_net_debt_b}B
+  COV001 binding EBITDA floor = USD {_net_debt_b}B / {_nd_ceil}x = USD {_ebitda_floor_b}B
+  EBITDA headroom until COV001 breach = USD {_ebitda_headroom_m}M
+  ⚠ NOTE: COV001 headroom={_cov1.get('headroom', 0.2)} shown above is RATIO UNITS only — NOT dollars.
+  Use USD {_ebitda_headroom_m}M as the EBITDA headroom in all recommendations.
 
 F-04 FINANCIAL AUDIT FINDINGS (SOX/Internal scope from audit_log.csv):
 {f04_lines}
