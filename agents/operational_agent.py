@@ -1,6 +1,6 @@
 """
 agents/operational_agent.py — O-01 to O-04
-Uses Claude Sonnet 4.5.
+Uses Claude Sonnet 4.6.
 Primary specialization: structured data evaluation.
 """
 
@@ -37,7 +37,7 @@ def run(kri_data: dict | None = None) -> dict:
     If None, computes KRI values from CSVs directly (standalone / test mode).
     """
     print(f"\n{'='*60}")
-    print("[Operational Agent] Starting — Claude Sonnet 4.5")
+    print("[Operational Agent] Starting — Claude Sonnet 4.6")
     print(f"{'='*60}")
 
     system_prompt = PROMPT_PATH.read_text()
@@ -174,7 +174,7 @@ Identify cross-domain interconnections from the data.
 Return the full JSON per the output format in your instructions."""
 
     # Hardcoded Python interconnections removed — LLM generates them from data above
-    print("  Calling Claude Sonnet 4.5 for operational assessment...")
+    print("  Calling Claude Sonnet 4.6 for operational assessment...")
     narrative = "Operational assessment completed. KRI evaluation based on structured data analysis."
     llm_interconnections = []
     token_usage = {"input_tokens": 0, "output_tokens": 0}
