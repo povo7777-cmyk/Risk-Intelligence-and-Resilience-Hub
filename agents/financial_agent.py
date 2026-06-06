@@ -14,7 +14,7 @@ from schemas.agent_outputs import validate_agent_output
 import anthropic
 
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "financial_v1.txt"
-MODEL = "claude-sonnet-4-5"
+MODEL = "claude-sonnet-4-6"
 
 
 def _call_claude(system: str, user: str) -> tuple[str, dict]:
