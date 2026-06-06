@@ -1130,22 +1130,67 @@ def update_exec_recs_node(state: RiskIntelligenceState) -> RiskIntelligenceState
     # ── Panel action items → board summary (Loop 2) ───────────────────────────
     panel_actions = state.get("panel_action_items", [])
     if panel_actions:
+        # ── Rewrite raw panel findings as board-quality prose ─────────────────
+        # Raw items look like "[PANEL-HIGH-02] Cyber response time...: Escalate to CISO..."
+        # We rewrite each as a clean, direct board action sentence before appending.
+        try:
+            import anthropic as _anthropic
+            _client = _anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+            raw_list = "\n".join(f"{i+1}. {a}" for i, a in enumerate(panel_actions))
+            prose_prompt = (
+                "You are rewriting raw risk panel findings as clean board-level action items.\n"
+                "Each input is a panel finding reference followed by a recommendation.\n"
+                "Rewrite each as one concise, direct board action in plain business English.\n"
+                "Rules:\n"
+                "(1) Remove the panel ID prefix (e.g. [PANEL-HIGH-02]).\n"
+                "(2) Start each action with a strong imperative verb directed at an executive "
+                "(e.g. 'Direct CISO to...', 'Mandate CFO to...', 'Assign Board to...').\n"
+                "(3) One sentence per action — no sub-clauses, no markdown.\n"
+                "(4) Return ONLY the rewritten actions, one per line, in the same order.\n"
+                "(5) Do not number the lines.\n\n"
+                f"RAW ACTIONS:\n{raw_list}"
+            )
+            _resp = _client.messages.create(
+                model="claude-haiku-4-5",
+                max_tokens=512,
+                messages=[{"role": "user", "content": prose_prompt}],
+            )
+            rewritten_raw = _resp.content[0].text.strip()
+            if _cost:
+                _cost.record("panel_action_prose",
+                             _resp.usage.input_tokens, _resp.usage.output_tokens)
+            # Parse — one action per line; strip any residual numbering the model adds
+            rewritten = [
+                line.strip().lstrip("0123456789.) ").strip()
+                for line in rewritten_raw.splitlines()
+                if line.strip()
+            ]
+            # Safety: if LLM returned fewer lines than inputs, pad with originals
+            if len(rewritten) < len(panel_actions):
+                rewritten += panel_actions[len(rewritten):]
+            panel_actions_final = rewritten[:len(panel_actions)]
+            print(f"  Panel actions rewritten as board prose ✓")
+        except Exception as _e:
+            state["warnings"].append(f"Panel action prose rewrite failed — using raw: {_e}")
+            print(f"  ⚠ Panel action rewrite failed ({_e}) — appending raw text")
+            panel_actions_final = panel_actions
+
         board_summary = state.get("board_summary", "")
         MARKER = "\n\nRISK COMMITTEE RECOMMENDED ACTIONS:"
         if MARKER in board_summary:
-            # Find existing actions and append new ones after the last bullet
-            additions = "\n" + "\n".join(f"  • {a}" for a in panel_actions)
+            # Append new board-quality actions after the existing ones
+            additions = "\n" + "\n".join(f"  • {a}" for a in panel_actions_final)
             board_summary = board_summary + additions
         else:
             # No existing actions section — create one
             board_summary += (
                 MARKER + "\n" +
-                "\n".join(f"  • {a}" for a in panel_actions)
+                "\n".join(f"  • {a}" for a in panel_actions_final)
             )
         state["board_summary"] = board_summary
         try:
             update_board_summary(dashboard_path, board_summary, state["run_id"])
-            print(f"\n[EXEC RECS] {len(panel_actions)} panel action(s) added to board summary")
+            print(f"\n[EXEC RECS] {len(panel_actions_final)} panel action(s) added to board summary")
             state["dashboard_updated"] = True
         except Exception as e:
             state["warnings"].append(f"Panel action board summary write failed: {e}")
@@ -1551,97 +1596,6 @@ def _render_risk_posture(client, facts: dict, cost) -> str:
     except Exception as e:
         print(f"  [RISK POSTURE] Haiku render failed ({e}) — using deterministic fallback")
         return _render_risk_posture_fallback(facts)
-
-
-def _build_kri_rollup_table(kri_ground_truth: dict) -> str:
-    """
-    Generates a deterministic KRI status roll-up HTML table from kri_ground_truth.
-    Appended to every board summary — not LLM-generated, never drifts.
-    Wrapped in sentinel comments so _format_board_summary can extract and render it
-    as a proper <table> element (not plain ASCII dumped into prose text).
-    """
-    STATUS_CFG = {
-        "breach": ("#c0392b", "BREACH"),
-        "amber":  ("#e67e22", "AMBER"),
-        "ok":     ("#27ae60", "OK"),
-        "fyi":    ("#7f8c8d", "FYI"),
-    }
-    domain_data = kri_ground_truth.get("dashboard_kris", {})
-    domain_order = [
-        ("Strategic",   "strategic_risks"),
-        ("Operational", "operational_risks"),
-        ("Financial",   "financial_risks"),
-        ("Compliance",  "compliance_risks"),
-    ]
-    rows = []
-    for domain_label, domain_key in domain_order:
-        risk_groups = domain_data.get(domain_key, {})
-        if not risk_groups:
-            continue
-        first = True
-        for risk_id, kris in risk_groups.items():
-            for k in kris:
-                name  = k.get("name", "")
-                val   = k.get("value")
-                unit  = k.get("unit", "")
-                a_th  = k.get("amber_threshold")
-                b_th  = k.get("threshold")
-                st    = k.get("status", "ok")
-                val_str = f"{val}{unit}" if val is not None else "N/A"
-                a_str   = f"{a_th}{unit}" if a_th is not None else "—"
-                b_str   = f"{b_th}{unit}" if b_th is not None else "—"
-                color, badge = STATUS_CFG.get(st, ("#7f8c8d", st.upper()))
-                row_bg = (
-                    "background:rgba(192,57,43,0.07);" if st == "breach"
-                    else "background:rgba(230,126,34,0.05);" if st == "amber"
-                    else ""
-                )
-                d_cell = (
-                    f'<td style="font-size:11px;font-weight:700;color:var(--txt);'
-                    f'padding:5px 8px;white-space:nowrap;vertical-align:top">{domain_label}</td>'
-                    if first else
-                    '<td style="padding:5px 8px"></td>'
-                )
-                rows.append(
-                    f'<tr style="{row_bg}border-bottom:1px solid rgba(255,255,255,0.05)">'
-                    f'{d_cell}'
-                    f'<td style="font-size:11px;color:var(--txt-m);padding:5px 8px;'
-                    f'font-family:\'DM Mono\',monospace">{name}</td>'
-                    f'<td style="font-size:11px;color:var(--txt);padding:5px 8px;'
-                    f'text-align:right;font-variant-numeric:tabular-nums">{val_str}</td>'
-                    f'<td style="font-size:11px;color:#e67e22;padding:5px 8px;'
-                    f'text-align:right;font-variant-numeric:tabular-nums">{a_str}</td>'
-                    f'<td style="font-size:11px;color:#c0392b;padding:5px 8px;'
-                    f'text-align:right;font-variant-numeric:tabular-nums">{b_str}</td>'
-                    f'<td style="padding:5px 8px;text-align:center">'
-                    f'<span style="font-size:10px;font-weight:700;color:{color};'
-                    f'padding:2px 6px;border-radius:3px;white-space:nowrap;'
-                    f'background:rgba(0,0,0,0.18)">{badge}</span></td>'
-                    f'</tr>'
-                )
-                first = False
-
-    thead = (
-        '<thead><tr style="border-bottom:1px solid rgba(255,255,255,0.18)">'
-        '<th style="font-size:10px;font-weight:600;color:var(--txt-m);text-align:left;'
-        'padding:4px 8px;letter-spacing:.05em;text-transform:uppercase">Domain</th>'
-        '<th style="font-size:10px;font-weight:600;color:var(--txt-m);text-align:left;'
-        'padding:4px 8px;letter-spacing:.05em;text-transform:uppercase">KRI</th>'
-        '<th style="font-size:10px;font-weight:600;color:var(--txt-m);text-align:right;'
-        'padding:4px 8px;letter-spacing:.05em;text-transform:uppercase">Current</th>'
-        '<th style="font-size:10px;font-weight:600;color:#e67e22;text-align:right;'
-        'padding:4px 8px;letter-spacing:.05em;text-transform:uppercase">Amber</th>'
-        '<th style="font-size:10px;font-weight:600;color:#c0392b;text-align:right;'
-        'padding:4px 8px;letter-spacing:.05em;text-transform:uppercase">Breach</th>'
-        '<th style="font-size:10px;font-weight:600;color:var(--txt-m);text-align:center;'
-        'padding:4px 8px;letter-spacing:.05em;text-transform:uppercase">Status</th>'
-        '</tr></thead>'
-    )
-    table_html = (
-        f'<table style="width:100%;border-collapse:collapse">'
-        f'{thead}<tbody>{"".join(rows)}</tbody></table>'
-    )
-    return '\n\n<!--KRI-ROLLUP-START-->\n' + table_html + '\n<!--KRI-ROLLUP-END-->'
 
 
 def _build_qoq_fact_block(qoq_deltas: dict) -> str:
