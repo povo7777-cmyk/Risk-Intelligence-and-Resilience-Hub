@@ -390,8 +390,8 @@ input[type=range]{width:100%;accent-color:var(--navy)}
     <div><div class="nav-title">Risk Intelligence and Resilience Hub</div><div class="nav-sub">Enterprise Risk Management &middot; Q2 2026</div></div>
   </div>
   <div class="nav-tabs">
+    <button onclick="sw('bp',this)"><i class="ti ti-clipboard-list"></i>Board Pack</button>
     <button class="on" onclick="sw('erm',this)"><i class="ti ti-layout-dashboard"></i>ERM overview</button>
-    <button onclick="sw('reg',this)"><i class="ti ti-list-search"></i>Risk register</button>
     <button onclick="sw('ap',this)"><i class="ti ti-target"></i>Appetite &amp; KRIs</button>
     <button onclick="sw('bcm',this)"><i class="ti ti-lifebuoy"></i>Business continuity</button>
     <button onclick="sw('mc',this)"><i class="ti ti-chart-dots"></i>EBITDA stress</button>
@@ -399,6 +399,19 @@ input[type=range]{width:100%;accent-color:var(--navy)}
     <button onclick="sw('op',this)"><i class="ti ti-building-factory-2"></i>Supply Chain Resilience</button>
   </div>
 </nav>
+
+<!-- ── BOARD PACK PAGE ── -->
+<div id="pg-bp" class="pg" style="background:var(--dark-bg);padding:0;max-width:none;margin:0">
+  <div style="padding:2rem 1.5rem 3rem;max-width:1140px;margin:0 auto">
+    <div style="margin-bottom:1.25rem">
+      <div style="font-family:'DM Serif Display',serif;font-size:22px;color:#fff;letter-spacing:.02em;margin-bottom:3px">Board Pack</div>
+      <div style="font-size:11px;color:var(--gold-lt);opacity:.85">Risk Committee Summary &middot; <span id="pg-bp-meta">Q2 2026</span></div>
+    </div>
+    <div class="card" style="border-left:4px solid var(--red-md)">
+      <div id="pg-bp-content" style="color:var(--txt)"></div>
+    </div>
+  </div>
+</div>
 
 <!-- ── ERM OVERVIEW PAGE ── -->
 <div id="pg-erm" class="pg on" style="padding:0;max-width:none;margin:0">
@@ -480,7 +493,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
     <!-- domain cards -->
     <div class="hero-section-lbl">Risk domains</div>
     <div class="dom-grid">
-      <div class="dom-hcard" onclick="sw('reg',document.querySelector('.nav-tabs button:nth-child(2)'))">
+      <div class="dom-hcard" onclick="sw('ap',document.querySelector('.nav-tabs button:nth-child(3)'))">
         <div class="dom-hcard-bar" style="background:#e8c547"></div>
         <div class="dom-hcard-body">
           <div class="dom-hcard-top">
@@ -495,7 +508,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
           <div class="dom-hcard-footer">KRI breaches: <span class="br-count">2 red</span> &nbsp;&middot;&nbsp; 5 geo signals</div>
         </div>
       </div>
-      <div class="dom-hcard breach" onclick="sw('reg',document.querySelector('.nav-tabs button:nth-child(2)'))">
+      <div class="dom-hcard breach" onclick="sw('ap',document.querySelector('.nav-tabs button:nth-child(3)'))">
         <div class="dom-hcard-bar" style="background:#ef4444"></div>
         <div class="dom-hcard-body">
           <div class="dom-hcard-top">
@@ -510,7 +523,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
           <div class="dom-hcard-footer">KRI breaches: <span class="br-count">3 red</span> &nbsp;&middot;&nbsp; 62.6% single-src</div>
         </div>
       </div>
-      <div class="dom-hcard" onclick="sw('reg',document.querySelector('.nav-tabs button:nth-child(2)'))">
+      <div class="dom-hcard" onclick="sw('ap',document.querySelector('.nav-tabs button:nth-child(3)'))">
         <div class="dom-hcard-bar" style="background:#3b82f6"></div>
         <div class="dom-hcard-body">
           <div class="dom-hcard-top">
@@ -598,15 +611,10 @@ input[type=range]{width:100%;accent-color:var(--navy)}
     <!-- hub modules -->
     <div class="hero-section-lbl">Hub modules</div>
     <div class="hub-mod-grid">
-      <div class="hub-mod" onclick="sw('erm',document.querySelector('.nav-tabs button:nth-child(1)'))">
+      <div class="hub-mod" onclick="sw('erm',document.querySelector('.nav-tabs button:nth-child(2)'))">
         <div class="hub-mod-ic"><i class="ti ti-layout-dashboard"></i></div>
         <div class="hub-mod-name">ERM Overview</div>
         <div class="hub-mod-desc">Portfolio risk landscape · trajectory · committee summary</div>
-      </div>
-      <div class="hub-mod" onclick="sw('reg',document.querySelector('.nav-tabs button:nth-child(2)'))">
-        <div class="hub-mod-ic"><i class="ti ti-list-search"></i></div>
-        <div class="hub-mod-name">Risk Register</div>
-        <div class="hub-mod-desc">14 risks · WCGW scenarios · control coverage</div>
       </div>
       <div class="hub-mod" onclick="sw('ap',document.querySelector('.nav-tabs button:nth-child(3)'))">
         <div class="hub-mod-ic"><i class="ti ti-target"></i></div>
@@ -638,7 +646,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
         <div class="hub-mod-name">Emerging Risk Signals</div>
         <div class="hub-mod-desc">EU AI Act · GDPR · OFAC · emerging risks</div>
       </div>
-      <div class="hub-mod" onclick="showPanel('board-summary-panel')">
+      <div class="hub-mod" onclick="sw('bp',document.querySelector('.nav-tabs button:nth-child(1)'))">
         <div class="hub-mod-ic"><i class="ti ti-clipboard-list"></i></div>
         <div class="hub-mod-name">Board Pack</div>
         <div class="hub-mod-desc">Risk posture · key drivers · cross-domain · recommended actions</div>
@@ -696,7 +704,7 @@ input[type=range]{width:100%;accent-color:var(--navy)}
         <div class="hero-footer-meta">Risk Intelligence &amp; Resilience Hub &middot; Enterprise Risk Management</div>
         <div class="hero-footer-meta" style="margin-top:2px">Run 20260525 &middot; 2026-05-25 08:44 UTC &middot; Q2 2026</div>
       </div>
-      <button class="hero-open-btn" onclick="sw('reg',document.querySelector('.nav-tabs button:nth-child(2)'))">
+      <button class="hero-open-btn" onclick="sw('erm',document.querySelector('.nav-tabs button:nth-child(2)'))">
         <i class="ti ti-external-link" style="font-size:12px"></i> Open Hub
       </button>
     </div>
@@ -1112,6 +1120,14 @@ function sw(n,btn){
   if(n==='hg'){if(hgCh){hgCh.destroy();hgCh=null;}runHG();}
   if(n==='op'){if(opCh){opCh.destroy();opCh=null;}runOP();}
   if(n==='ap'){buildDomain('s');buildDomain('o');buildDomain('f');buildDomain('c');}
+  if(n==='bp'){
+    var src=document.getElementById('board-summary-text');
+    var dst=document.getElementById('pg-bp-content');
+    if(src&&dst)dst.innerHTML=src.innerHTML;
+    var meta=document.getElementById('board-summary-meta');
+    var bpMeta=document.getElementById('pg-bp-meta');
+    if(meta&&bpMeta)bpMeta.textContent=meta.textContent;
+  }
 }
 
 // ── Q1 vs Q2 cumulated trend line chart ──
