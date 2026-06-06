@@ -1062,6 +1062,23 @@ A systemic risk flag has been raised. Three or more domains are simultaneously i
       </div>
       <div class="relock-bar"><button onclick="relock('op')"><i class="ti ti-lock" style="font-size:11px"></i> Re-lock</button></div>
     </div>
+    <div class="exec-shield" id="es-quality" style="margin-top:1.5rem">
+      <i class="ti ti-lock lk"></i><p class="lock-title">Executive recommendation</p>
+      <p class="lock-hint">Product quality &amp; safety recommendations. Enter password to unlock.</p>
+      <div class="lock-row"><input type="password" id="ep-quality" placeholder="Password" onkeydown="if(event.key==='Enter')tryUnlock('quality')"><button class="lock-btn" onclick="tryUnlock('quality')">Unlock</button></div>
+      <p class="lock-err" id="ee-quality"></p>
+    </div>
+    <div class="exec" id="ec-quality" style="margin-top:1.5rem">
+      <div class="exec-hd"><div class="exec-ic"><i class="ti ti-shield-check"></i></div><h3>Executive recommendation &mdash; product quality &amp; safety (O-03)</h3></div>
+      <p>The Chief Quality Officer and COO must address escalating product quality signals: field failure rate has reached 0.048% against a 0.04% breach threshold, recall readiness has fallen to 72% against an 80% amber threshold, and supplier quality rejection rate stands at 0.68% with 1,842 warranty claims recorded month-to-date. The quality deterioration is partly attributable to supplier financial distress &mdash; the primary ODM supplier carries a health score of 61 and a rejection rate of 1.2%, both in breach &mdash; requiring urgent supplier quality audit and, if unresolved, sourcing diversification. The CQO must present a named remediation plan with accountable owners at the next Risk Committee meeting.</p>
+      <div class="exec-acts">
+        <div class="exec-act"><div class="exec-n">01</div><div class="exec-t">Supplier quality audit &mdash; immediate</div><div class="exec-b">Owner: CQO. Commission emergency quality audit of the primary ODM supplier (rejection rate 1.2%, health score 61). Audit must cover process controls, incoming inspection, and financial capacity to remediate. Deadline: 30 days. If audit fails, escalate to sourcing review.</div></div>
+        <div class="exec-act"><div class="exec-n">02</div><div class="exec-t">Recall readiness simulation</div><div class="exec-b">Owner: VP Quality. Execute recall readiness tabletop within 45 days. Current score 72% is amber &mdash; a live recall at this readiness level would materially increase regulatory exposure and response cost. Owner must present pass/fail against the 80% threshold.</div></div>
+        <div class="exec-act"><div class="exec-n">03</div><div class="exec-t">Warranty cost containment plan</div><div class="exec-b">Owner: COO/CQO. With 1,842 warranty claims MTD, present a cost-containment plan including root-cause analysis by SKU, cross-reference with O-01 supplier distress flags, and projected warranty reserve requirement for Q3 2026.</div></div>
+        <div class="exec-act"><div class="exec-n">04</div><div class="exec-t">Board ask &mdash; quality accountability</div><div class="exec-b">Board is requested to note O-03 KRI breaches (field failure rate, recall readiness) and confirm that the CQO has explicit board-level accountability for quality remediation. Owner: CRO/CEO.</div></div>
+      </div>
+      <div class="relock-bar"><button onclick="relock('quality')"><i class="ti ti-lock" style="font-size:11px"></i> Re-lock</button></div>
+    </div>
   </div>
 
 
@@ -1789,6 +1806,7 @@ var KRI_DATA = {
   'o01_inventory': {cur:'3.9wk', a:'6wk', r:'4wk', ts:'br', risk:'O-01'},
   'o01_distress': {cur:'2', a:'1', r:'3', ts:'am', risk:'O-01'},
   'o01_cyber_assess': {cur:'0%', a:'80%', r:'50%', ts:'br', risk:'O-01'},
+  'o01_geo_conc': {cur:'75.3%', a:'65%', r:'75%', ts:'br', risk:'O-01'},
   'o02_mttd': {cur:'264h', a:'168h', r:'240h', ts:'br', risk:'O-02'},
   'o02_mttr': {cur:'18 days', a:'14 days', r:'21 days', ts:'br', risk:'O-02'},
   'o02_patch': {cur:'71.0%', a:'90%', r:'80%', ts:'br', risk:'O-02'},
@@ -1821,7 +1839,7 @@ var KRI_DATA = {
 // ── Q3 DATA ENTRY PANEL ──────────────────────────────────────
 var Q3_FIELDS = [
   {domain:'Strategic', color:'#e8c547', keys:['s01_odm_concentration','s01_sku_restricted','s01_geo_signals','s02_ai_growth','s02_rd_spend','s02_comp_signals','s03_synergy','s03_dd_coverage'], labels:['ODM/EMS PRC concentration','Restricted SKU count','Geopolitical signals (YTD)','AI revenue growth YoY','R&D spend % revenue','Competitive signals (active)','Synergy delivery vs target','Pipeline DD coverage']},
-  {domain:'Operational', color:'#f97316', keys:['o01_single_source','o01_inventory','o01_distress','o01_cyber_assess','o02_mttd','o02_mttr','o02_patch','o02_rto','o02_vulns','o03_field_failure','o03_recall','o03_supp_quality','o04_open_roles','o04_succession','o04_prog_staffing'], labels:['Single-source concentration','Inventory cover (weeks)','Supplier distress flags','Supplier cyber assess. %','MTTD (hours)','MTTR (days)','Patch compliance %','OMS RTO (hours)','Critical vulns open >30d','Field failure rate','Recall readiness score','Supplier quality rejection %','Critical open roles >60d','SVP+ succession %','Programme staffing %']},
+  {domain:'Operational', color:'#f97316', keys:['o01_single_source','o01_inventory','o01_distress','o01_cyber_assess','o01_geo_conc','o02_mttd','o02_mttr','o02_patch','o02_rto','o02_vulns','o03_field_failure','o03_recall','o03_supp_quality','o04_open_roles','o04_succession','o04_prog_staffing'], labels:['Single-source concentration','Inventory cover (weeks)','Supplier distress flags','Supplier cyber assess. %','Taiwan+China concentration %','MTTD (hours)','MTTR (days)','Patch compliance %','OMS RTO (hours)','Critical vulns open >30d','Field failure rate','Recall readiness score','Supplier quality rejection %','Critical open roles >60d','SVP+ succession %','Programme staffing %']},
   {domain:'Financial', color:'#3b82f6', keys:['f01_unhedged_fx','f01_hedge_ratio','f01_gross_margin','f02_cust_concentration','f02_bad_debt','f03_liquidity','f03_nd_ebitda','f03_maturity','f04_journal','f04_rev_rec'], labels:['Unhedged FX exposure','FX hedge ratio %','Gross margin vs target','Top customer ISG share %','Bad debt provision %','Liquidity headroom','Net-debt/EBITDA ratio','Debt maturity (months)','Journal anomalies','Revenue recog. adjustments']},
   {domain:'Compliance', color:'#a78bfa', keys:['c01_screening','c02_ai_act','c03_abac','c03_sb253'], labels:['Export screening coverage %','AI Act audit coverage %','ABAC coverage %','SB 253 readiness %']}
 ];
@@ -1895,7 +1913,7 @@ var agentsCompleted = {strategic:false, operational:false, financial:false, comp
 function getKRISummary(domain){
   var keys = {
     strategic:['s01_odm_concentration','s01_sku_restricted','s01_geo_signals','s02_ai_growth','s02_rd_spend','s02_comp_signals','s03_synergy','s03_dd_coverage'],
-    operational:['o01_single_source','o01_inventory','o01_distress','o01_cyber_assess','o02_mttd','o02_mttr','o02_patch','o02_rto','o02_vulns','o03_field_failure','o03_recall','o03_supp_quality','o04_open_roles','o04_succession','o04_prog_staffing'],
+    operational:['o01_single_source','o01_inventory','o01_distress','o01_cyber_assess','o01_geo_conc','o02_mttd','o02_mttr','o02_patch','o02_rto','o02_vulns','o03_field_failure','o03_recall','o03_supp_quality','o04_open_roles','o04_succession','o04_prog_staffing'],
     financial:['f01_unhedged_fx','f01_hedge_ratio','f01_gross_margin','f02_cust_concentration','f02_bad_debt','f03_liquidity','f03_nd_ebitda','f03_maturity','f04_journal','f04_rev_rec'],
     compliance:['c01_screening','c02_ai_act','c03_abac','c03_sb253']
   };
