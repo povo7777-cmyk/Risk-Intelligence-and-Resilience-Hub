@@ -943,7 +943,25 @@ def hitl_gate_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
             print(f"     Fix in kri_thresholds.csv or model_benchmarks.json then re-run.")
 
         if calib_findings:
+            from tools.calibration_tracker import (
+                load_tracker, save_tracker, get_status, record_seen, summary_line
+            )
+            _tracker = load_tracker()
+
+            # Pre-compute NEW vs OPEN counts for the header (before any updates)
+            _new_count  = sum(
+                1 for f in calib_findings
+                if get_status(_tracker, f.get("id", ""))[0] == "NEW"
+            )
+            _open_count = len(calib_findings) - _new_count
+            _tag_parts  = []
+            if _new_count:  _tag_parts.append(f"{_new_count} NEW")
+            if _open_count: _tag_parts.append(f"{_open_count} OPEN from prior runs")
+
             print(f"\n  📋 CALIBRATION FINDINGS — require your judgment ({len(calib_findings)}):")
+            if _tag_parts:
+                print(f"     ({' · '.join(_tag_parts)})")
+
             for f in calib_findings:
                 sev   = f.get("severity", "high").upper()
                 fid   = f.get("id", "")
@@ -951,7 +969,22 @@ def hitl_gate_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
                 owner = f.get("owner", "")
                 rec   = f.get("recommendation", "")
                 icon_f = "🔴" if sev == "CRITICAL" else "🟠"
+
+                # Get status BEFORE recording so label reflects prior runs only
+                _status, _entry = get_status(_tracker, fid)
+                if _status == "NEW":
+                    _status_tag = "🆕 NEW"
+                else:
+                    _n = _entry.get("times_seen", 1)
+                    _d = _entry.get("first_seen_date", "")
+                    _run_word = "run" if _n == 1 else "runs"
+                    _status_tag = f"🔁 OPEN · flagged {_n} prior {_run_word} · first seen {_d}"
+
+                # Record this run in tracker (increments times_seen for OPEN items)
+                record_seen(_tracker, f, state["run_id"])
+
                 print(f"     {icon_f} [{sev}] [{fid}] {title}")
+                print(f"          {_status_tag}")
                 if rec:
                     print(f"          Recommendation: {rec}")
                 if owner:
@@ -969,6 +1002,14 @@ def hitl_gate_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
                 elif rec and ci_mode:
                     # CI: do not auto-add calibration findings; they require human judgment
                     pass
+
+            # Persist tracker updates
+            try:
+                save_tracker(_tracker)
+                print(f"\n  Calibration tracker saved — {summary_line(_tracker)}")
+            except Exception as _te:
+                state["warnings"].append(f"Calibration tracker save failed: {_te}")
+
         elif not blocked:
             print(f"\n  ✓ No calibration findings require human review this run.")
 
