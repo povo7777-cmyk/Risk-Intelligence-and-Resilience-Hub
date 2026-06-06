@@ -1,7 +1,7 @@
 """
 agents/validation_agent.py
 Validates board summary and executive recommendations against KRI data.
-Uses Claude Haiku 4.5 — annotates rather than blocks.
+Uses Claude Sonnet 4.6 — annotates rather than blocks.
 
 Called after chief_risk_synthesis and kri_validation, before HITL gate.
 """
