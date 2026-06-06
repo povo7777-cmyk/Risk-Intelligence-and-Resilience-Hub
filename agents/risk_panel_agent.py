@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import anthropic
 
-MODEL = "claude-sonnet-4-5"
+MODEL = "claude-sonnet-4-6"
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 # ── Deterministic pre-checks ──────────────────────────────────────────────────
