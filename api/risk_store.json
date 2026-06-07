@@ -1,5 +1,5 @@
 {
-    "last_updated": "2026-06-07T14:25:13.289179+00:00",
+    "last_updated": "2026-06-07T16:11:39.796007+00:00",
     "version": "1.0",
     "operational_risks": {
         "O-01": {
@@ -24,7 +24,9 @@
                 },
                 "supplier_distress_flags": {
                     "value": 2.0,
-                    "status": "amber"
+                    "status": "amber",
+                    "high04_review_note": "HIGH-04 2026-06-07: Panel flagged SUP008 (Yangtze Memory, inventory_weeks=5.5) as potentially excluded from distress count. erp_supply_chain.csv confirms SUP008 is present but does not carry a health_score column \u2014 health score 55 cited by panel comes from supply chain stress model internal MTBF calculation. Current count of 2 may understate if Yangtze Memory qualifies (breach threshold = 3). COO/VP Supply Chain to confirm inclusion \u2014 if included, KRI status upgrades from amber (2) to breach (3). Pending COO confirmation \u2014 value held at 2 pending data reconciliation.",
+                    "yangtze_memory_status": "PENDING_COO_CONFIRMATION"
                 },
                 "supplier_cyber_resilience_assess_pct": {
                     "value": 0.0,
@@ -261,7 +263,13 @@
                 },
                 "bad_debt_provision_pct": {
                     "value": 1.44,
-                    "status": "breach"
+                    "status": "breach",
+                    "threshold_tightened": "2026-06-07T16:11:39.796007+00:00",
+                    "amber_threshold_prior": 0.55,
+                    "breach_threshold_prior": 0.7,
+                    "amber_threshold_new": 0.4,
+                    "breach_threshold_new": 0.55,
+                    "tightening_rationale": "HIGH-06: Prior amber threshold (0.55%) provided only 25bp early warning before COV006 trigger (0.80%). New amber threshold 0.40% provides 40bp lead; new breach threshold 0.55% provides 25bp lead \u2014 enough time for CFO intervention before covenant breach is triggered. Current value 1.44% remains well above all thresholds (status = breach)."
                 },
                 "overdue_90d_pct": {
                     "value": 0.9,
@@ -434,7 +442,9 @@
             "fx_revenue_unhedged_usd_m": 3400.0,
             "fx_revenue_gross_usd_m": 6000.0,
             "fx_revenue_hedge_ratio_pct": 43.3,
-            "fx_revenue_integration_note": "MO-06 ADDED 2026-06-07: Revenue FX unhedged USD 3,400M (FX001 USD/CNY 1,800M + FX002 USD/EUR 1,600M) must be integrated into EBITDA demand distribution. Under USD appreciation scenarios, this 3,400M exposure is excluded from current stress scenarios, causing systematic understatement of P(covenant breach). Add as revenue vol driver: revenue_fx_shock = fx_revenue_unhedged \u00d7 currency_vol; combine with existing demand_var. P(breach) recomputation required \u2014 expected to increase from current 44.2%."
+            "fx_revenue_integration_note": "MO-06 ADDED 2026-06-07: Revenue FX unhedged USD 3,400M (FX001 USD/CNY 1,800M + FX002 USD/EUR 1,600M) must be integrated into EBITDA demand distribution. Under USD appreciation scenarios, this 3,400M exposure is excluded from current stress scenarios, causing systematic understatement of P(covenant breach). Add as revenue vol driver: revenue_fx_shock = fx_revenue_unhedged \u00d7 currency_vol; combine with existing demand_var. P(breach) recomputation required \u2014 expected to increase from current 44.2%.",
+            "p_covenant_breach_pct_deterministic": 100.0,
+            "p_covenant_breach_pct_deterministic_note": "P = 100% in the scenario where COV006 USD 365M provision is taken in full. Distinct from Monte Carlo forward probability of 69.4%."
         },
         "hedge": {
             "gross_exposure_usd_m": 9140.0,
@@ -462,7 +472,50 @@
             "n_sims": 5000,
             "var_sign_convention_note": "MO-02 CORRECTION 2026-06-07: var_95_unhedged (1303) is the gross portfolio VaR without hedge protection. var_95_hedged (1050) is the net portfolio VaR after hedging \u2014 correctly lower than unhedged. var_improvement (253) = VaR reduction achieved by the hedge programme. Prior version had labels swapped, causing VaR(hedged) > VaR(unhedged) paradox.",
             "mo03_verification_note": "MO-03 VERIFICATION 2026-06-07: Panel finding MO-03 claimed treasury_positions.csv sum = USD 10,140M vs model's USD 9,140M. Manual verification: FX001(3200)+FX002(2800)+FX003(980)+FX004(620) = 7,600M FX; +COM001(890)+COM002(650) = 1,540M commodity; total = 9,140M. Model gross_exposure_usd_m=9,140 MATCHES source data. Panel finding contained arithmetic error (stated FX sum as 8,600M vs actual 7,600M). No correction required to model or source data.",
-            "mo04_verification_note": "MO-04 VERIFICATION 2026-06-07: Panel claimed FX003 JPY cost hedge should GAIN when JPY weakens. Analysis: FX003 is a BUY-JPY forward (company buys JPY to pay JPY-denominated COGS). When USD/JPY spot (151.8) > forward (149.2), JPY has weakened \u2014 buying JPY at forward is MORE EXPENSIVE than spot, so the forward is underwater \u2192 unrealised loss of -15.6M is MATHEMATICALLY CORRECT. Panel confused Revenue-hedge (sell JPY) direction with Cost-hedge (buy JPY) direction. No change to treasury_positions.csv required. Sign convention is correct."
+            "mo04_verification_note": "MO-04 VERIFICATION 2026-06-07: Panel claimed FX003 JPY cost hedge should GAIN when JPY weakens. Analysis: FX003 is a BUY-JPY forward (company buys JPY to pay JPY-denominated COGS). When USD/JPY spot (151.8) > forward (149.2), JPY has weakened \u2014 buying JPY at forward is MORE EXPENSIVE than spot, so the forward is underwater \u2192 unrealised loss of -15.6M is MATHEMATICALLY CORRECT. Panel confused Revenue-hedge (sell JPY) direction with Cost-hedge (buy JPY) direction. No change to treasury_positions.csv required. Sign convention is correct.",
+            "fx_pl_netting_table": {
+                "description": "HIGH-09 2026-06-07: Cost/Revenue netting table for unrealised P&L. Total unrealised_pnl = -47M.",
+                "revenue_hedges": {
+                    "FX001_usd_cny": {
+                        "hedge_notional_usd_m": 1400,
+                        "direction": "sell_CNY_buy_USD",
+                        "note": "Receive USD on CNY-denominated revenue; gain when USD appreciates"
+                    },
+                    "FX002_usd_eur": {
+                        "hedge_notional_usd_m": 1200,
+                        "direction": "sell_EUR_buy_USD",
+                        "note": "Receive USD on EUR-denominated revenue; gain when USD appreciates"
+                    },
+                    "total_revenue_hedge_notional_usd_m": 2600
+                },
+                "cost_hedges": {
+                    "FX003_usd_jpy": {
+                        "hedge_notional_usd_m": 600,
+                        "direction": "buy_JPY_sell_USD",
+                        "note": "Pay JPY for COGS; loss when JPY appreciates vs USD forward"
+                    },
+                    "FX004_usd_krw": {
+                        "hedge_notional_usd_m": 320,
+                        "direction": "buy_KRW_sell_USD",
+                        "note": "Pay KRW for COGS; gain when KRW depreciates vs USD forward"
+                    },
+                    "total_cost_hedge_notional_usd_m": 920
+                },
+                "commodity_hedges": {
+                    "COM001_dram": {
+                        "hedge_notional_usd_m": 400,
+                        "note": "DRAM procurement fixed-price"
+                    },
+                    "COM002_nand": {
+                        "hedge_notional_usd_m": 280,
+                        "note": "NAND procurement fixed-price"
+                    },
+                    "total_commodity_hedge_notional_usd_m": 680
+                },
+                "net_unrealised_pnl_usd_m": -47.0,
+                "economic_interpretation": "Net -47M reflects cost hedges (FX003 JPY) underwater at spot (JPY weakened vs forward) partially offset by revenue hedge gains. Accounting P&L (mark-to-market) vs economic P&L (all-in COGS/revenue impact) may differ \u2014 Group Treasurer to confirm whether -47M is gross MTM or netted against revenue hedge gains.",
+                "action_required": "Group Treasurer to publish explicit netting confirmation before next board pack"
+            }
         },
         "supply_chain": {
             "supplier_count": 8,
@@ -523,6 +576,19 @@
                 "implied_revenue_multiplier": 1.139,
                 "avg_portfolio_rev_cogs_ratio": 1.042,
                 "note": "MO-07 ADDED 2026-06-07: rev_at_risk=9B derived from single-source spend (7.9B) \u00d7 product-level revenue multiplier (1.139x). This exceeds the portfolio-average COGS/revenue ratio (1.042x) because TSMC, Foxconn, and Quanta supply premium compute products with above-average margins. Formal derivation: COO/VP Supply Chain to confirm product-revenue attribution by SKU and validate 1.139x multiplier against product P&L data. Until confirmed, treat 9B as conservative upper bound."
+            },
+            "quanta_standalone_scenario": {
+                "description": "HIGH-10 2026-06-07: Quanta (SUP005) standalone stressed scenario.",
+                "supplier": "Quanta Computer (SUP005) \u2014 laptop/notebook assembly, single-source",
+                "inventory_weeks": 3.9,
+                "breach_threshold_weeks": 4.0,
+                "status": "BREACH \u2014 inventory 3.9w below 4.0w breach threshold",
+                "lead_time_weeks": 6,
+                "mtbf_years": 5.58,
+                "delta_var_vs_base": "Not yet computed \u2014 VP Supply Chain to model using existing MC framework",
+                "action_required": "VP Supply Chain to run Quanta-isolated Monte Carlo: simulate Quanta failure with 3.9w inventory cover and 6w lead time. Compute delta-VaR vs base (currently included in aggregate 8-supplier model). Present delta-VaR and recovery timeline to COO within 14 days.",
+                "risk_implication": "At 3.9w inventory cover vs 6w lead time, any Quanta disruption lasting > 3.9 weeks causes laptop/notebook production halt with no recovery path for 2.1 additional weeks minimum. Quanta represents single-source dependency \u2014 no alternative assembler in current approved vendor list.",
+                "panel_ref": "HIGH-10"
             }
         }
     },
@@ -545,14 +611,19 @@
             "priority": "CRITICAL",
             "deadline_business_days": 10,
             "deadline_date": "2026-06-20",
-            "action": "Report to Risk Committee within 10 business days on: (1) COV006 cure negotiation status with Trade-Finance lenders \u2014 bad debt provision at 1.44% vs 0.80% threshold; (2) quantified covenant stress map showing EBITDA decline amounts of USD 0.28B (COV001 breach) and USD 0.48B (COV005 breach) with mitigating actions; (3) current EBITDA headroom of USD 152M (6.7% of EBITDA) with P(covenant breach) at 44.2% against 30 June 2026 test date.",
+            "action": "URGENT \u2014 COV006 CONFIRMED IN BREACH, COV001 CASCADE RISK: COV006 (bad debt provision at 1.44% vs 0.80% threshold) is confirmed in breach. Under the deterministic scenario where the full USD 365M provision is taken, EBITDA falls from USD 2,280M to USD 1,915M \u2014 USD 213M below the COV001 floor of USD 2,128M \u2014 triggering COV001 breach with certainty (P = 100% in this scenario). Monte Carlo forward probability incorporating remedial action scenarios: P(COV001 breach) = 69.4% (range 64.5%\u201376.9%) as of 2026-06-07 recomputation. Both figures must be presented to the board. Report to Risk Committee within 10 business days on: (1) COV006 cure negotiation status with Trade-Finance lenders \u2014 bad debt provision at 1.44% vs 0.80% threshold; (2) quantified covenant stress map showing EBITDA decline amounts of USD 0.28B (COV001 breach) and USD 0.48B (COV005 breach) with mitigating actions; (3) current EBITDA headroom of USD 152M (6.7% of EBITDA) with P(covenant breach) at 69.4% against 30 June 2026 test date.",
             "linked_kris": [
                 "net_debt_ebitda_ratio",
                 "covenant_breach_count",
                 "liquidity_headroom_usd_b"
             ],
             "linked_risk": "F-03",
-            "model_output_link": "ebitda.p_covenant_breach_pct"
+            "model_output_link": "ebitda.p_covenant_breach_pct",
+            "crit_01_addressed": "2026-06-07T16:11:39.796007+00:00",
+            "crit_03_addressed": "2026-06-07T16:11:39.796007+00:00",
+            "p_breach_deterministic": "100% (COV006 confirmed \u2192 USD 365M provision \u2192 EBITDA 1,915M < COV001 floor 2,128M)",
+            "p_breach_monte_carlo": "69.4% (range 64.5%\u201376.9%) \u2014 incorporates remedial action and timing uncertainty",
+            "p_breach_prior_stale": "44.2% \u2014 superseded; do not cite in board materials"
         },
         "fx_hedging": {
             "owner": "CFO / Group Treasurer",
@@ -626,6 +697,14 @@
                 "review_cadence": "Monthly Risk Committee update until gap closed",
                 "added": "2026-06-07"
             }
+        },
+        "quanta_standalone_stress": {
+            "status": "ACTION_REQUIRED",
+            "owner": "VP Supply Chain / COO",
+            "deadline": "2026-06-21",
+            "action": "Run Quanta standalone Monte Carlo stress scenario; compute delta-VaR; present to COO",
+            "added": "2026-06-07T16:11:39.796007+00:00",
+            "panel_ref": "HIGH-10"
         }
     },
     "model_kri_linkage": {
