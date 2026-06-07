@@ -28,8 +28,51 @@ DATA_DIR      = Path(__file__).parent.parent / "data"
 STORE_PATH    = Path(__file__).parent.parent / "api" / "risk_store.json"
 DASHBOARD     = Path(__file__).parent.parent / "dashboard" / "index.html"
 
-N_SIMS  = 5_000
-SEED    = 42
+# ── Load model benchmarks — single source of truth for all simulation parameters ─
+# All numeric constants previously hardcoded in this file now live in
+# data/model_benchmarks.json under "simulation_parameters". Update the JSON file,
+# not this Python file, when parameter values need to change.
+
+def _load_benchmarks() -> dict:
+    """Load model_benchmarks.json — single source of truth for simulation parameters."""
+    bench_path = DATA_DIR / "model_benchmarks.json"
+    try:
+        return json.loads(bench_path.read_text())
+    except Exception as exc:
+        print(f"  [MODEL CALIBRATOR] WARNING: could not load model_benchmarks.json ({exc}); using fallback defaults")
+        return {}
+
+_BENCHMARKS  = _load_benchmarks()
+_SIM_PARAMS  = _BENCHMARKS.get("simulation_parameters", {})
+
+# Simulation control
+N_SIMS = int(_SIM_PARAMS.get("n_sims", 5_000))
+SEED   = int(_SIM_PARAMS.get("seed",   42))
+
+# MTBF formula parameters
+_MTBF_PARAMS   = _SIM_PARAMS.get("mtbf_formula", {})
+_MTBF_BASE     = float(_MTBF_PARAMS.get("base_years",    15.0))
+_MTBF_EXP      = float(_MTBF_PARAMS.get("exponent",       2.0))
+_MTBF_FLOOR    = float(_MTBF_PARAMS.get("floor_years",    2.0))
+_MTBF_CEILING  = float(_MTBF_PARAMS.get("ceiling_years", 15.0))
+
+# EBITDA model parameters
+_EBITDA_PARAMS         = _SIM_PARAMS.get("ebitda", {})
+_MARGIN_NOISE_STD      = float(_EBITDA_PARAMS.get("margin_noise_std_pp",         0.5)) / 100
+_DEMAND_VAR_DEFAULT    = float(_EBITDA_PARAMS.get("demand_variability_pct",      12.0))
+_TOP_CUST_LOSS_PCT     = float(_EBITDA_PARAMS.get("top_customer_revenue_loss_pct", 5.0))
+_REV_AT_RISK_CAP_PCT   = float(_EBITDA_PARAMS.get("rev_at_risk_cap_pct",         30.0))
+
+# Hedge model parameters
+_HEDGE_PARAMS          = _SIM_PARAMS.get("hedge", {})
+_HEDGE_COST_RATE       = float(_HEDGE_PARAMS.get("hedge_cost_rate_pct",      1.5)) / 100
+_COMMODITY_DEMAND_VOL  = float(_HEDGE_PARAMS.get("commodity_demand_vol_pct", 15.0)) / 100
+
+# Supply chain model parameters
+_SC_PARAMS             = _SIM_PARAMS.get("supply_chain", {})
+_EMERG_PREMIUM_PCT     = float(_SC_PARAMS.get("emergency_sourcing_premium_pct",  25.0))
+_STORAGE_RATE          = float(_SC_PARAMS.get("inventory_storage_rate_pct",       2.0)) / 100
+_INV_COST_FALLBACK     = float(_SC_PARAMS.get("inv_buffer_cost_fallback_usd_m",   8.0))
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -90,7 +133,8 @@ def calibrate_ebitda(raw: dict) -> dict:
     ebitda_b     = float(latest.get("ebitda_usd_b",      2.28))
     volatility   = float(latest.get("revenue_volatility_pct", 12.0))   # % p.a.
     drift        = 0.0
-    demand_var   = 12.0   # demand variability %
+    # Demand variability — read from financial_summary.csv if available, else model_benchmarks.json
+    demand_var   = float(latest.get("demand_variability_pct", _DEMAND_VAR_DEFAULT))
 
     # ── FX cost pass-through — derived from treasury_positions.csv ────────────
     # Cost-type positions (e.g. JPY/KRW component/manufacturing costs): if the
@@ -157,11 +201,12 @@ def calibrate_ebitda(raw: dict) -> dict:
         # FX cost pass-through shock: unhedged Cost exposure × FX move
         # A positive FX shock (USD weakens) increases costs → reduces EBITDA
         fx_cost_shock = fx_cost_b * fx_vl * _randn()
-        # EBITDA margin noise: ±0.5pp margin variation (operational variability).
-        # Uses margin-relative noise so std dev ≈ rev × 0.005 ≈ USD 285M at base revenue.
+        # EBITDA margin noise: ±margin_noise_std_pp pp margin variation (operational variability).
+        # _MARGIN_NOISE_STD = margin_noise_std_pp / 100 — sourced from model_benchmarks.json.
+        # At 0.5pp (0.005 fraction): std dev ≈ rev × 0.005 ≈ USD 285M at base revenue.
         # Previous formula (0.05 × rev) produced std dev USD 2.85B — 125% of EBITDA —
         # which dominated the simulation and generated implausible P5 EBITDA of −USD 2.5B.
-        margin_noise = 0.005 * _randn()
+        margin_noise = _MARGIN_NOISE_STD * _randn()
         ebitda = rev * (1 - cr + margin_noise) - fx_cost_shock
         ebitda_sims.append(ebitda)
 
@@ -177,8 +222,8 @@ def calibrate_ebitda(raw: dict) -> dict:
         cost_up1pp_breach.append(int(ebitda_c1 < cov_floor_b or
                                      (net_debt_b / ebitda_c1 if ebitda_c1 > 0 else 99) > net_debt_ebitda_ceil))
 
-        # Top customer loss (remove ~22% of ISG revenue ≈ 5% of total; same noise draw)
-        ebitda_cl = (rev * 0.95) * (1 - cr + margin_noise) - fx_cost_shock
+        # Top customer loss — revenue loss fraction sourced from model_benchmarks.json::simulation_parameters.ebitda.top_customer_revenue_loss_pct
+        ebitda_cl = (rev * (1 - _TOP_CUST_LOSS_PCT / 100)) * (1 - cr + margin_noise) - fx_cost_shock
         top_cust_loss_breach.append(int(ebitda_cl < cov_floor_b or
                                         (net_debt_b / ebitda_cl if ebitda_cl > 0 else 99) > net_debt_ebitda_ceil))
 
@@ -291,8 +336,8 @@ def calibrate_hedge(raw: dict) -> dict:
 
     # Estimate hedge cost: all-in cost on hedged notional
     # Includes bid/ask spread, collateral cost, and time-value adjustment.
-    # Industry benchmark for mixed forward/option book: ~1.5% p.a. on hedged notional.
-    hedge_cost_m = round(hedged_total * 0.015, 0)   # 1.5% × hedged notional (1yr)
+    # Rate sourced from model_benchmarks.json::simulation_parameters.hedge.hedge_cost_rate_pct
+    hedge_cost_m = round(hedged_total * _HEDGE_COST_RATE, 0)
 
     # Weighted average spot and forward rates (revenue exposures only)
     rev_rows = [r for r in treasury if r.get("exposure_type") == "Revenue"]
@@ -361,7 +406,7 @@ def calibrate_hedge(raw: dict) -> dict:
             com_hd = 0.0
             for _ in range(3):
                 p_com = p_com * math.exp(-0.5 * com_vl * com_vl + com_vl * _randn())
-                av = com_g * (p_com / 100) * (1 + 0.15 * _randn())  # 15% demand vol
+                av = com_g * (p_com / 100) * (1 + _COMMODITY_DEMAND_VOL * _randn())  # demand vol from model_benchmarks.json
                 com_uh += av * 1000
                 # Hedged fraction locked at base price (100); unhedged fraction floats with spot.
                 # Same decomposition as FX: replace (p_com/100) with 1.0 for hedged share.
@@ -455,9 +500,9 @@ def calibrate_supply_chain(raw: dict) -> dict:
     company_cogs_m  = rev_b * 1000 * (cost_ratio_pct / 100)
     single_spend_m  = sum(float(r["our_spend_usd_m"]) for r in single_src)
 
-    # Cap at 30% of revenue (conservative upper bound — not all spend = unique revenue)
+    # Cap revenue-at-risk at configured upper bound — sourced from model_benchmarks.json::simulation_parameters.ebitda.rev_at_risk_cap_pct
     rev_at_risk_b = round(
-        min(single_spend_m / company_cogs_m * rev_b, rev_b * 0.30), 0
+        min(single_spend_m / company_cogs_m * rev_b, rev_b * _REV_AT_RISK_CAP_PCT / 100), 0
     ) if company_cogs_m else 12.0
 
     # Demand shock parameters — derive from market intelligence signal count
@@ -470,19 +515,17 @@ def calibrate_supply_chain(raw: dict) -> dict:
     demand_shock_impact = 15.0   # % impact — calibrated to sector history
     impact_vol = float(fin_latest_sc.get("supply_chain_demand_shock_vol_pct", 8.0))  # % — read from financial_summary.csv
 
-    # Emergency sourcing premium — from market conditions
-    emerg_premium = 25   # % — standard industry benchmark
+    # Emergency sourcing premium — sourced from model_benchmarks.json::simulation_parameters.supply_chain.emergency_sourcing_premium_pct
+    emerg_premium = _EMERG_PREMIUM_PCT
 
-    # MTBF — supplier-specific, calibrated from financial_health_score and single-source flag
-    # Each supplier gets its own MTBF: lower health → shorter MTBF → higher failure probability
-    # This ensures distressed single-source suppliers (health <65) are not masked by healthy ones
-    # Quadratic decay: MTBF = 15 × (health/100)^2, floored at 2yr
-    #   health=100 → 15yr (P≈6.5%/yr)   health=65 → 6.3yr (P≈14.5%/yr)
-    #   health=50  →  3.75yr (P≈23.5%)  health=30 → capped 2yr (P≈39%/yr)
-    # Quadratic is more realistic than linear: near-distress suppliers face
+    # MTBF — supplier-specific, calibrated from financial_health_score and single-source flag.
+    # Formula parameters sourced from model_benchmarks.json::simulation_parameters.mtbf_formula.
+    # Formula: MTBF = base_years × (health/100)^exponent, clamped to [floor_years, ceiling_years].
+    # Quadratic decay (exponent=2) is more realistic than linear: near-distress suppliers face
     # disproportionately higher disruption probability (financial stress is non-linear).
+    # To recalibrate: update model_benchmarks.json::simulation_parameters.mtbf_formula only.
     def _health_to_mtbf(health_score: float) -> float:
-        return max(2.0, 15.0 * (health_score / 100.0) ** 2)
+        return max(_MTBF_FLOOR, min(_MTBF_CEILING, _MTBF_BASE * (health_score / 100.0) ** _MTBF_EXP))
 
     supplier_mtbfs = [_health_to_mtbf(float(r["financial_health_score"])) for r in sc]
     supplier_spends = [float(r["our_spend_usd_m"]) for r in sc]
@@ -580,8 +623,8 @@ def calibrate_supply_chain(raw: dict) -> dict:
 
     per_supplier_costs.sort(key=lambda x: x["annual_cost_usd_m"])   # cheapest first
     full_dual_cost_m   = round(sum(c["annual_cost_usd_m"] for c in per_supplier_costs), 1)
-    urgent_dual_cost_m = per_supplier_costs[0]["annual_cost_usd_m"] if per_supplier_costs else 15.0
-    urgent_supplier    = per_supplier_costs[0]["supplier"] if per_supplier_costs else "Quanta"
+    urgent_dual_cost_m = per_supplier_costs[0]["annual_cost_usd_m"] if per_supplier_costs else _SC_PARAMS.get("dual_cost_fallback_usd_m", 15.0)
+    urgent_supplier    = per_supplier_costs[0]["supplier"] if per_supplier_costs else ""
 
     # ── Inventory buffer cost — derived from additional weeks target ───────────
     #
@@ -590,7 +633,8 @@ def calibrate_supply_chain(raw: dict) -> dict:
     #   annual_carrying_cost = inventory_value × storage_rate (warehousing + insurance
     #                          + obsolescence, typically 2% of inventory value per year)
     #
-    STORAGE_RATE = 0.02   # 2% p.a. of inventory value (cash cost, not WACC)
+    # Storage rate — sourced from model_benchmarks.json::simulation_parameters.supply_chain.inventory_storage_rate_pct
+    STORAGE_RATE = _STORAGE_RATE   # annual carrying cost as fraction of inventory value
     total_inv_buffer_cost = 0.0
     for r in sc:
         target_wks  = float(r.get("target_inventory_weeks", 0))
@@ -602,7 +646,7 @@ def calibrate_supply_chain(raw: dict) -> dict:
             total_inv_buffer_cost += buffer_value * STORAGE_RATE
     inv_cost_m = round(total_inv_buffer_cost, 1)
     if inv_cost_m == 0:
-        inv_cost_m = 8.0   # fallback if target_inventory_weeks not set
+        inv_cost_m = _INV_COST_FALLBACK   # fallback from model_benchmarks.json if target_inventory_weeks not set in CSV
 
     # Use urgent (cheapest, most actionable) programme for primary ROI calc
     dual_cost_m = urgent_dual_cost_m
