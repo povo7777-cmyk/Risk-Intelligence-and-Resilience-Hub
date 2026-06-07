@@ -1,30 +1,76 @@
 {
   "_comment": "Single source of truth for quantitative model benchmark figures. Update this file when simulation parameters change \u2014 dashboard_updater will inject these values into the HTML automatically.",
-  "_updated": "2026-05-28",
+  "_updated": "2026-06-07",
   "supply_chain": {
-    "baseline_var_95_usd_m": 2049,
-    "dual_source_var_saving_usd_m": 253,
+    "baseline_var_95_usd_m": 2298,
+    "dual_source_var_saving_usd_m": 415,
     "dual_source_cost_per_yr_usd_m": 14.4,
-    "dual_source_roi_x": 17,
-    "inventory_buffer_var_saving_usd_m": 147,
+    "dual_source_roi_x": 29,
+    "inventory_buffer_var_saving_usd_m": 220,
     "inventory_buffer_cost_per_yr_usd_m": 7.7,
-    "combined_var_saving_usd_m": 369,
-    "combined_roi_x": 17,
+    "combined_var_saving_usd_m": 523,
+    "combined_roi_x": 24,
     "revenue_at_risk_usd_m": 660,
     "simulation_n": 5000,
-    "_source": "Python Monte Carlo simulation N=5000 | 8 suppliers | MTBF 7yr | recovery 3mo | USD 12B revenue at risk"
+    "_source": "Python Monte Carlo N=5000 | 8 suppliers | supplier-specific MTBF (health-score weighted) | recovery 5mo | USD 9B revenue at risk",
+    "rev_at_risk_derivation_note": "MO-07 2026-06-07: USD 9B = USD 7.9B single-source spend \u00d7 1.139 product-revenue multiplier. COO/VP Supply Chain to validate multiplier against product P&L. Conservative upper bound."
   },
   "ebitda": {
-    "covenant_breach_probability_pct": 49.7,
+    "covenant_breach_probability_pct": 50.1,
     "cogs_1pp_breach_increase_pp": 7.1,
     "top_customer_loss_breach_increase_pp": 1.2,
     "covenant_headroom_usd_m": 152,
     "base_revenue_usd_b": 57,
-    "_source": "EBITDA Stress Monte Carlo N=5000 | vol=12% (from financial_summary.csv) | 96% cost ratio | USD 57B revenue",
-    "revenue_volatility_pct": 12.0
+    "fx_cost_unhedged_usd_m": 680,
+    "fx_cost_vol_pct": 9.0,
+    "_source": "EBITDA Stress Monte Carlo N=5000 | vol=12% | 96% cost ratio | USD 57B revenue | FX cost pass-through: USD 680M unhedged JPY/KRW COGS exposure | M-05 implemented 2026-05-28",
+    "revenue_volatility_pct": 12.0,
+    "cov006_stress_scenario": {
+      "provision_impact_usd_m": 365,
+      "ebitda_post_impact_usd_m": 1915,
+      "cov001_breached": true,
+      "note": "Bad debt provision at 1.44% vs 0.80% threshold \u2014 incremental charge ~USD 365M reduces EBITDA from 2,280M to 1,915M, below COV001 floor of 2,128M. P(breach) recomputation required.",
+      "added": "2026-06-07",
+      "panel_ref": "MO-01"
+    },
+    "fx_revenue_unhedged_usd_m": 3400,
+    "fx_revenue_gross_usd_m": 6000,
+    "mo06_note": "MO-06 2026-06-07: Revenue FX unhedged USD 3,400M (FX001+FX002) added to EBITDA model. Current demand_var does not capture USD appreciation impact on CNY/EUR revenue streams. Rerun Monte Carlo with revenue_fx_unhedged included in revenue distribution."
+  },
+  "unified_fx_model": {
+    "_description": "MO-06/MO-03 2026-06-07: Unified FX exposure model design. Both Hedge Analyser and EBITDA Stress model must derive all FX inputs from treasury_positions.csv as single source of truth. Eliminates structural divergence discovered by panel (MO-03, MO-06).",
+    "single_source": "data/treasury_positions.csv",
+    "architecture": {
+      "step_1_load": "Read treasury_positions.csv — all positions, all dates",
+      "step_2_split": "Split by asset_type: FX positions → hedge model; Revenue/Cost FX → EBITDA model",
+      "step_3_aggregate": {
+        "fx_gross_usd_m": "SUM(gross_exposure_usd_m) WHERE position_type IN (FX001,FX002,FX003,FX004) = 7600",
+        "commodity_gross_usd_m": "SUM(gross_exposure_usd_m) WHERE position_type IN (COM001,COM002) = 1540",
+        "total_gross_usd_m": 9140,
+        "revenue_fx_gross_usd_m": "SUM(gross_exposure_usd_m) WHERE direction='Revenue' AND asset_type='FX' = 6000",
+        "revenue_fx_hedged_usd_m": "SUM(hedge_usd_m) WHERE direction='Revenue' AND asset_type='FX' = 2600",
+        "revenue_fx_unhedged_usd_m": 3400,
+        "revenue_hedge_ratio_pct": 43.3
+      },
+      "step_4_validate": "Assert SUM matches model_benchmarks.json totals; log discrepancy if diff > 0"
+    },
+    "verification_2026_06_07": {
+      "csv_total_gross_usd_m": 9140,
+      "panel_claimed_usd_m": 10140,
+      "panel_error_usd_m": 1000,
+      "verdict": "Panel MO-03 arithmetic error — CSV data correct at USD 9,140M. No data change required.",
+      "mo03_resolved": true
+    },
+    "implementation_note": "dashboard_updater.py should call load_fx_positions(treasury_positions.csv) once and pass results to both HedgeModel.compute_var() and EBITDAModel.compute_p_breach(). Never hardcode gross totals in either model.",
+    "added": "2026-06-07"
   },
   "fx_hedge": {
-    "fx_exposed_revenue_usd_b": 9.1,
-    "_source": "Hedge Analyser Monte Carlo, FX-only positions (CNY+EUR+JPY+KRW)"
+    "fx_exposed_revenue_usd_b": 9.14,
+    "fx_vol_pct": 9.0,
+    "commodity_vol_pct": 32.0,
+    "fx_gross_usd_m": 7600,
+    "commodity_gross_usd_m": 1540,
+    "_source": "Hedge Analyser Monte Carlo | FX (Revenue+Cost): 9% vol | Commodity (DRAM+NAND): 32% vol | M-03 panel recommendation implemented 2026-05-28",
+    "var_95_unhedged_note": "1303 = gross VaR without hedge; 1050 = net VaR after hedge; improvement = 253 (MO-02 corrected 2026-06-07)"
   }
 }
