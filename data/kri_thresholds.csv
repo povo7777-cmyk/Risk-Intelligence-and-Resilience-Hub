@@ -25,9 +25,14 @@ F-03,liquidity_headroom_usd_b,1.2,0.9,lower_worse,USD_B,Available liquidity head
 F-03,debt_maturity_runway_months,12,6,lower_worse,months,Months until next material debt maturity
 F-04,audit_findings_open,2,5,higher_worse,count,High-severity internal audit findings open (SOX scope)
 C-01,export_screening_coverage_pct,98,95,lower_worse,%,Export control screening coverage rate
-C-01,confirmed_sanctions_violations_ytd,0.5,1,higher_worse,count,Confirmed sanctions violations year to date
+C-01,confirmed_sanctions_violations_ytd,1,1,higher_worse,count,Confirmed sanctions violations year to date (zero-tolerance: amber and breach coincide at first violation)
 C-02,ai_audit_coverage_pct,95,90,lower_worse,%,AI systems with completed conformity assessment
 C-03,third_party_abac_coverage_pct,100,95,lower_worse,%,Third-party anti-bribery and corruption coverage
 O-01,supplier_cyber_resilience_assess_pct,80,50,lower_worse,%,Single-source supplier cyber resilience assessment coverage
 O-01,geo_concentration_pct,65,75,higher_worse,%,Taiwan + China combined supply chain spend as % of total
 O-03,supplier_quality_rejection_rate_pct,0.5,1.0,higher_worse,%,Supplier quality rejection rate as % of units received
+F-03,covenant_breach_count,0,1,higher_worse,count,Number of active covenant breaches (COV001-COV006) — breach on first confirmed covenant in breach
+C-01,denied_party_matches_pending,2,4,higher_worse,count,Denied party screening matches awaiting resolution — leading indicator for sanctions risk; amber ≥2 matches pending; breach ≥4 matches pending
+F-03,p_covenant_breach_pct,30,50,higher_worse,%,Monte Carlo probability of COV001 Net Debt/EBITDA covenant breach at next test date (amber ≥30%; breach ≥50%)
+O-01,supplier_recovery_runway_weeks,8,4,lower_worse,weeks,Inventory cover weeks for the critical-path single-source supplier (TSMC 18-week lead time benchmark); amber <8w (below target); breach <4w (~22% of lead time — critical depletion)
+O-02,cyber_supply_response_gap_days,0,0.1,higher_worse,days,Gap between combined MTTD+MTTR cyber response time and available supplier inventory cover (max(0,MTTD+MTTR-inventory_cover_days)); amber ≥0 (response meets inventory); breach >0 (response exceeds inventory — production halt guaranteed)
