@@ -1,0 +1,10 @@
+date,metric,value,unit,source_system,notes
+2026-02-01,ai_audit_coverage_pct,74,percent,AI-Governance-Programme,Pct of in-scope AI systems with completed conformity assessment per EU AI Act
+2026-02-01,gdpr_dsr_resolution_rate_pct,92,percent,Privacy-Management-System,Pct of Data Subject Requests resolved within 30-day statutory deadline
+2026-02-01,third_party_abac_coverage_pct,85,percent,Third-Party-Risk-System,Pct of Tier-1+Tier-2 third parties with completed anti-bribery assessment
+2026-02-01,csrd_scope3_disclosure_pct,70,percent,ESG-Reporting-Platform,Pct of material Scope 3 categories with verified emissions data per CSRD
+2026-05-01,ai_audit_coverage_pct,78,percent,AI-Governance-Programme,Pct of in-scope AI systems with completed conformity assessment per EU AI Act
+2026-05-01,gdpr_dsr_resolution_rate_pct,94,percent,Privacy-Management-System,Pct of Data Subject Requests resolved within 30-day statutory deadline
+2026-05-01,third_party_abac_coverage_pct,89,percent,Third-Party-Risk-System,Pct of Tier-1+Tier-2 third parties with completed anti-bribery assessment
+2026-05-01,csrd_scope3_disclosure_pct,74,percent,ESG-Reporting-Platform,Pct of material Scope 3 categories with verified emissions data per CSRD
+2026-05-01,export_licence_expiring_30d,2,count,Trade-Controls-System,Export control licences expiring within 30 days pending renewal — two licences (ECC-2024-0047 TSMC components and ECC-2024-0061 DRAM modules) require CCO sign-off before expiry
