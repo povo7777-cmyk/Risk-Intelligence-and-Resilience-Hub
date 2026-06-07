@@ -22,5 +22,15 @@
         "inventory_weeks_column": "inventory_weeks",
         "inventory_cover_fallback_weeks": 4.0,
         "_fallback_note": "Used only if erp_supply_chain.csv is empty or missing — should not occur in production."
+    },
+
+    "completeness_checks": {
+        "_description": "Board pack completeness gate configuration. Layer 1 (deterministic) always runs before the panel. Layer 2 (LLM semantic) is a stub — activate by setting layer2_enabled: true once the implementation is complete.",
+        "layer1_enabled": true,
+        "layer2_enabled": false,
+        "layer2_model": "claude-haiku-4-5-20251001",
+        "_layer2_note": "Layer 2 uses a third LLM specialist to check semantic completeness: exec_rec-to-KRI traceability, prior CRIT findings as board resolution items, language consistency. Activate after implementing run_layer2() in tools/board_pack_completeness.py.",
+        "hard_fail_on_critical": true,
+        "_hard_fail_note": "If true, CRITICAL completeness findings block the pipeline before the panel runs. Set false to warn-only (not recommended for production board runs)."
     }
 }
