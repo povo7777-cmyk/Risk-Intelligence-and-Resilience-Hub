@@ -19,7 +19,7 @@ O-04,svp_succession_coverage_pct,80,70,lower_worse,%,SVP-level roles with docume
 F-01,unhedged_fx_exposure_usd_m,4000,5000,higher_worse,USD_M,Unhedged FX exposure in USD millions
 F-01,avg_hedge_ratio_pct,60,45,lower_worse,%,Average hedge ratio across all material FX exposures
 F-02,top_customer_concentration_pct,20,25,higher_worse,%,Top customer as % of total revenue
-F-02,bad_debt_provision_pct,0.55,0.70,higher_worse,%,Bad debt provision as % of total accounts receivable
+F-02,bad_debt_provision_pct,0.40,0.55,higher_worse,%,Bad debt provision as % of total accounts receivable; amber ≥0.40% (40bp lead before COV006 trigger at 0.80%); breach ≥0.55% (25bp lead); tightened 2026-06-07 per HIGH-06 panel finding
 F-03,net_debt_ebitda_ratio,2.5,3.0,higher_worse,ratio,Net debt to EBITDA ratio
 F-03,liquidity_headroom_usd_b,1.2,0.9,lower_worse,USD_B,Available liquidity headroom in USD billions
 F-03,debt_maturity_runway_months,12,6,lower_worse,months,Months until next material debt maturity
