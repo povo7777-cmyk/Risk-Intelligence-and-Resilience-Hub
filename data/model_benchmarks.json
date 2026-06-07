@@ -1,6 +1,37 @@
 {
-    "_comment": "Single source of truth for quantitative model benchmark figures. Update this file when simulation parameters change \u2014 dashboard_updater will inject these values into the HTML automatically.",
+    "_comment": "Single source of truth for quantitative model benchmark figures AND simulation parameters. All hardcoded values in model_calibrator.py and risk_panel_agent.py must be sourced from this file. Update this file when any parameter changes \u2014 do not edit the Python files directly.",
     "_updated": "2026-06-07T16:27:43.935640+00:00",
+    "simulation_parameters": {
+        "_description": "Monte Carlo and model control parameters. All Python models read these at import time \u2014 do not hardcode in .py files.",
+        "n_sims": 5000,
+        "seed": 42,
+        "mtbf_formula": {
+            "_description": "Supplier MTBF quadratic decay: MTBF = base_years \u00d7 (health/100)^exponent, clamped to [floor_years, ceiling_years]. Distressed suppliers (health <65) face disproportionately higher disruption probability \u2014 quadratic is more realistic than linear for financial-stress-driven failure.",
+            "base_years": 15.0,
+            "exponent": 2.0,
+            "floor_years": 2.0,
+            "ceiling_years": 15.0
+        },
+        "ebitda": {
+            "_description": "EBITDA stress model constants. margin_noise_std_pp is \u00b1pp margin volatility (not % of revenue). top_customer_revenue_loss_pct is the revenue fraction removed in the top-customer-loss sensitivity scenario.",
+            "margin_noise_std_pp": 0.5,
+            "demand_variability_pct": 12.0,
+            "top_customer_revenue_loss_pct": 5.0,
+            "rev_at_risk_cap_pct": 30.0
+        },
+        "hedge": {
+            "_description": "Hedge analyser constants. hedge_cost_rate_pct is all-in annual cost on hedged notional (bid/ask, collateral, time-value). commodity_demand_vol_pct is the demand variability multiplier for DRAM/NAND commodity positions.",
+            "hedge_cost_rate_pct": 1.5,
+            "commodity_demand_vol_pct": 15.0
+        },
+        "supply_chain": {
+            "_description": "Supply chain model constants. emergency_sourcing_premium_pct is the price premium for unplanned alternate sourcing. inventory_storage_rate_pct is annual carrying cost (warehousing + insurance + obsolescence) as % of inventory value.",
+            "emergency_sourcing_premium_pct": 25.0,
+            "inventory_storage_rate_pct": 2.0,
+            "inv_buffer_cost_fallback_usd_m": 8.0,
+            "dual_cost_fallback_usd_m": 15.0
+        }
+    },
     "supply_chain": {
         "baseline_var_95_usd_m": 2298,
         "dual_source_var_saving_usd_m": 415,
