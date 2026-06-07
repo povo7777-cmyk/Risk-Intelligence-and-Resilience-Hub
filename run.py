@@ -90,12 +90,15 @@ def check_prerequisites() -> list[str]:
             "or run: cp /path/to/index.html ~/rib-agents/dashboard/"
         )
 
-    # EM-05: Warn when exec_rec_drafts is empty — board pack cannot be approved
-    # without at least one structured executive recommendation
+    # EM-05: Block when exec_rec_drafts is empty — board pack cannot be approved
+    # without at least one structured executive recommendation.
+    # Item 3: Block when any KRI has recompute_required=True — stale model output.
     if store_path.exists():
         try:
             import json as _json
             _store = _json.loads(store_path.read_text())
+
+            # EM-05 check
             _drafts = _store.get("exec_rec_drafts", {})
             if not _drafts:
                 errors.append(
@@ -104,8 +107,40 @@ def check_prerequisites() -> list[str]:
                     "executive recommendation. Run agents to populate exec_rec_drafts "
                     "before board pack generation."
                 )
+
+            # Item 3: recompute_required gate
+            _recompute_needed: list[str] = []
+            for _bucket in ["operational_risks", "strategic_risks",
+                            "financial_risks", "compliance_risks"]:
+                for _rid, _robj in _store.get(_bucket, {}).items():
+                    for _kname, _kdata in _robj.get("kris", {}).items():
+                        if isinstance(_kdata, dict) and _kdata.get("recompute_required"):
+                            _recompute_needed.append(f"{_rid}/{_kname}")
+            if _recompute_needed:
+                errors.append(
+                    f"CRITICAL [RECOMPUTE-REQUIRED]: {len(_recompute_needed)} KRI(s) "
+                    f"have recompute_required=True — values are stale and must be "
+                    f"recomputed before board pack generation: "
+                    f"{', '.join(_recompute_needed)}"
+                )
         except Exception:
             pass
+
+    # Item 2: Run structural KRI threshold checks — block on any ERROR-level finding
+    try:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from tools.kri_threshold_validator import load_thresholds, check_thresholds
+        _thresh_path = Path(__file__).parent / "data" / "kri_thresholds.csv"
+        if _thresh_path.exists():
+            _rows = load_thresholds(_thresh_path)
+            _thresh_issues = [i for i in check_thresholds(_rows) if i["severity"] == "ERROR"]
+            for _issue in _thresh_issues:
+                errors.append(
+                    f"CRITICAL [THRESHOLD-INTEGRITY/{_issue['code']}] "
+                    f"{_issue['ref']}: {_issue['detail']}"
+                )
+    except Exception:
+        pass
 
     return errors
 
