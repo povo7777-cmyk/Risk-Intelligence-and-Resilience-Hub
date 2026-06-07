@@ -236,7 +236,6 @@ def _compute_strategic() -> dict:
     signals    = read_csv_latest("market_intelligence.csv")
     s01_count  = float(len([s for s in signals if s.get("risk_id") == "S-01"]))
     s02_count  = float(len([s for s in signals if s.get("risk_id") == "S-02"]))
-    high_count = float(len([s for s in signals if s.get("severity") == "high"]))
 
     # S-01 — ODM/EMS concentration in PRC-jurisdiction (current period)
     sc_rows  = read_csv_latest("erp_supply_chain.csv")
@@ -372,7 +371,7 @@ def _compute_agent_context() -> dict:
     try:
         signals = read_csv_latest("market_intelligence.csv")
         s01_signals  = [s for s in signals if s.get("risk_id") == "S-01"]
-        high_signals = [s for s in signals if s.get("severity") == "high"]
+        high_signals = [s for s in s01_signals if s.get("severity") == "high"]
         ctx["S-01"] = {
             "geopolitical_signal_count": len(s01_signals),
             "high_severity_signal_count": len(high_signals),
@@ -424,11 +423,11 @@ def _compute_agent_context() -> dict:
     except Exception:
         ctx["C-02"] = {}
 
-    # C-03: whistleblower high findings (current period)
+    # C-03: whistleblower high findings — sum ALL Whistleblower rows (current period)
     try:
         audit_wb = read_csv_latest("audit_log.csv")
-        wb = next((r for r in audit_wb if "Whistleblower" in r.get("audit_type", "")), {})
-        ctx["C-03"] = {"whistleblower_high_findings": int(wb.get("high_findings", 0))}
+        wb_rows = [r for r in audit_wb if "Whistleblower" in r.get("audit_type", "")]
+        ctx["C-03"] = {"whistleblower_high_findings": int(sum(int(r.get("high_findings", 0)) for r in wb_rows))}
     except Exception:
         ctx["C-03"] = {}
 
@@ -573,6 +572,30 @@ def _compute_qoq_deltas() -> dict:
     _compare("C-02", "ai_audit_coverage_pct",         cm_p.get("ai_audit_coverage_pct"),         cm_c.get("ai_audit_coverage_pct"))
     _compare("C-03", "third_party_abac_coverage_pct", cm_p.get("third_party_abac_coverage_pct"), cm_c.get("third_party_abac_coverage_pct"))
 
+    # ── Strategic signals ─────────────────────────────────────────────────────
+    mi_p = read_csv_prior("market_intelligence.csv")
+    mi_c = read_csv_latest("market_intelligence.csv")
+    if mi_p and mi_c:
+        _compare("S-01", "geopolitical_signal_count",
+                 float(len([s for s in mi_p if s.get("risk_id") == "S-01"])),
+                 float(len([s for s in mi_c if s.get("risk_id") == "S-01"])))
+        _compare("S-02", "competitive_signals",
+                 float(len([s for s in mi_p if s.get("risk_id") == "S-02"])),
+                 float(len([s for s in mi_c if s.get("risk_id") == "S-02"])))
+
+    # ── M&A synergy ────────────────────────────────────────────────────────────
+    try:
+        pip_p = read_csv_prior("ma_pipeline.csv")
+        pip_c = read_csv_latest("ma_pipeline.csv")
+        int_p = [d for d in pip_p if d.get("stage", "").startswith("Integration")]
+        int_c = [d for d in pip_c if d.get("stage", "").startswith("Integration")]
+        if int_p and int_c:
+            syn_p = round(sum(float(d["synergy_delivered_pct"]) for d in int_p) / len(int_p), 1)
+            syn_c = round(sum(float(d["synergy_delivered_pct"]) for d in int_c) / len(int_c), 1)
+            _compare("S-03", "synergy_delivery_pct", syn_p, syn_c)
+    except Exception:
+        pass
+
     # ── Summarise ──────────────────────────────────────────────────────────────
     deteriorating = [m for m in movements if m["trend"] == "deteriorating"]
     improving     = [m for m in movements if m["trend"] == "improving"]
@@ -621,11 +644,93 @@ _BUCKET_MAP = {
     "C": "compliance_risks",
 }
 
+# KRI-status → (likelihood_score, impact_score) deltas applied to base risk rating.
+# Aggregation rule: breach KRI → HIGH minimum; 2+ ambers → MEDIUM minimum.
+_STATUS_RANK = {"ok": 0, "amber": 1, "breach": 2}
+_SCORE_MAP   = {
+    # (likelihood, impact) → label
+    (1, 1): "low",   (1, 2): "low",   (1, 3): "medium",
+    (2, 1): "low",   (2, 2): "medium",(2, 3): "high",
+    (3, 1): "medium",(3, 2): "high",  (3, 3): "high",
+}
 
-def _write_to_store(dashboard_kris: dict):
+
+def _recompute_ratings(store: dict) -> None:
     """
-    Write dashboard KRI values directly to risk_store.json.
-    Uses file locking (same as risk_writer) to avoid corruption.
+    Re-derive each risk's aggregate severity label (lv) and likelihood score (l)
+    from the live KRI statuses currently in the store.  Overwrites static values.
+
+    Rules:
+      - Any breach KRI       → likelihood ≥ 3 (high); label ≥ "high"
+      - ≥ 2 amber KRIs       → likelihood ≥ 2 (medium); label ≥ "medium"
+      - All KRIs ok          → likelihood stays at base value from risk_register
+    Impact (i) is kept from the existing store value — KRI data alone cannot
+    determine consequence magnitude; that requires expert judgment.
+    """
+    _buckets = [
+        "operational_risks", "strategic_risks",
+        "financial_risks", "compliance_risks",
+    ]
+    changed: list[str] = []
+
+    for bucket in _buckets:
+        for risk_id, risk_obj in store.get(bucket, {}).items():
+            kris = risk_obj.get("kris", {})
+            statuses = [
+                kri.get("status", "ok")
+                for kri in kris.values()
+                if isinstance(kri, dict) and "status" in kri
+            ]
+            if not statuses:
+                continue
+
+            breach_count = statuses.count("breach")
+            amber_count  = statuses.count("amber")
+
+            # Derive minimum likelihood from KRI state
+            if breach_count >= 1:
+                min_l = 3
+            elif amber_count >= 2:
+                min_l = 2
+            elif amber_count == 1:
+                min_l = max(1, risk_obj.get("l", 1))  # don't downgrade
+            else:
+                min_l = risk_obj.get("l", 1)          # all ok — preserve
+
+            # Never downgrade existing score (experts may have set it higher)
+            current_l = risk_obj.get("l", 1)
+            new_l = max(current_l, min_l)
+
+            # Derive label from (l, i) lookup
+            current_i = risk_obj.get("i", risk_obj.get("impact", 2))
+            new_lv = _SCORE_MAP.get((new_l, current_i), risk_obj.get("lv", "medium"))
+            # Hard floor: any breach → at least "high"
+            if breach_count >= 1 and new_lv not in ("high", "critical"):
+                new_lv = "high"
+
+            if new_l != current_l or new_lv != risk_obj.get("lv"):
+                changed.append(
+                    f"{risk_id}: l {current_l}→{new_l}, lv '{risk_obj.get('lv')}'→'{new_lv}' "
+                    f"({breach_count} breach, {amber_count} amber)"
+                )
+                store[bucket][risk_id]["l"]  = new_l
+                store[bucket][risk_id]["lv"] = new_lv
+                store[bucket][risk_id]["rating_auto_updated"] = (
+                    datetime.now(timezone.utc).isoformat()
+                )
+
+    if changed:
+        print(f"  [RATING RECOMPUTE] {len(changed)} risk rating(s) updated from KRI status:")
+        for c in changed:
+            print(f"    ↳ {c}")
+
+
+def _write_to_store(dashboard_kris: dict, agent_ctx: dict = None):
+    """
+    Write dashboard KRI values and agent context to risk_store.json.
+    Agent context is persisted so kri_validator can independently recompute
+    and diff it — keeping agent context inside the same validation loop as KRIs.
+    Uses file locking to avoid corruption.
     """
     import fcntl
     with open(STORE_PATH, "r+") as f:
@@ -646,6 +751,13 @@ def _write_to_store(dashboard_kris: dict):
                             "value":  kri["value"],
                             "status": kri["status"],
                         }
+
+            if agent_ctx:
+                store["agent_context"] = agent_ctx
+
+            # Item 4: Auto-recompute parent risk ratings from aggregated KRI status.
+            # Prevents static lv/l values diverging from live KRI results.
+            _recompute_ratings(store)
 
             store["last_updated"] = datetime.now(timezone.utc).isoformat()
             store["kri_last_computed"] = datetime.now(timezone.utc).isoformat()
@@ -718,8 +830,8 @@ def run() -> dict:
         "compliance_risks":  com_kris,
     }
 
-    # Write dashboard KRIs to store
-    _write_to_store(dashboard_kris)
+    # Write dashboard KRIs and agent context to store
+    _write_to_store(dashboard_kris, agent_ctx)
 
     # Build summary
     all_kris = [k for domain in dashboard_kris.values()
