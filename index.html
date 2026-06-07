@@ -403,12 +403,12 @@ input[type=range]{width:100%;accent-color:var(--navy)}
 
 <!-- ── BOARD PACK PAGE ── -->
 <div id="pg-bp" class="pg" style="background:var(--dark-bg);padding:0;max-width:none;margin:0">
-  <div class="hero-shell" style="padding:2rem 1.5rem 1.75rem;border-bottom:1px solid rgba(255,255,255,.07)">
-    <div class="hero-inner">
+  <div class="hero-shell" style="padding:2rem 1.5rem 2rem;border-bottom:1px solid rgba(255,255,255,.07)">
+    <div class="hero-inner" style="max-width:960px">
       <div style="font-size:10px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">Board Pack</div>
       <div style="font-family:'DM Serif Display',serif;font-size:26px;color:#fff;letter-spacing:.01em;margin-bottom:5px">Risk Committee Summary</div>
       <div style="font-size:12px;color:rgba(255,255,255,.55);margin-bottom:1.4rem">Enterprise Risk Management &middot; Q2 2026 &middot; <span id="pg-bp-meta"></span></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:1.5rem">
         <div style="display:flex;align-items:center;gap:6px;background:rgba(239,68,68,.13);border:1px solid rgba(239,68,68,.28);border-radius:6px;padding:5px 12px">
           <span style="width:6px;height:6px;border-radius:50%;background:var(--red-md);flex-shrink:0"></span>
           <span style="font-size:11px;color:var(--red-md)"><span id="bp-kpi-red" style="font-weight:700">—</span> KRI breaches</span>
@@ -422,12 +422,13 @@ input[type=range]{width:100%;accent-color:var(--navy)}
           <span style="font-size:11px;color:rgba(255,255,255,.7)">Systemic risk flag active &mdash; 4 domains in breach</span>
         </div>
       </div>
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.35);margin-bottom:0.5rem">KRI Breach Distribution &mdash; All 4 Domains Active</div>
+      <div id="bp-seg-bar" style="display:flex;height:6px;margin-bottom:0.85rem;gap:2px"></div>
+      <div id="bp-domain-cards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:0.9rem"></div>
     </div>
   </div>
-  <div style="padding:1.75rem 1.5rem 3rem;max-width:1140px;margin:0 auto">
-    <div class="card" style="border-left:4px solid var(--red-md)">
-      <div id="pg-bp-content"></div>
-    </div>
+  <div style="padding:1.5rem 1.5rem 3rem;max-width:900px;margin:0 auto">
+    <div id="pg-bp-content"></div>
   </div>
 </div>
 
@@ -1170,16 +1171,100 @@ function sw(n,btn){
   if(n==='bp'){
     var src=document.getElementById('board-summary-text');
     var dst=document.getElementById('pg-bp-content');
-    if(src&&dst)dst.innerHTML=src.innerHTML;
+    function _bpDarkify(h){
+      // Section wrappers → padded dark cards
+      h=h.replaceAll('margin-bottom:0.55rem;padding:0.4rem 0.6rem 0.4rem 0.7rem;border-left:3px solid',
+        'margin-bottom:1rem;padding:1.1rem 1.25rem;border-radius:9px;border-left:2px solid');
+      h=h.replaceAll('margin-bottom:0;padding:0.4rem 0.6rem 0.4rem 0.7rem;border-left:3px solid',
+        'margin-bottom:0;padding:1.1rem 1.25rem;border-radius:9px;border-left:2px solid');
+      h=h.replaceAll(';background:rgba(0,0,0,0.02)',';background:rgba(255,255,255,.04)');
+      // Domain sub-sections in Risk Posture
+      h=h.replaceAll('padding:0.35rem 0.55rem 0.35rem 0.65rem;',
+        'padding:0.55rem 0.7rem 0.55rem 0.8rem;');
+      h=h.replaceAll(';background:rgba(0,0,0,0.015)',';background:rgba(255,255,255,.03)');
+      h=h.replaceAll('padding:0.55rem 0.7rem 0.55rem 0.8rem;border-left:2px solid',
+        'padding:0.55rem 0.7rem 0.55rem 0.8rem;border-radius:5px;border-left:2px solid');
+      // Section header: bigger letter-spacing + separator line
+      h=h.replaceAll(';letter-spacing:.06em;margin-bottom:6px',
+        ';letter-spacing:.1em;margin-bottom:0.8rem;padding-bottom:0.5rem;border-bottom:1px solid rgba(255,255,255,.09)');
+      // Domain sub-label: slightly bigger letter-spacing
+      h=h.replaceAll(';letter-spacing:.05em;margin-bottom:4px',';letter-spacing:.08em;margin-bottom:5px');
+      // Section header colours on dark bg
+      h=h.replaceAll('color:#7f8c8d;text-transform:uppercase','color:#8b9ab0;text-transform:uppercase');
+      h=h.replaceAll('color:var(--navy);text-transform:uppercase','color:#a5b4fc;text-transform:uppercase');
+      // Section header font size (shared with sub-labels — acceptable)
+      h=h.replaceAll('font-size:10px;font-weight:700;','font-size:11px;font-weight:700;');
+      // Action number badge — before general var(--txt) sweep
+      h=h.replaceAll(
+        'font-size:11px;font-weight:700;color:var(--navy);min-width:20px;padding-top:2px;flex-shrink:0;line-height:1',
+        'font-size:12px;font-weight:700;color:#a5b4fc;min-width:24px;width:24px;height:24px;flex-shrink:0;background:rgba(100,120,255,.2);border-radius:5px;display:flex;align-items:center;justify-content:center');
+      // All body text
+      h=h.replaceAll('color:var(--txt)','color:rgba(255,255,255,.82)');
+      // Paragraph separator lines
+      h=h.replaceAll('border-bottom:1px solid rgba(0,0,0,0.05)','border-bottom:1px solid rgba(255,255,255,.07)');
+      // Line height
+      h=h.replaceAll('line-height:1.55','line-height:1.65');
+      // Action item rows
+      h=h.replaceAll(';background:rgba(0,0,80,0.03);border-radius:3px',
+        ';background:rgba(100,120,255,.09);border:1px solid rgba(100,120,255,.18);border-radius:7px');
+      h=h.replaceAll('gap:0.55rem;margin-bottom:0.4rem;padding:0.45rem 0.55rem;',
+        'gap:0.8rem;margin-bottom:0.55rem;padding:0.65rem 0.75rem;');
+      h=h.replaceAll('gap:0.55rem;padding:0.45rem 0.55rem;',
+        'gap:0.8rem;padding:0.65rem 0.75rem;');
+      // Section icons
+      h=h.replace('>Risk Posture<','><i class="ti ti-activity" style="margin-right:6px;font-size:12px"></i>Risk Posture<');
+      h=h.replace('>Key Risk Drivers<','><i class="ti ti-flame" style="margin-right:6px;font-size:12px"></i>Key Risk Drivers<');
+      h=h.replace('>Cross-Domain Connections<','><i class="ti ti-arrows-exchange" style="margin-right:6px;font-size:12px"></i>Cross-Domain Connections<');
+      h=h.replace('>Quarter-On-Quarter Movement<','><i class="ti ti-trending-up" style="margin-right:6px;font-size:12px"></i>Quarter-On-Quarter Movement<');
+      h=h.replace('>Risk Committee Recommended Actions<','><i class="ti ti-list-check" style="margin-right:6px;font-size:12px"></i>Risk Committee Recommended Actions<');
+      return h;
+    }
+    if(src&&dst)dst.innerHTML=_bpDarkify(src.innerHTML);
     var meta=document.getElementById('board-summary-meta');
     var bpMeta=document.getElementById('pg-bp-meta');
     if(meta&&bpMeta)bpMeta.textContent=meta.textContent;
     if(typeof KRI_DATA!=='undefined'){
-      var vals=Object.values(KRI_DATA);
-      var elR=document.getElementById('bp-kpi-red');
-      var elA=document.getElementById('bp-kpi-amb');
-      if(elR)elR.textContent=vals.filter(function(d){return d.ts==='br';}).length;
-      if(elA)elA.textContent=vals.filter(function(d){return d.ts==='am';}).length;
+      var _domMeta={
+        s:{name:'Strategic',  color:'#e8c547',br:0,am:0,tot:0},
+        o:{name:'Operational',color:'#f97316',br:0,am:0,tot:0},
+        f:{name:'Financial',  color:'#3b82f6',br:0,am:0,tot:0},
+        c:{name:'Compliance', color:'#a78bfa',br:0,am:0,tot:0}
+      };
+      Object.keys(KRI_DATA).forEach(function(k){
+        var p=k[0],v=KRI_DATA[k];
+        if(_domMeta[p]){_domMeta[p].tot++;if(v.ts==='br')_domMeta[p].br++;if(v.ts==='am')_domMeta[p].am++;}
+      });
+      var _totBr=Object.values(_domMeta).reduce(function(s,d){return s+d.br;},0);
+      var _totAm=Object.values(_domMeta).reduce(function(s,d){return s+d.am;},0);
+      var _elR=document.getElementById('bp-kpi-red');
+      var _elA=document.getElementById('bp-kpi-amb');
+      if(_elR)_elR.textContent=_totBr;
+      if(_elA)_elA.textContent=_totAm;
+      var _ord=Object.keys(_domMeta).sort(function(a,b){return _domMeta[b].br-_domMeta[a].br;});
+      var _seg=document.getElementById('bp-seg-bar');
+      if(_seg)_seg.innerHTML=_ord.map(function(d){
+        var m=_domMeta[d];
+        var pct=_totBr>0?Math.round(m.br/_totBr*100):0;
+        return '<div style="flex:'+m.br+';min-width:4px;background:'+m.color
+          +';opacity:.82;border-radius:3px" title="'+m.name+': '+m.br+' breaches ('+pct+'%)"></div>';
+      }).join('');
+      var _cards=document.getElementById('bp-domain-cards');
+      if(_cards)_cards.innerHTML=_ord.map(function(d){
+        var m=_domMeta[d];
+        var pct=_totBr>0?Math.round(m.br/_totBr*100):0;
+        var rate=m.tot>0?Math.round(m.br/m.tot*100):0;
+        return '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-top:2px solid '
+          +m.color+';border-radius:8px;padding:.7rem .8rem;min-width:0">'
+          +'<div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:'+m.color+';margin-bottom:5px">'+m.name+'</div>'
+          +'<div style="display:flex;align-items:baseline;gap:4px;margin-bottom:3px">'
+          +'<span style="font-size:26px;font-weight:700;color:#ef4444;font-family:\'JetBrains Mono\',monospace;line-height:1">'+m.br+'</span>'
+          +'<span style="font-size:9px;color:rgba(255,255,255,.38)">breach'+(m.br!==1?'es':'')+'</span>'
+          +'</div>'
+          +'<div style="font-size:9px;color:rgba(255,255,255,.6);margin-bottom:2px"><strong>'+pct+'%</strong> of all breaches</div>'
+          +'<div style="font-size:9px;color:rgba(255,255,255,.38);margin-bottom:2px">'+rate+'% KRI breach rate</div>'
+          +(m.am>0?'<div style="margin-top:5px;padding:2px 6px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:4px;font-size:8.5px;color:rgba(245,158,11,.85);display:inline-block">+'+m.am+' amber</div>':'')
+          +'</div>';
+      }).join('');
     }
   }
 }
