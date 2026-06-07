@@ -44,7 +44,7 @@ def _parse_treasury() -> dict:
 
 
 def _parse_ar() -> dict:
-    rows = read_csv("ar_aging.csv")
+    rows = read_csv_latest("ar_aging.csv")  # latest period only — prevents cross-period double-count
     top_conc = max((float(r.get("top_customer_concentration_pct", 0)) for r in rows), default=22.1)
     overdue_90 = sum(float(r.get("overdue_90d_usd_m", 0)) for r in rows)
     total_current = sum(float(r.get("current_usd_m", 0)) for r in rows)
@@ -143,7 +143,7 @@ def run(kri_data: dict | None = None) -> dict:
                 {"name": "top_customer_concentration_pct", "value": top_customer_pct, "unit": "%",
                  "status": "breach" if top_customer_pct >= 25 else "amber" if top_customer_pct >= 20 else "ok"},
                 {"name": "bad_debt_provision_pct", "value": bad_debt_pct, "unit": "%",
-                 "status": "breach" if bad_debt_pct >= 0.70 else "amber" if bad_debt_pct >= 0.55 else "ok"},
+                 "status": "breach" if bad_debt_pct >= 0.55 else "amber" if bad_debt_pct >= 0.40 else "ok"},
             ],
             "F-03": [
                 {"name": "net_debt_ebitda_ratio", "value": net_debt_ebitda, "unit": "ratio",
@@ -196,7 +196,7 @@ def run(kri_data: dict | None = None) -> dict:
         f"maturity {r['maturity_months']}mo, counterparty {r['counterparty']}"
         for r in treasury_rows
     )
-    ar_rows = read_csv("ar_aging.csv")
+    ar_rows = read_csv_latest("ar_aging.csv")  # latest period only
     ar_lines = "\n".join(
         f"  {r['segment']} ({r['customer_tier']}): current ${r['current_usd_m']}M, "
         f"overdue_30d ${r['overdue_30d_usd_m']}M, overdue_60d ${r['overdue_60d_usd_m']}M, "
@@ -235,7 +235,7 @@ def run(kri_data: dict | None = None) -> dict:
 F-02 AR AGING (all rows from ar_aging.csv):
 {ar_lines}
   Totals: top_customer={top_customer_pct}%, overdue_90d_usd=${overdue_90d_usd}M (context only), bad_debt={bad_debt_pct}%
-  (amber: top_customer>20% | bad_debt>0.55% — breach: >25% | >0.70%)
+  (amber: top_customer>20% | bad_debt>0.40% — breach: >25% | >0.55%; COV006 covenant threshold=0.80%)
 
 F-03 COVENANTS (all rows from covenant_tracker.csv):
 {cov_lines}

@@ -143,6 +143,7 @@ Minimum inventory cover: {sc.get('min_inventory_weeks',0)} weeks
   (amber threshold: 6wk | breach threshold: 4wk — lower is worse)
 Supplier distress flags (financial_health < 65): {sc.get('supplier_distress_flags',0)}
   (amber threshold: 1 | breach threshold: 3)
+  Flagged suppliers: {", ".join(f"{r['supplier_name']} [{r['supplier_id']}] score={r['financial_health_score']}" for r in sc.get("raw_rows",[]) if float(r.get("financial_health_score",100)) < 65)}
 Geographic concentration: {geo_str}
 
 Single-source suppliers ({len(single_source_rows)} of {sc.get('suppliers_assessed',0)}):

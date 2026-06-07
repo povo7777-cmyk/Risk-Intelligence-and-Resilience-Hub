@@ -285,6 +285,16 @@ def calibrate_ebitda(raw: dict) -> dict:
         # Covenant
         "covenant_floor_usd_b":     round(cov_floor_b, 2),
         "ebitda_headroom_usd_m":    ebitda_headroom_m,
+        # MODEL SCOPE NOTE: p_covenant_breach_pct (Monte Carlo) stress-tests COV001
+        # Net Debt/EBITDA forward probability only. COV006 bad_debt_provision_pct is
+        # ALREADY IN CONFIRMED BREACH (current 1.44% > 0.80% threshold) — it requires
+        # no forward probability; it requires immediate cure/waiver action by 2026-06-12.
+        # The fields below capture COV006 confirmed-breach status and cure cost impact.
+        "model_scope_note": (
+            "p_covenant_breach_pct models forward P(COV001 breach) only. "
+            "COV006 is confirmed in active breach (1.44% > 0.80%) — cure/waiver action "
+            "required by 2026-06-12, not probabilistic modelling."
+        ),
         # COV006 active breach — cure cost reduces practical EBITDA headroom
         "cov006_breach":                cov006_breach,
         "cov006_cure_cost_usd_m":       cov006_cure_cost_usd_m,
@@ -326,13 +336,25 @@ def calibrate_hedge(raw: dict) -> dict:
     if not treasury:
         return {}
 
+    # Total portfolio (FX + commodity) — retained for Monte Carlo simulation inputs only
     gross_total  = sum(float(r["gross_exposure_usd_m"]) for r in treasury)
     hedged_total = sum(float(r["hedged_amount_usd_m"])  for r in treasury)
     pnl_total    = sum(float(r["unrealised_pnl_usd_m"]) for r in treasury)
 
-    hedge_ratio  = round(hedged_total / gross_total * 100, 1) if gross_total else 0
-    unhedged     = round(gross_total - hedged_total, 0)
-    gross_b      = round(gross_total / 1000, 2)          # USD B (for JS base variable)
+    # FX-only scope (Revenue + Cost positions) — PRIMARY KRI F-01 scope per CF-04 2026-06-07
+    # All dashboard figures, exec recs, and board narrative must reference FX-only.
+    _fx_types  = ("Revenue", "Cost")
+    _fx_rows   = [r for r in treasury if r.get("exposure_type", "") in _fx_types]
+    fx_gross_primary  = sum(float(r["gross_exposure_usd_m"]) for r in _fx_rows)
+    fx_hedged_primary = sum(float(r["hedged_amount_usd_m"])  for r in _fx_rows)
+    fx_pnl_primary    = sum(float(r["unrealised_pnl_usd_m"]) for r in _fx_rows)
+    fx_unhedged_primary = round(fx_gross_primary - fx_hedged_primary, 0)
+    fx_hedge_ratio_primary = round(fx_hedged_primary / fx_gross_primary * 100, 1) if fx_gross_primary else 0
+
+    # Primary KRI-aligned scalars (FX-only)
+    hedge_ratio  = fx_hedge_ratio_primary
+    unhedged     = fx_unhedged_primary
+    gross_b      = round(fx_gross_primary / 1000, 2)   # FX-only USD B (for JS base variable)
 
     # Estimate hedge cost: all-in cost on hedged notional
     # Includes bid/ask spread, collateral cost, and time-value adjustment.
@@ -476,13 +498,19 @@ def calibrate_hedge(raw: dict) -> dict:
 
     return {
         # Slider parameters
-        "gross_exposure_usd_m":   round(gross_total, 0),
-        "gross_exposure_usd_b":   gross_b,
-        "hedged_amount_usd_m":    round(hedged_total, 0),
-        "unhedged_usd_m":         unhedged,
-        "hedge_ratio_pct":        hedge_ratio,
-        "hedge_ratio_slider":     int(round(hedge_ratio / 5) * 5),  # nearest step-5
-        "unrealised_pnl_usd_m":   round(pnl_total, 1),
+        # Primary figures — FX-only scope (aligned with KRI F-01 per CF-04 2026-06-07)
+        "gross_exposure_usd_m":   round(fx_gross_primary, 0),   # FX-only: 7,600
+        "gross_exposure_usd_b":   gross_b,                       # FX-only USD B
+        "hedged_amount_usd_m":    round(fx_hedged_primary, 0),  # FX-only: 3,520
+        "unhedged_usd_m":         unhedged,                      # FX-only: 4,080
+        "hedge_ratio_pct":        hedge_ratio,                   # FX-only: 46.3%
+        "hedge_ratio_slider":     int(round(hedge_ratio / 5) * 5),
+        "unrealised_pnl_usd_m":   round(fx_pnl_primary, 1),    # FX-only: -26.6M
+        # Supplementary — total portfolio (FX + commodity) for transparency
+        "total_portfolio_gross_usd_m":     round(gross_total, 0),   # 9,140
+        "total_portfolio_hedged_usd_m":    round(hedged_total, 0),  # 4,200
+        "total_portfolio_unhedged_usd_m":  round(gross_total - hedged_total, 0),  # 4,940
+        "total_portfolio_pnl_usd_m":       round(pnl_total, 1),     # -47.0M
         "pnl_corrected_usd_m":    pnl_corrected,
         "pnl_audit_flags":        pnl_audit_flags,
         "hedge_cost_usd_m":       int(round(hedge_cost_m / 10) * 10),  # nearest 10
