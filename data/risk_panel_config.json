@@ -1,0 +1,26 @@
+{
+    "_description": "Risk Validation Panel configuration — single source of truth for panel-specific parameters. All values in risk_panel_agent.py must be sourced from this file, not hardcoded.",
+    "_updated": "2026-06-07",
+
+    "deterministic_checks": {
+        "_description": "Parameters for Python-level cross-checks that do not require LLM judgment.",
+        "materiality_threshold_pct": 5.0,
+        "_materiality_note": "Minimum discrepancy (as % of reference value) required to raise a finding. Rounding differences below this are not reported."
+    },
+
+    "fx_unhedged_tile": {
+        "_description": "KRI identity for the unhedged FX exposure tile regression check. Risk panel reads actual value and threshold from live data sources — not hardcoded.",
+        "risk_id": "F-01",
+        "kri_name": "unhedged_fx_exposure_usd_m",
+        "store_path": ["financial_risks", "F-01", "kris", "unhedged_fx_exposure_usd_m", "value"],
+        "threshold_kri_name": "unhedged_fx_exposure_usd_m",
+        "threshold_column": "breach_threshold"
+    },
+
+    "cyber_supply_overlap": {
+        "_description": "Cross-domain MTTD+MTTR vs inventory cover check. Inventory cover is derived dynamically from the minimum inventory_weeks across all supply chain rows — no hardcoded supplier name or week count.",
+        "inventory_weeks_column": "inventory_weeks",
+        "inventory_cover_fallback_weeks": 4.0,
+        "_fallback_note": "Used only if erp_supply_chain.csv is empty or missing — should not occur in production."
+    }
+}
