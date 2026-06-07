@@ -1,4 +1,155 @@
 {
-  "open": {},
+  "open": {
+    "MO-01": {
+      "title": "COV006 live breach not reflected in P(covenant breach) \u2014 board told 69.4% when joint probability is 100%",
+      "severity": "HIGH",
+      "owner": "CFO / CRO / Model Owner",
+      "first_seen_run": "20260606",
+      "first_seen_date": "2026-06-06",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 2
+    },
+    "MO-04": {
+      "title": "Revenue-at-risk $8B not reconciled to single-source spend $7.9B \u2014 undocumented conversion factor undermines VaR baseline",
+      "severity": "HIGH",
+      "owner": "COO / Model Owner",
+      "first_seen_run": "20260606",
+      "first_seen_date": "2026-06-06",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 2
+    },
+    "EM-03": {
+      "title": "S-03 synergy_delivery_pct amber/breach band only 5pp \u2014 insufficient early-warning window for USD 1.2B M&A integration",
+      "severity": "HIGH",
+      "owner": "CFO / CEO",
+      "first_seen_run": "20260606",
+      "first_seen_date": "2026-06-06",
+      "last_seen_run": "20260606",
+      "last_seen_date": "2026-06-06",
+      "times_seen": 1
+    },
+    "EM-04": {
+      "title": "Yangtze Memory (financial health 55, $650M spend, 14-week lead time) unnamed in board narrative \u2014 material supplier distress concealed from board",
+      "severity": "HIGH",
+      "owner": "COO / VP Supply Chain",
+      "first_seen_run": "20260606",
+      "first_seen_date": "2026-06-06",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 2
+    },
+    "EM-05": {
+      "title": "Field failure rate 40x discrepancy between board narrative (1.9%) and live KRI store (0.048%) \u2014 critical data lineage failure",
+      "severity": "HIGH",
+      "owner": "CRO / COO",
+      "first_seen_run": "20260606",
+      "first_seen_date": "2026-06-06",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 2
+    },
+    "EM-06": {
+      "title": "ai_audit_coverage_pct agent narrative misclassifies confirmed breach (78%) as amber \u2014 EU AI Act remediation will be under-prioritised",
+      "severity": "HIGH",
+      "owner": "CTO / CCO",
+      "first_seen_run": "20260606",
+      "first_seen_date": "2026-06-06",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 2
+    },
+    "MO-05": {
+      "title": "p_covenant_breach_pct 44.2% (amber, 5.8pp from breach trigger) absent from EBITDA executive recommendation \u2014 board anchored on lagging headroom metric",
+      "severity": "HIGH",
+      "owner": "CFO",
+      "first_seen_run": "20260606",
+      "first_seen_date": "2026-06-06",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 2
+    },
+    "MO-06": {
+      "title": "Supply chain EBITDA VaR $2,315M exceeds total EBITDA $2,280M \u2014 uninterpretable without scenario weighting and EBITDA floor constraint",
+      "severity": "HIGH",
+      "owner": "COO / Model Owner",
+      "first_seen_run": "20260606",
+      "first_seen_date": "2026-06-06",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 2
+    },
+    "CYBER-SUPPLYCHAIN-OVERLAP": {
+      "title": "MTTD+MTTR combined cyber response time (29 days) exceeds Quanta inventory cover (27 days) by 2 days \u2014 production halt guaranteed if cyber incident disrupts supplier communications",
+      "severity": "HIGH",
+      "owner": "CISO / COO / VP Supply Chain",
+      "first_seen_run": "20260606",
+      "first_seen_date": "2026-06-06",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 3
+    },
+    "EM-02": {
+      "title": "COV006 covenant breach escalation suppressed without documented CRO adjudication \u2014 active lender notification obligation at risk",
+      "severity": "HIGH",
+      "owner": "CRO",
+      "first_seen_run": "20260607",
+      "first_seen_date": "2026-06-07",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 2
+    },
+    "MO-02": {
+      "title": "Commodity exposures (COM001/COM002, USD 1,540M) classified as FX in Hedge Analyser \u2014 F-01 unhedged_fx_exposure_usd_m KRI overstated by USD 1.5B; commodity risk masked under wrong KRI",
+      "severity": "HIGH",
+      "owner": "Group Treasurer",
+      "first_seen_run": "20260607",
+      "first_seen_date": "2026-06-07",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 3
+    },
+    "MO-03": {
+      "title": "Hedge Analyser FX003 (USD/JPY) unrealised P&L arithmetic does not reconcile \u2014 model reports \u2212USD 15.6M vs independently derived \u2212USD 10.3M; USD 5.3M discrepancy suggests duration or notional scaling error",
+      "severity": "HIGH",
+      "owner": "Group Treasurer / Quant Team",
+      "first_seen_run": "20260607",
+      "first_seen_date": "2026-06-07",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 3
+    },
+    "MO-06 / EM-05 (linked)": {
+      "title": "Quanta three concurrent operational breaches not captured in supplier_distress_flags KRI; Yangtze Memory (health score 55, lowest in supply base) also absent from distress flag methodology",
+      "severity": "HIGH",
+      "owner": "CRO / VP Supply Chain",
+      "first_seen_run": "20260607",
+      "first_seen_date": "2026-06-07",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 1
+    },
+    "EM-08": {
+      "title": "BCM exec rec directs CRO to confirm own BCM playbooks \u2014 governance circularity, BCM accountability unclaimed in escalation chain",
+      "severity": "HIGH",
+      "owner": "CRO / COO / CISO",
+      "first_seen_run": "20260607",
+      "first_seen_date": "2026-06-07",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 1
+    },
+    "DET-01 / CYBER-SUPPLYCHAIN-OVERLAP": {
+      "title": "Combined cyber response time (MTTD 11d + MTTR 18d = 29d) exceeds Quanta inventory cover window (27d) by 2 days \u2014 production halt guaranteed if a cyber incident disrupts Quanta supplier communications",
+      "severity": "HIGH",
+      "owner": "CISO / COO",
+      "first_seen_run": "20260607",
+      "first_seen_date": "2026-06-07",
+      "last_seen_run": "20260607",
+      "last_seen_date": "2026-06-07",
+      "times_seen": 1
+    }
+  },
   "resolved": {}
 }

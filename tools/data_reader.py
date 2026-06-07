@@ -18,12 +18,49 @@ def read_csv(filename: str) -> list[dict]:
         return list(csv.DictReader(f))
 
 
+def _dates_in(rows: list[dict]) -> list[str]:
+    """Return sorted unique dates from a row list, most recent first."""
+    return sorted(set(r.get("date", "") for r in rows if r.get("date")), reverse=True)
+
+
+def read_csv_latest(filename: str) -> list[dict]:
+    """Read only the rows belonging to the most recent date in the CSV."""
+    rows = read_csv(filename)
+    dates = _dates_in(rows)
+    if not dates:
+        return rows
+    return [r for r in rows if r.get("date") == dates[0]]
+
+
+def read_csv_prior(filename: str) -> list[dict]:
+    """Read only the rows belonging to the second-most-recent date (prior period)."""
+    rows = read_csv(filename)
+    dates = _dates_in(rows)
+    if len(dates) < 2:
+        return []
+    return [r for r in rows if r.get("date") == dates[1]]
+
+
+def latest_date(filename: str) -> str | None:
+    """Return the most recent date string in a CSV, or None."""
+    rows = read_csv(filename)
+    dates = _dates_in(rows)
+    return dates[0] if dates else None
+
+
+def prior_date(filename: str) -> str | None:
+    """Return the second-most-recent date string in a CSV, or None."""
+    rows = read_csv(filename)
+    dates = _dates_in(rows)
+    return dates[1] if len(dates) >= 2 else None
+
+
 def get_supply_chain_data() -> dict:
     """
-    Reads ERP supply chain extract.
+    Reads ERP supply chain extract (current period only).
     Returns concentration metrics, inventory, supplier health.
     """
-    rows = read_csv("erp_supply_chain.csv")
+    rows = read_csv_latest("erp_supply_chain.csv")
     total_spend = sum(float(r["our_spend_usd_m"]) for r in rows)
     single_source_spend = sum(
         float(r["our_spend_usd_m"]) for r in rows if r["single_source"] == "true"
@@ -78,10 +115,10 @@ def get_supply_chain_data() -> dict:
 
 def get_cyber_data() -> dict:
     """
-    Reads SIEM/ITSM extract.
+    Reads SIEM/ITSM extract (current period only).
     Returns all cyber KRI values as a flat dict.
     """
-    rows = read_csv("siem_cyber.csv")
+    rows = read_csv_latest("siem_cyber.csv")
     metrics = {r["metric"]: float(r["value"]) for r in rows}
     return {
         "mttd_days": metrics.get("mean_time_to_detect", None),
@@ -90,7 +127,7 @@ def get_cyber_data() -> dict:
         "critical_vulns_open_gt30d": metrics.get("critical_vulnerabilities_open_gt30d", None),
         "high_vulns_open_gt30d": metrics.get("high_vulnerabilities_open_gt30d", None),
         "it_rto_hours": metrics.get("it_rto_oms", metrics.get("it_rto_trading_platform", None)),
-        "ot_scada_bcp_documented": bool(metrics.get("ot_scada_bcp_documented", 0)),
+        "privileged_access_unreviewed_days": metrics.get("privileged_access_unreviewed_days", None),
         "security_incidents_mtd": metrics.get("security_incidents_mtd", None),
         "mfa_coverage_pct": metrics.get("mfa_coverage", None),
         "third_party_vendor_assessed_pct": metrics.get("third_party_vendor_assessed", None),
@@ -101,10 +138,10 @@ def get_cyber_data() -> dict:
 
 def get_quality_data() -> dict:
     """
-    Reads QMS extract.
+    Reads QMS extract (current period only).
     Returns product quality KRI values.
     """
-    rows = read_csv("qms_quality.csv")
+    rows = read_csv_latest("qms_quality.csv")
     # Get the worst-case field failure rate across SKU categories
     failure_rates = [
         float(r["value"])
@@ -117,6 +154,11 @@ def get_quality_data() -> dict:
          if r["metric"] == "field_failure_rate" and r["sku_category"] == "Laptops"), None
     )
 
+    rejection_rate = next(
+        (float(r["value"]) for r in rows
+         if r["metric"] == "supplier_quality_rejection_rate" and r["sku_category"] == "All"), None
+    )
+
     return {
         "max_field_failure_rate_pct": max(failure_rates) if failure_rates else None,
         "laptop_field_failure_rate_pct": laptop_failure,
@@ -125,16 +167,17 @@ def get_quality_data() -> dict:
         "near_miss_events_ytd": metrics.get("near_miss_events_ytd", None),
         "recall_simulation_last_run_months_ago": metrics.get("recall_simulation_last_run_months_ago", None),
         "warranty_claims_mtd": metrics.get("warranty_claims_mtd", None),
+        "supplier_quality_rejection_rate_pct": rejection_rate,
         "raw_metrics": {r["metric"]: float(r["value"]) for r in rows},
     }
 
 
 def get_talent_data() -> dict:
     """
-    Reads HRIS extract.
+    Reads HRIS extract (current period only).
     Returns talent KRI values.
     """
-    rows = read_csv("hris_talent.csv")
+    rows = read_csv_latest("hris_talent.csv")
     # Engineering attrition is the highest-risk segment
     eng_attrition = next(
         (float(r["value"]) for r in rows

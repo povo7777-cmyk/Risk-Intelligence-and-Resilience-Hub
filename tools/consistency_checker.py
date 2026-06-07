@@ -88,15 +88,62 @@ THRESHOLD_FORMAT = {
 # Each entry defines a pattern to search in the HTML, the benchmark JSON path to compare against,
 # and a tolerance (% difference) before flagging as an issue.
 BENCHMARK_CHECKS = [
+    # ── Supply chain: dual-source VaR saving ─────────────────────────────────
     {
-        # Match: "dual-source saves USD 253M VaR" or "reduces VaR 95% by USD 253M"
+        # Plain text: "dual-source saves USD 253M VaR" or "by USD 253M VaR"
         "label":     "Supply chain dual-source VaR saving",
         "pattern":   r"dual.source[^.!?]*?(?:saves?\s+USD|by\s+USD)\s*([\d,]+)M\s*VaR",
         "bench_key": ("supply_chain", "dual_source_var_saving_usd_m"),
         "tolerance": 5.0,
     },
     {
-        # Match: "a 17× return" — anchor on "a " to prevent greedy capture of partial digits
+        # HTML-tagged in exec rec: saves <strong>USD 253M</strong> VaR
+        # Use [^<]*? (lazy, no < allowed) so decimal points in "14.4M/yr" don't break the match
+        "label":     "Supply chain dual-source VaR saving (HTML tagged)",
+        "pattern":   r"[Dd]ual.source[^<]*?<strong>USD\s*([\d,]+)M</strong>\s*VaR",
+        "bench_key": ("supply_chain", "dual_source_var_saving_usd_m"),
+        "tolerance": 5.0,
+    },
+    {
+        # Risk register "reduces VaR [95%] by [~]USD NM" — no "VaR" after the number.
+        # Use .{0,80}? (not [^.!?]*) so decimal points in "14.4M/yr" don't break the match.
+        "label":     "Supply chain dual-source VaR saving (reduces by)",
+        "pattern":   r"[Dd]ual.source.{0,80}?reduces\s+VaR\s+(?:95%\s+)?by\s+~?USD\s*([\d,]+)M",
+        "bench_key": ("supply_chain", "dual_source_var_saving_usd_m"),
+        "tolerance": 5.0,
+    },
+    {
+        # Risk register: "shows USD 253M VaR improvement"
+        "label":     "Supply chain dual-source VaR saving (shows improvement)",
+        "pattern":   r"shows\s+USD\s*([\d,]+)M\s+VaR\s+improvement",
+        "bench_key": ("supply_chain", "dual_source_var_saving_usd_m"),
+        "tolerance": 5.0,
+    },
+    {
+        # Risk register: "validated VaR saving of USD 253M"
+        "label":     "Supply chain dual-source VaR saving (saving of)",
+        "pattern":   r"VaR\s+saving\s+of\s+USD\s*([\d,]+)M",
+        "bench_key": ("supply_chain", "dual_source_var_saving_usd_m"),
+        "tolerance": 5.0,
+    },
+    {
+        # Geo-diversification note: "reduces VaR 95% by ~USD 253M" (not anchored on dual-source)
+        "label":     "Supply chain dual-source VaR saving (geo diversification)",
+        "pattern":   r"reduces\s+VaR\s+95%\s+by\s+~USD\s*([\d,]+)M",
+        "bench_key": ("supply_chain", "dual_source_var_saving_usd_m"),
+        "tolerance": 5.0,
+    },
+    {
+        # AI advisor prompt: "reduces VaR by ~USD 253M (" — parenthesised ROI follows.
+        # Use .{0,80}? so decimal points in "14.4M/yr" don't break the match.
+        "label":     "Supply chain dual-source VaR saving (AI prompt)",
+        "pattern":   r"[Dd]ual.source.{0,80}?reduces\s+VaR\s+by\s+~USD\s*([\d,]+)M\s*\(",
+        "bench_key": ("supply_chain", "dual_source_var_saving_usd_m"),
+        "tolerance": 5.0,
+    },
+    # ── Supply chain: dual-source ROI multiplier ──────────────────────────────
+    {
+        # Plain text: "a 17× return" — anchor on "a " to prevent greedy capture
         "label":     "Supply chain dual-source ROI multiplier",
         "pattern":   r"a\s+(\d{1,3})[×x×]\s*return",
         "bench_key": ("supply_chain", "dual_source_roi_x"),
@@ -104,26 +151,75 @@ BENCHMARK_CHECKS = [
         "is_raw":    True,
     },
     {
-        # Match: "Baseline VaR 95%: USD 2,049M" — stop at first M after USD
+        # AI advisor prompt: "(17× ROI)"
+        "label":     "Supply chain dual-source ROI multiplier (AI prompt)",
+        "pattern":   r"\((\d{1,3})[×x×]\s*ROI\)",
+        "bench_key": ("supply_chain", "dual_source_roi_x"),
+        "tolerance": 0.0,
+        "is_raw":    True,
+    },
+    # ── Supply chain: baseline VaR 95% ────────────────────────────────────────
+    {
+        # Match: "Baseline VaR 95%: USD 2,049M" or with HTML tags
         "label":     "Supply chain baseline VaR 95%",
-        "pattern":   r"[Bb]aseline\s+VaR\s+95%[^U]{0,20}USD\s*([\d,]+)M",
+        "pattern":   r"[Bb]aseline\s+VaR\s+95%[^U]{0,30}USD\s*([\d,]+)M",
         "bench_key": ("supply_chain", "baseline_var_95_usd_m"),
         "tolerance": 5.0,
     },
+    # ── Supply chain: inventory buffer VaR saving ─────────────────────────────
     {
-        # Match: "inventory buffer ... saves USD 147M" — stop at sentence boundary
+        # Plain text: "inventory buffer ... saves USD 147M"
         "label":     "Supply chain inventory buffer VaR saving",
         "pattern":   r"[Ii]nventory\s+buffer[^.!?]*?saves?\s+USD\s*([\d,]+)M\b",
         "bench_key": ("supply_chain", "inventory_buffer_var_saving_usd_m"),
         "tolerance": 5.0,
     },
     {
-        # Match: "Both together: saves USD 369M" — anchored on "Both together"
+        # HTML-tagged: inventory buffer saves <strong>USD 147M</strong>
+        # Use [^<]*? so decimal points in "7.7M/yr" don't break the match
+        "label":     "Supply chain inventory buffer VaR saving (HTML tagged)",
+        "pattern":   r"[Ii]nventory\s+buffer[^<]*?<strong>USD\s*([\d,]+)M</strong>",
+        "bench_key": ("supply_chain", "inventory_buffer_var_saving_usd_m"),
+        "tolerance": 5.0,
+    },
+    {
+        # AI advisor prompt: "reduces VaR by ~USD 147M." — period follows (not paren).
+        # Use .{0,80}? so decimal points in "7.7M/yr" don't break the match.
+        "label":     "Supply chain inventory buffer VaR saving (AI prompt)",
+        "pattern":   r"[Ii]nventory\s+buffer.{0,80}?reduces\s+VaR\s+by\s+~USD\s*([\d,]+)M\.",
+        "bench_key": ("supply_chain", "inventory_buffer_var_saving_usd_m"),
+        "tolerance": 5.0,
+    },
+    # ── Supply chain: combined VaR saving ─────────────────────────────────────
+    {
+        # Plain text: "Both together: saves USD 369M"
         "label":     "Supply chain combined VaR saving",
         "pattern":   r"[Bb]oth\s+together[^.!?]{0,20}saves?\s+USD\s*([\d,]+)M",
         "bench_key": ("supply_chain", "combined_var_saving_usd_m"),
         "tolerance": 5.0,
     },
+    {
+        # HTML-tagged: Both together ... saves <strong>USD 369M</strong>
+        "label":     "Supply chain combined VaR saving (HTML tagged)",
+        "pattern":   r"[Bb]oth\s+together[^<.!?]*<strong>USD\s*([\d,]+)M</strong>",
+        "bench_key": ("supply_chain", "combined_var_saving_usd_m"),
+        "tolerance": 5.0,
+    },
+    {
+        # AI advisor prompt: "~USD 369M saving"
+        "label":     "Supply chain combined VaR saving (AI prompt)",
+        "pattern":   r"~USD\s*([\d,]+)M\s+saving",
+        "bench_key": ("supply_chain", "combined_var_saving_usd_m"),
+        "tolerance": 5.0,
+    },
+    {
+        # Simulator comment: "saves USD 369M VaR combined"
+        "label":     "Supply chain combined VaR saving (comment)",
+        "pattern":   r"saves\s+USD\s*([\d,]+)M\s+VaR\s+combined",
+        "bench_key": ("supply_chain", "combined_var_saving_usd_m"),
+        "tolerance": 5.0,
+    },
+    # ── EBITDA ────────────────────────────────────────────────────────────────
     {
         "label":     "EBITDA covenant breach probability",
         "pattern":   r"covenant\s+breach\s+probability\s*[=:]\s*([\d.]+)%",

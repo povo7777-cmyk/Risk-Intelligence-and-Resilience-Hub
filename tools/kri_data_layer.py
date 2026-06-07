@@ -166,11 +166,20 @@ def _compute_operational() -> dict:
 def _compute_financial() -> dict:
     """Returns {risk_id: [kri_dict, ...]} for F-01 → F-04 (dashboard KRIs only)."""
     # F-01 — treasury positions (current period only)
-    tr_rows   = read_csv_latest("treasury_positions.csv")
-    gross     = sum(float(r.get("gross_exposure_usd_m", 0)) for r in tr_rows)
-    hedged    = sum(float(r.get("hedged_amount_usd_m", 0)) for r in tr_rows)
-    unhedged  = round(gross - hedged, 1)
-    hedge_pct = round((hedged / gross * 100) if gross > 0 else 0, 1)
+    # FX positions (Revenue + Cost) and Commodity positions (DRAM/NAND) are separated.
+    # unhedged_fx_exposure_usd_m and avg_hedge_ratio_pct cover FX-only.
+    # unhedged_commodity_exposure_usd_m covers commodity swaps separately.
+    tr_rows    = read_csv_latest("treasury_positions.csv")
+    fx_types   = ("Revenue", "Cost")
+    fx_rows    = [r for r in tr_rows if r.get("exposure_type", "") in fx_types]
+    com_rows   = [r for r in tr_rows if r.get("exposure_type", "") == "Commodity"]
+    fx_gross   = sum(float(r.get("gross_exposure_usd_m", 0)) for r in fx_rows)
+    fx_hedged  = sum(float(r.get("hedged_amount_usd_m",  0)) for r in fx_rows)
+    com_gross  = sum(float(r.get("gross_exposure_usd_m", 0)) for r in com_rows)
+    com_hedged = sum(float(r.get("hedged_amount_usd_m",  0)) for r in com_rows)
+    unhedged   = round(fx_gross  - fx_hedged,  1)   # FX-only unhedged (F-01 KRI scope)
+    com_unhedged = round(com_gross - com_hedged, 1)  # commodity unhedged (new KRI)
+    hedge_pct  = round((fx_hedged / fx_gross * 100) if fx_gross > 0 else 0, 1)
 
     # F-02 — accounts receivable (current period only)
     ar_rows   = read_csv_latest("ar_aging.csv")
@@ -210,8 +219,9 @@ def _compute_financial() -> dict:
 
     return {
         "F-01": [
-            _kri("unhedged_fx_exposure_usd_m", unhedged,  "USD_M", _status(unhedged,  "unhedged_fx_exposure_usd_m")),
-            _kri("avg_hedge_ratio_pct",        hedge_pct, "%",     _status(hedge_pct, "avg_hedge_ratio_pct")),
+            _kri("unhedged_fx_exposure_usd_m",        unhedged,     "USD_M", _status(unhedged,     "unhedged_fx_exposure_usd_m")),
+            _kri("avg_hedge_ratio_pct",                hedge_pct,    "%",     _status(hedge_pct,    "avg_hedge_ratio_pct")),
+            _kri("unhedged_commodity_exposure_usd_m",  com_unhedged, "USD_M", _status(com_unhedged, "unhedged_commodity_exposure_usd_m")),
         ],
         "F-02": [
             _kri("top_customer_concentration_pct", top_conc, "%",  _status(top_conc, "top_customer_concentration_pct")),

@@ -1,4 +1,12 @@
 date,supplier_id,supplier_name,component_category,our_spend_usd_m,total_category_spend_usd_m,single_source,inventory_weeks,lead_time_weeks,financial_health_score,on_time_delivery_pct,quality_rejection_pct,country,dual_source_diversion_pct,dual_source_price_premium_pct,target_inventory_weeks
+2026-02-01,SUP001,TSMC,Semiconductors-CPU,4100,6100,true,5.5,18,75,95.2,0.2,Taiwan,20,8.0,8.0
+2026-02-01,SUP002,Samsung,Semiconductors-Memory,1800,3200,false,6.3,12,83,96.8,0.2,South Korea,0,0.0,6.0
+2026-02-01,SUP003,Foxconn,Manufacturing-Assembly,2000,2800,true,5.2,8,70,92.8,0.6,China,25,4.0,7.0
+2026-02-01,SUP004,LG Chem,Batteries,900,1400,false,7.5,10,81,97.4,0.1,South Korea,0,0.0,7.0
+2026-02-01,SUP005,Quanta,ODM-Laptops,1500,2200,true,4.3,6,64,90.1,1.0,Taiwan,30,3.0,6.0
+2026-02-01,SUP006,Pegatron,ODM-Servers,950,1500,false,8.4,8,76,96.1,0.3,Taiwan,0,0.0,8.0
+2026-02-01,SUP007,Flex Ltd,PCB-Assembly,420,980,false,9.3,6,85,98.5,0.1,Singapore,0,0.0,9.0
+2026-02-01,SUP008,Yangtze Memory,Semiconductors-NAND,650,1100,false,5.7,14,58,90.1,0.5,China,0,0.0,6.0
 2026-05-01,SUP001,TSMC,Semiconductors-CPU,4200,6100,true,5.2,18,72,94.1,0.3,Taiwan,20,8.0,8.0
 2026-05-01,SUP002,Samsung,Semiconductors-Memory,1800,3200,false,6.1,12,81,96.2,0.2,South Korea,0,0.0,6.0
 2026-05-01,SUP003,Foxconn,Manufacturing-Assembly,2100,2800,true,4.8,8,68,91.3,0.8,China,25,4.0,7.0

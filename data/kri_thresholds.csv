@@ -16,8 +16,9 @@ O-03,safety_incidents_ytd,1,3,higher_worse,count,Confirmed product safety incide
 O-04,tech_attrition_rate_pct,12,18,higher_worse,%,Annualised attrition rate in Engineering and IT
 O-04,critical_open_roles_gt60d,3,6,higher_worse,count,Critical roles unfilled beyond 60 days
 O-04,svp_succession_coverage_pct,80,70,lower_worse,%,SVP-level roles with documented succession plan
-F-01,unhedged_fx_exposure_usd_m,4000,5000,higher_worse,USD_M,Unhedged FX exposure in USD millions
-F-01,avg_hedge_ratio_pct,60,45,lower_worse,%,Average hedge ratio across all material FX exposures
+F-01,unhedged_fx_exposure_usd_m,4000,5000,higher_worse,USD_M,Unhedged FX exposure in USD millions — FX currency positions only (USD/CNY, USD/EUR, USD/JPY, USD/KRW); excludes commodity swaps (DRAM/NAND) which are tracked separately in unhedged_commodity_exposure_usd_m; segregated per CF-04 panel finding 2026-06-07
+F-01,avg_hedge_ratio_pct,60,45,lower_worse,%,Average hedge ratio across FX currency positions only (USD/CNY, USD/EUR, USD/JPY, USD/KRW) — excludes commodity swaps (DRAM/NAND); segregated per CF-04 panel finding 2026-06-07
+F-01,unhedged_commodity_exposure_usd_m,700,900,higher_worse,USD_M,Unhedged commodity swap exposure in USD millions — DRAM and NAND memory commodity positions only; separate from FX currency exposure in unhedged_fx_exposure_usd_m; amber ≥USD 700M; breach ≥USD 900M; added 2026-06-07 per CF-04 panel finding
 F-02,top_customer_concentration_pct,20,25,higher_worse,%,Top customer as % of total revenue
 F-02,bad_debt_provision_pct,0.40,0.55,higher_worse,%,Bad debt provision as % of total accounts receivable; amber ≥0.40% (early warning — 15bp before internal breach trigger; 40bp before COV006 covenant at 0.80%); breach ≥0.55% (internal management action threshold — 25bp lead time before COV006 covenant trigger at 0.80%); the two thresholds are distinct: 0.40% triggers daily monitoring and CFO notification; 0.55% triggers mandatory board escalation and covenant management action; tightened 2026-06-07 per HIGH-06 panel finding; EM-02 description ambiguity resolved 2026-06-07
 F-03,net_debt_ebitda_ratio,2.5,3.0,higher_worse,ratio,Net debt to EBITDA ratio

@@ -364,6 +364,45 @@ def calibrate_hedge(raw: dict) -> dict:
     fx_hedged_m  = sum(float(r["hedged_amount_usd_m"])  for r in fx_rows)
     com_hedged_m = sum(float(r["hedged_amount_usd_m"])  for r in com_rows)
 
+    # ── P&L audit — theoretical vs reported for each FX position ─────────────
+    # Theoretical P&L = hedged_notional × (forward_rate / spot_rate - 1).
+    # TMS systems occasionally compute P&L on gross notional rather than hedged
+    # notional, producing a systematic overstatement of unrealised losses.
+    # FX003 case: gross($980M) vs hedged($600M) notional gives -$15.6M vs -$10.3M.
+    # Commodity positions are excluded — no forward_rate reference price applies.
+    _PNL_DEVIATION_THRESHOLD_USD_M = 2.0   # absolute: flag if deviation > $2M
+    _PNL_DEVIATION_THRESHOLD_PCT   = 0.10  # relative: flag if deviation > 10%
+    pnl_audit_flags: list[dict] = []
+    pnl_corrected = 0.0
+    for r in treasury:
+        reported   = float(r.get("unrealised_pnl_usd_m", 0))
+        fwd        = float(r.get("forward_rate", 0))
+        spot       = float(r.get("spot_rate",    0))
+        hedged_n   = float(r.get("hedged_amount_usd_m", 0))
+        exp_type   = r.get("exposure_type", "")
+        if fwd > 0 and spot > 0 and hedged_n > 0 and exp_type in ("Revenue", "Cost"):
+            theoretical = round(hedged_n * (fwd / spot - 1), 1)
+            deviation   = abs(reported - theoretical)
+            threshold   = max(_PNL_DEVIATION_THRESHOLD_USD_M,
+                              abs(theoretical) * _PNL_DEVIATION_THRESHOLD_PCT)
+            if deviation > threshold:
+                pnl_audit_flags.append({
+                    "exposure_id":         r.get("exposure_id", ""),
+                    "currency_pair":       r.get("currency_pair", ""),
+                    "reported_pnl_usd_m":  reported,
+                    "theoretical_pnl_usd_m": theoretical,
+                    "deviation_usd_m":     round(deviation, 1),
+                    "hedged_notional_usd_m": hedged_n,
+                    "note": (
+                        "Reported P&L computed on gross notional — should use hedged notional. "
+                        f"Restate to {theoretical:+.1f}M USD."
+                    ),
+                })
+            pnl_corrected += theoretical
+        else:
+            pnl_corrected += reported  # commodity or missing rates — use as reported
+    pnl_corrected = round(pnl_corrected, 1)
+
     # ── Monte Carlo — per-position volatility routing ────────────────────────
     # Each position uses its own volatility class; shocks are drawn independently.
     # FX positions use fx_vol_pct; Commodity positions use commodity_vol_pct.
@@ -444,6 +483,8 @@ def calibrate_hedge(raw: dict) -> dict:
         "hedge_ratio_pct":        hedge_ratio,
         "hedge_ratio_slider":     int(round(hedge_ratio / 5) * 5),  # nearest step-5
         "unrealised_pnl_usd_m":   round(pnl_total, 1),
+        "pnl_corrected_usd_m":    pnl_corrected,
+        "pnl_audit_flags":        pnl_audit_flags,
         "hedge_cost_usd_m":       int(round(hedge_cost_m / 10) * 10),  # nearest 10
         "avg_spot":               avg_spot,
         "avg_forward":            avg_forward,

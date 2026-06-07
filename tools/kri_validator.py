@@ -233,7 +233,7 @@ def _validate_financial(store: dict) -> list[dict]:
         expected_weakness = float(sum(int(r.get("critical_findings", 0)) for r in sox_rows))
         _check(results, "F-04", "audit_findings_open", expected_findings,
                _stored(store, "financial_risks", "F-04", "audit_findings_open"), tolerance=0)
-        # material_weakness_count is agent_context only — not a dashboard KRI, not validated here
+        # material_weakness_count is agent_context only — validated in _validate_agent_context()
     except Exception as e:
         results.append({"risk_id": "F-04", "kri": "ALL", "ok": False, "note": str(e)})
 
@@ -258,7 +258,7 @@ def _validate_compliance(store: dict) -> list[dict]:
         mapping = [
             ("C-01", "export_screening_coverage_pct",      "export_screening_coverage_pct",      DEFAULT_TOLERANCE),
             ("C-01", "confirmed_sanctions_violations_ytd",  "confirmed_sanctions_violations_ytd",  0),
-            # denied_party_matches_pending is agent_context only — not a dashboard KRI, not validated here
+            # denied_party_matches_pending is agent_context only — validated in _validate_agent_context()
         ]
         for risk_id, kri_name, csv_key, tol in mapping:
             if csv_key in screening:
@@ -350,6 +350,98 @@ def _validate_strategic(store: dict) -> list[dict]:
     return results
 
 
+# ── Agent context ─────────────────────────────────────────
+
+def _stored_ctx(store: dict, risk_id: str, metric: str):
+    """Return stored agent context value or None if missing."""
+    return store.get("agent_context", {}).get(risk_id, {}).get(metric)
+
+
+def _check_ctx(results: list, risk_id: str, metric: str,
+               expected, actual, tolerance=DEFAULT_TOLERANCE):
+    """Same logic as _check but prefixes the KRI name with 'ctx:' for clarity."""
+    _check(results, risk_id, f"ctx:{metric}", expected, actual, tolerance)
+
+
+def _validate_agent_context(store: dict) -> list[dict]:
+    """
+    Re-compute key agent context metrics from source CSVs and diff against
+    the values stored in risk_store.json['agent_context'].
+
+    These metrics are never shown as dashboard KRIs but are cited as specific
+    numbers in board narrative — so filter/scope bugs propagate invisibly unless
+    validated here.
+    """
+    from tools.data_reader import read_csv_latest
+    results = []
+
+    # S-01: high-severity signal count — S-01 signals only (not all risk IDs)
+    try:
+        signals     = read_csv_latest("market_intelligence.csv")
+        s01_signals = [s for s in signals if s.get("risk_id") == "S-01"]
+        high_s01    = float(len([s for s in s01_signals if s.get("severity") == "high"]))
+        _check_ctx(results, "S-01", "high_severity_signal_count", high_s01,
+                   _stored_ctx(store, "S-01", "high_severity_signal_count"), tolerance=0)
+    except Exception as e:
+        results.append({"risk_id": "S-01", "kri": "ctx:high_severity_signal_count",
+                        "ok": False, "note": str(e)})
+
+    # F-01: unrealised FX P&L
+    try:
+        tr  = read_csv_latest("treasury_positions.csv")
+        pnl = round(sum(float(r.get("unrealised_pnl_usd_m", 0)) for r in tr), 1)
+        _check_ctx(results, "F-01", "unrealised_pnl_usd_m", pnl,
+                   _stored_ctx(store, "F-01", "unrealised_pnl_usd_m"))
+    except Exception as e:
+        results.append({"risk_id": "F-01", "kri": "ctx:unrealised_pnl_usd_m",
+                        "ok": False, "note": str(e)})
+
+    # F-02: absolute overdue >90d USD
+    try:
+        ar     = read_csv_latest("ar_aging.csv")
+        overdue = round(sum(float(r.get("overdue_90d_usd_m", 0)) for r in ar), 1)
+        _check_ctx(results, "F-02", "overdue_90d_usd_m", overdue,
+                   _stored_ctx(store, "F-02", "overdue_90d_usd_m"))
+    except Exception as e:
+        results.append({"risk_id": "F-02", "kri": "ctx:overdue_90d_usd_m",
+                        "ok": False, "note": str(e)})
+
+    # F-04: material weakness count (SOX/Internal critical findings)
+    try:
+        audit = read_csv_latest("audit_log.csv")
+        sox   = [r for r in audit if any(t in r.get("audit_type", "") for t in ["SOX", "Internal"])]
+        mw    = float(sum(int(r.get("critical_findings", 0)) for r in sox))
+        _check_ctx(results, "F-04", "material_weakness_count", mw,
+                   _stored_ctx(store, "F-04", "material_weakness_count"), tolerance=0)
+    except Exception as e:
+        results.append({"risk_id": "F-04", "kri": "ctx:material_weakness_count",
+                        "ok": False, "note": str(e)})
+
+    # C-01: denied party matches pending
+    try:
+        scr   = read_csv_latest("screening_results.csv")
+        scr_d = {r["metric"]: float(r["value"]) for r in scr}
+        dp    = scr_d.get("denied_party_matches_pending", 0.0)
+        _check_ctx(results, "C-01", "denied_party_matches_pending", dp,
+                   _stored_ctx(store, "C-01", "denied_party_matches_pending"), tolerance=0)
+    except Exception as e:
+        results.append({"risk_id": "C-01", "kri": "ctx:denied_party_matches_pending",
+                        "ok": False, "note": str(e)})
+
+    # C-03: whistleblower high findings — sum ALL Whistleblower rows, not just first
+    try:
+        audit_wb = read_csv_latest("audit_log.csv")
+        wb_rows  = [r for r in audit_wb if "Whistleblower" in r.get("audit_type", "")]
+        wb_high  = float(sum(int(r.get("high_findings", 0)) for r in wb_rows))
+        _check_ctx(results, "C-03", "whistleblower_high_findings", wb_high,
+                   _stored_ctx(store, "C-03", "whistleblower_high_findings"), tolerance=0)
+    except Exception as e:
+        results.append({"risk_id": "C-03", "kri": "ctx:whistleblower_high_findings",
+                        "ok": False, "note": str(e)})
+
+    return results
+
+
 # ── Public entry point ────────────────────────────────────
 
 def run_kri_validation() -> dict:
@@ -366,6 +458,7 @@ def run_kri_validation() -> dict:
     all_results.extend(_validate_operational(store))
     all_results.extend(_validate_financial(store))
     all_results.extend(_validate_compliance(store))
+    all_results.extend(_validate_agent_context(store))
 
     discrepancies = [r for r in all_results if not r.get("ok", False)]
     passed = [r for r in all_results if r.get("ok", False)]

@@ -249,12 +249,19 @@
     "F-01": {
       "kris": {
         "unhedged_fx_exposure_usd_m": {
-          "value": 4940.0,
-          "status": "amber"
+          "value": 4080.0,
+          "status": "amber",
+          "restatement_note": "Restated 2026-06-07 per CF-04 panel finding: excludes COM001/COM002 commodity swaps ($860M). Prior value 4940.0 conflated FX + commodity. Correct FX-only basis: USD/CNY 1800 + USD/EUR 1600 + USD/JPY 380 + USD/KRW 300 = 4080."
         },
         "avg_hedge_ratio_pct": {
-          "value": 46.0,
-          "status": "amber"
+          "value": 46.3,
+          "status": "amber",
+          "restatement_note": "Restated 2026-06-07 per CF-04 panel finding: FX-only basis (hedged $3,520M / gross $7,600M × 100). Prior value 46.0 used blended FX+commodity denominator."
+        },
+        "unhedged_commodity_exposure_usd_m": {
+          "value": 860.0,
+          "status": "amber",
+          "note": "New KRI added 2026-06-07 per CF-04 panel finding. COM001 DRAM unhedged $490M + COM002 NAND unhedged $370M = $860M. Amber threshold USD 700M; breach USD 900M."
         }
       },
       "ctrl": 72,
@@ -682,11 +689,11 @@
       "risk_ids": [
         "F-01"
       ],
-      "action": "Group Treasurer and model developer to restate the Hedge Analyser before next board run: (1) strip COM001/COM002 commodity swaps (DRAM/NAND, USD -18.0M) from FX gross exposure — restated unhedged FX = USD 4,080M on corrected FX gross of USD 7,600M; (2) audit cost-hedge directional sign conventions and resolve USD 1M arithmetic discrepancy; (3) formally document hedge ratio scope definition (FX-only vs FX+commodity) in KRI register; (4) recalculate F-01 KRI status on corrected basis. Until restated, F-01 unhedged_fx_exposure_usd_m carries a USD 860M overstatement (4,940M reported vs 4,080M correct) and the hedge ratio KRI is unreliable.",
+      "action": "Group Treasurer and model developer to restate the Hedge Analyser before next board run: (1) [DATA LAYER COMPLETE] FX/commodity segregation implemented in kri_data_layer.py — unhedged_fx_exposure_usd_m corrected to USD 4,080M (was 4,940M); unhedged_commodity_exposure_usd_m = USD 860M added as new KRI; avg_hedge_ratio_pct restated to 46.3% on FX-only basis. (2) [DATA LAYER COMPLETE] P&L audit added to model_calibrator.py — FX003 USD_JPY theoretical P&L = -$10.3M vs reported -$15.6M flagged (deviation $5.3M > $2M threshold; TMS using gross $980M instead of hedged $600M notional). Group Treasurer to confirm corrected P&L figure with TMS vendor and update treasury_positions.csv FX003 row. (3) [COMPLETE] KRI scope documented in kri_thresholds.csv descriptions — FX-only scope explicit for all F-01 KRIs. (4) [COMPLETE] hedge_restatement exec_rec updated to reflect data-layer remediation status. Remaining open item: Group Treasurer to confirm TMS P&L correction with vendor.",
       "owner": "Group Treasurer / Model Developer",
       "deadline": "2026-06-20",
-      "status": "open — panel finding MO-02/MO-03; blocks board readiness",
-      "model_output_reference": "Hedge Analyser: commodity $1,540M misclassified as FX; FX-only = $4,080M"
+      "status": "in progress — data-layer restatement complete 2026-06-07; awaiting TMS P&L vendor confirmation",
+      "model_output_reference": "Hedge Analyser: FX-only restated $4,080M; commodity new KRI $860M; FX003 P&L corrected -$10.3M from -$15.6M"
     },
     "product_quality_reconciliation": {
       "risk_ids": [
