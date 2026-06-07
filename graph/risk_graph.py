@@ -80,6 +80,7 @@ class RiskIntelligenceState(TypedDict):
     panel_action_items: list          # calibration findings user elected to add to board actions — Loop 2
     data_validation_results: dict     # Item 1: source CSV schema + freshness check
     narrative_scan_results: dict      # Item 7: agent narrative vs KRI ground truth mismatch check
+    completeness_gaps: list           # Layer 1/2 completeness gate findings (pre-panel)
 
     # Infrastructure
     errors: list
@@ -122,6 +123,7 @@ def dispatch_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
     state["qoq_deltas"] = {}
     state["data_validation_results"] = {}
     state["narrative_scan_results"] = {}
+    state["completeness_gaps"] = []
     state["errors"] = []
     state["warnings"] = []
     return state
@@ -618,6 +620,66 @@ def content_validation_node(state: RiskIntelligenceState) -> RiskIntelligenceSta
     except Exception as e:
         state["warnings"].append(f"Content validation failed: {e}")
         print(f"  Content validation error: {e}")
+    return state
+
+
+def completeness_gate_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
+    """
+    Deterministic board pack completeness gate — runs BEFORE the panel.
+
+    Layer 1 (always): KRI threshold registration, exec_rec field completeness,
+    override governance dates, breach domain coverage, board summary coverage.
+
+    Layer 2 (stub, off by default): LLM semantic check — activate via
+    risk_panel_config.json completeness_checks.layer2_enabled = true.
+
+    CRITICAL findings block the pipeline when hard_fail_on_critical = true (default).
+    All findings are surfaced in state["completeness_gaps"] for the HITL gate.
+    """
+    import json, pathlib
+    from tools.board_pack_completeness import run_completeness_checks
+
+    DATA_DIR   = pathlib.Path(__file__).parent.parent / "data"
+    STORE_PATH = pathlib.Path(__file__).parent.parent / "api" / "risk_store.json"
+    THR_PATH   = DATA_DIR / "kri_thresholds.csv"
+    CFG_PATH   = DATA_DIR / "risk_panel_config.json"
+
+    try:
+        store       = json.loads(STORE_PATH.read_text())
+        panel_cfg   = json.loads(CFG_PATH.read_text()) if CFG_PATH.exists() else {}
+        result      = run_completeness_checks(store, THR_PATH, panel_cfg)
+
+        state["completeness_gaps"] = result.get("findings", result["layer1"]["findings"])
+
+        n_crit = result["total_critical"]
+        summary = result["summary"]
+        print(f"\n  [COMPLETENESS GATE] {summary}")
+
+        if n_crit > 0:
+            for f in result["layer1"]["critical"]:
+                print(f"    CRITICAL [{f['code']}] {f['message']}")
+            hard_fail = panel_cfg.get("completeness_checks", {}).get("hard_fail_on_critical", True)
+            if hard_fail:
+                state["errors"].append(
+                    f"[COMPLETENESS] {n_crit} CRITICAL gap(s) must be resolved before the panel runs. "
+                    f"Run tools/board_pack_completeness.py standalone to see full detail."
+                )
+                print(f"  [COMPLETENESS GATE] HARD FAIL — {n_crit} CRITICAL gap(s). Panel blocked.")
+            else:
+                state["warnings"].append(
+                    f"[COMPLETENESS] {n_crit} CRITICAL gap(s) found but hard_fail_on_critical=false — "
+                    f"continuing to panel with known gaps."
+                )
+
+        for f in result["layer1"]["high"]:
+            state["warnings"].append(f"[COMPLETENESS HIGH] {f['message']}")
+        for f in result["layer1"]["medium"]:
+            state["warnings"].append(f"[COMPLETENESS MED] {f['message']}")
+
+    except Exception as exc:
+        state["warnings"].append(f"Completeness gate failed: {exc}")
+        print(f"  [COMPLETENESS GATE] WARNING: gate failed ({exc}), continuing to panel")
+
     return state
 
 
@@ -2202,6 +2264,7 @@ def build_graph():
     graph.add_node("write_approved",            write_approved_node)
     graph.add_node("kri_validation",            kri_validation_node)
     graph.add_node("content_validation",        content_validation_node)
+    graph.add_node("completeness_gate",         completeness_gate_node)
     graph.add_node("risk_panel",                risk_panel_node)
     graph.add_node("panel_remediation",         panel_remediation_node)
     graph.add_node("board_summary_correction",  board_summary_correction_node)  # Loop 1+2
@@ -2226,7 +2289,8 @@ def build_graph():
     )
     graph.add_edge("write_approved",           "kri_validation")
     graph.add_edge("kri_validation",           "content_validation")
-    graph.add_edge("content_validation",       "risk_panel")
+    graph.add_edge("content_validation",       "completeness_gate")
+    graph.add_edge("completeness_gate",        "risk_panel")
     graph.add_edge("risk_panel",               "panel_remediation")
     graph.add_edge("panel_remediation",        "board_summary_correction")  # ← Loop 1+2
     graph.add_edge("board_summary_correction", "hitl_gate")
