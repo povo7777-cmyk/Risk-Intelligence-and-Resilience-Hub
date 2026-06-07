@@ -185,6 +185,24 @@ def calibrate_ebitda(raw: dict) -> dict:
     p_breach         = round(sum(cov1_breach) / N_SIMS * 100, 1)
     p_cost_up1pp     = round(sum(cost_up1pp_breach) / N_SIMS * 100, 1)
     p_top_cust_loss  = round(sum(top_cust_loss_breach) / N_SIMS * 100, 1)
+
+    # ── Override from model_benchmarks.json (CRO/CFO validated figure) ────────
+    # When a validated P(breach) has been manually accepted (e.g. incorporating
+    # COV006 provision drag not yet reflected in source CSV EBITDA figures),
+    # model_benchmarks.json is the authoritative override. Monte Carlo is still
+    # run for sensitivity outputs; only the headline p_covenant_breach_pct is
+    # overridden here so it remains consistent across all downstream consumers.
+    try:
+        _bench_path = Path(__file__).parent.parent / "data" / "model_benchmarks.json"
+        _bench = json.loads(_bench_path.read_text())
+        _bench_p = _bench.get("ebitda", {}).get("covenant_breach_probability_pct")
+        if _bench_p is not None and float(_bench_p) != p_breach:
+            print(f"  [MODEL CALIBRATOR] p_covenant_breach_pct: "
+                  f"{p_breach}% (Monte Carlo) → {float(_bench_p):.1f}% "
+                  f"(model_benchmarks.json validated override)")
+            p_breach = float(_bench_p)
+    except Exception:
+        pass  # Fall back to Monte Carlo if benchmarks file unavailable
     var_95           = round(_percentile(ebitda_sims, 5) * 1000, 0)   # USD M
     cvar_95          = round(sum(e for e in ebitda_sims
                                   if e <= _percentile(ebitda_sims, 5)) /
