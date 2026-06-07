@@ -78,6 +78,8 @@ class RiskIntelligenceState(TypedDict):
     panel_remediation: dict           # Auto-fix results: {auto_fixed, calibration_findings, blocked}
     board_summary_corrections: dict   # {applied, flags, reason} — Loop 1 feedback
     panel_action_items: list          # calibration findings user elected to add to board actions — Loop 2
+    data_validation_results: dict     # Item 1: source CSV schema + freshness check
+    narrative_scan_results: dict      # Item 7: agent narrative vs KRI ground truth mismatch check
 
     # Infrastructure
     errors: list
@@ -118,8 +120,55 @@ def dispatch_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
     state["kri_ground_truth"] = {}
     state["agent_context"] = {}
     state["qoq_deltas"] = {}
+    state["data_validation_results"] = {}
+    state["narrative_scan_results"] = {}
     state["errors"] = []
     state["warnings"] = []
+    return state
+
+
+def data_validation_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
+    """
+    Item 1: Source data integrity gate. Runs BEFORE kri_data_layer.
+    Validates CSV schemas, required columns, numeric field non-nullity,
+    data freshness (age thresholds), and row-count plausibility.
+    Hard-blocks the pipeline on ERROR-level findings.
+    """
+    from tools.data_validator import validate_all, print_report
+    print(f"\n{'='*60}")
+    print("[DATA VALIDATION] Checking source CSV integrity...")
+    print(f"{'='*60}")
+    try:
+        result = validate_all()
+        print_report(result)
+        state["data_validation_results"] = result
+
+        # Escalate errors into pipeline errors list
+        for issue in result.get("errors", []):
+            state["errors"].append(
+                f"[DATA-VALIDATION/{issue['code']}] {issue['file']}: {issue['detail']}"
+            )
+        for issue in result.get("warnings", []):
+            state["warnings"].append(
+                f"[DATA-VALIDATION/{issue['code']}] {issue['file']}: {issue['detail']}"
+            )
+
+        if not result["passed"]:
+            print(
+                f"\n  PIPELINE BLOCKED — {result['error_count']} data integrity error(s). "
+                f"Fix source CSVs before re-running."
+            )
+            # Raise to halt graph execution; errors list is captured in run.py handler
+            raise RuntimeError(
+                f"Data validation failed: {result['error_count']} error(s). "
+                f"See above for details."
+            )
+    except RuntimeError:
+        raise
+    except Exception as e:
+        state["warnings"].append(f"Data validation node failed unexpectedly: {e}")
+        print(f"  ⚠ Data validation error: {e}")
+
     return state
 
 
@@ -539,8 +588,30 @@ def kri_validation_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
 
 
 def content_validation_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
-    """Validate board summary and exec rec drafts against KRI data using Haiku."""
+    """Validate board summary and exec rec drafts against KRI data using Haiku.
+    Also runs narrative figure scanner (Item 7) — deterministic, no LLM call."""
     from agents.validation_agent import run as run_validation
+
+    # Item 7: Narrative figure scanner — deterministic pre-check before LLM validation
+    try:
+        from tools.narrative_figure_scanner import run as run_scanner
+        scan_result = run_scanner(state)
+        state["narrative_scan_results"] = scan_result
+        n_miss = scan_result.get("mismatch_count", 0)
+        if n_miss > 0:
+            print(f"\n[NARRATIVE SCANNER] ⚠ {n_miss} figure mismatch(es) "
+                  f"between agent narratives and KRI ground truth:")
+            for m in scan_result.get("mismatches", []):
+                print(f"  ⚠ {m['detail']}")
+                state["warnings"].append(f"[NARRATIVE-FIGURE] {m['detail']}")
+        else:
+            checked = scan_result.get("scan_targets_checked", 0)
+            print(f"\n[NARRATIVE SCANNER] ✓ All narrative figures consistent "
+                  f"({checked} text block(s) checked)")
+    except Exception as e:
+        state["warnings"].append(f"Narrative figure scanner failed: {e}")
+        print(f"  ⚠ Narrative scanner error: {e}")
+
     try:
         result = run_validation(state)
         state["content_validation"] = result
@@ -625,6 +696,22 @@ def panel_remediation_node(state: RiskIntelligenceState) -> RiskIntelligenceStat
         if not is_structural:
             remediation["calibration_findings"].append(f)
         # structural findings get processed below — no need to store separately
+
+    # Item 6: Panel verdict hard gate — INADEQUATE blocks push immediately.
+    # fitness_for_board=False means the panel found the pack unfit for distribution.
+    if not panel_verdict.get("fitness_for_board", True):
+        remediation["blocked"] = True
+        remediation["block_reasons"].append(
+            f"PANEL VERDICT: {panel_verdict.get('overall_rating', 'INADEQUATE')} — "
+            "board pack not fit for distribution. Resolve all CRITICAL and HIGH panel "
+            "findings before re-running. GitHub push is blocked."
+        )
+        print(
+            f"\n  ⛔ [PANEL HARD GATE] fitness_for_board=False — "
+            f"push BLOCKED. Rating: {panel_verdict.get('overall_rating', '?')} | "
+            f"Critical: {len(panel_verdict.get('critical_findings', []))} | "
+            f"High: {len(panel_verdict.get('high_findings', []))}"
+        )
 
     calibration_count = len(remediation["calibration_findings"])
     structural_count  = len(all_findings) - calibration_count
@@ -1143,6 +1230,34 @@ def hitl_gate_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
     state["exec_rec_approved"] = approved
     auto_str = " (CI auto-approve)" if ci_mode else ""
     print(f"\n  Review complete. {len(approved)} section(s) approved for update{auto_str}.")
+
+    # Item 5: Durable HITL sign-off log — append-only JSONL for audit trail.
+    try:
+        log_path = Path(__file__).parent.parent / "api" / "signoff_log.jsonl"
+        log_entry = {
+            "run_id":           state.get("run_id", "unknown"),
+            "timestamp_utc":    datetime.now(timezone.utc).isoformat(),
+            "triggered_by":     state.get("triggered_by", "unknown"),
+            "ci_mode":          ci_mode,
+            "sections_approved": list(approved.keys()),
+            "sections_edited":   list(state.get("hitl_edits", {}).keys()),
+            "kri_discrepancies": state.get("kri_validation_results", {}).get("discrepancy_count", 0),
+            "panel_rating":      state.get("panel_validation", {}).get(
+                                    "panel_verdict", {}).get("overall_rating", "n/a"),
+            "panel_fitness":     state.get("panel_validation", {}).get(
+                                    "panel_verdict", {}).get("fitness_for_board", None),
+            "narrative_mismatches": state.get("narrative_scan_results", {}).get("mismatch_count", 0),
+            "push_blocked":      state.get("panel_remediation", {}).get("blocked", False),
+            "warnings_count":    len(state.get("warnings", [])),
+            "errors_count":      len(state.get("errors", [])),
+        }
+        with open(log_path, "a") as lf:
+            import json as _json
+            lf.write(_json.dumps(log_entry) + "\n")
+        print(f"  Sign-off logged → api/signoff_log.jsonl")
+    except Exception as _le:
+        state["warnings"].append(f"HITL sign-off log write failed: {_le}")
+
     return state
 
 
@@ -1249,10 +1364,47 @@ def github_push_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
         print("\n[GITHUB] No dashboard changes to push")
         return state
 
+    # Item 6: Enforce panel hard gate — blocked flag prevents push regardless of approvals
+    if state.get("panel_remediation", {}).get("blocked"):
+        reasons = state.get("panel_remediation", {}).get("block_reasons", [])
+        print("\n[GITHUB] ⛔ Push BLOCKED by validation gate:")
+        for r in reasons:
+            print(f"  • {r}")
+        state["errors"].append(
+            "GitHub push blocked: panel_remediation.blocked=True. "
+            f"Reasons: {'; '.join(reasons)}"
+        )
+        return state
+
     dashboard_path = Path(__file__).parent.parent / "dashboard" / "index.html"
     if not dashboard_path.exists():
         state["warnings"].append("Dashboard not found — cannot push")
         return state
+
+    # Item 8: Embed content hash of risk_store.json in dashboard HTML before pushing.
+    # On the next run, data_validation_node or check_prerequisites can compare the
+    # embedded hash against the current store to detect silent updater failures.
+    try:
+        import hashlib
+        store_path = Path(__file__).parent.parent / "api" / "risk_store.json"
+        if store_path.exists():
+            store_hash = hashlib.sha256(store_path.read_bytes()).hexdigest()[:16]
+            html = dashboard_path.read_text()
+            # Replace existing hash meta tag or inject before </head>
+            import re as _re
+            hash_tag = f'<meta name="data-store-hash" content="{store_hash}">'
+            if 'name="data-store-hash"' in html:
+                html = _re.sub(
+                    r'<meta name="data-store-hash"[^>]*>',
+                    hash_tag, html
+                )
+            else:
+                html = html.replace("</head>", f"  {hash_tag}\n</head>", 1)
+            dashboard_path.write_text(html)
+            state["warnings"]  # don't add a warning — this is informational
+            print(f"[GITHUB] Content hash embedded: {store_hash}")
+    except Exception as _he:
+        state["warnings"].append(f"Content hash embedding failed: {_he}")
 
     try:
         from github import Github
@@ -2042,6 +2194,7 @@ def build_graph():
     graph = StateGraph(RiskIntelligenceState)
 
     graph.add_node("dispatch",                  dispatch_node)
+    graph.add_node("data_validation",          data_validation_node)   # Item 1
     graph.add_node("kri_data_layer",            kri_data_layer_node)
     graph.add_node("model_calibration",         model_calibration_node)
     graph.add_node("run_agents",                run_domain_agents_node)
@@ -2058,7 +2211,8 @@ def build_graph():
     graph.add_node("finalise",                  finalise_node)
 
     graph.set_entry_point("dispatch")
-    graph.add_edge("dispatch",                 "kri_data_layer")
+    graph.add_edge("dispatch",                 "data_validation")
+    graph.add_edge("data_validation",          "kri_data_layer")
     graph.add_edge("kri_data_layer",           "model_calibration")
     graph.add_edge("model_calibration",        "run_agents")
     graph.add_edge("run_agents",               "synthesis")
