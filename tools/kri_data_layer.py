@@ -295,11 +295,22 @@ def _compute_compliance() -> dict:
                                    "third_party_abac_coverage_pct": abac_cov}.items() if v is None]
         raise ValueError(f"compliance_metrics.csv missing required metrics: {missing}")
 
+    # C-01 — export licence expiry count (optional: present from FY26Q2 onwards)
+    # Read from compliance_metrics.csv if the metric exists — no error if absent (backward compat)
+    lic_expiring = cm.get("export_licence_expiring_30d")
+
+    c01_kris = [
+        _kri("export_screening_coverage_pct",      cov,   "%",     _status(cov,   "export_screening_coverage_pct")),
+        _kri("confirmed_sanctions_violations_ytd", viols, "count", _status(viols, "confirmed_sanctions_violations_ytd")),
+    ]
+    if lic_expiring is not None:
+        c01_kris.append(
+            _kri("export_licence_expiring_30d", lic_expiring, "count",
+                 _status(lic_expiring, "export_licence_expiring_30d"))
+        )
+
     return {
-        "C-01": [
-            _kri("export_screening_coverage_pct",      cov,   "%",     _status(cov,   "export_screening_coverage_pct")),
-            _kri("confirmed_sanctions_violations_ytd", viols, "count", _status(viols, "confirmed_sanctions_violations_ytd")),
-        ],
+        "C-01": c01_kris,
         "C-02": [
             _kri("ai_audit_coverage_pct", ai_audit, "%", _status(ai_audit, "ai_audit_coverage_pct")),
         ],
