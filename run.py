@@ -90,6 +90,23 @@ def check_prerequisites() -> list[str]:
             "or run: cp /path/to/index.html ~/rib-agents/dashboard/"
         )
 
+    # EM-05: Warn when exec_rec_drafts is empty — board pack cannot be approved
+    # without at least one structured executive recommendation
+    if store_path.exists():
+        try:
+            import json as _json
+            _store = _json.loads(store_path.read_text())
+            _drafts = _store.get("exec_rec_drafts", {})
+            if not _drafts:
+                errors.append(
+                    "CRITICAL [EM-05]: risk_store.json exec_rec_drafts is empty — "
+                    "board pack cannot be generated without at least one structured "
+                    "executive recommendation. Run agents to populate exec_rec_drafts "
+                    "before board pack generation."
+                )
+        except Exception:
+            pass
+
     return errors
 
 
