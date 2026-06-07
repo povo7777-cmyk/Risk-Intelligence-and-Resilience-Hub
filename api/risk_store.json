@@ -318,7 +318,7 @@
           "value": 69.4,
           "status": "breach",
           "source": "EBITDA Stress Monte Carlo N=5000 | model_params.ebitda.p_covenant_breach_pct",
-          "description": "Monte Carlo P(COV001 Net Debt/EBITDA breach at next test date). BREACH: 69.4% > 50% threshold. Deterministic P=100% (COV006 active breach). Note: COV001 CURRENT ratio = 2.8x (amber, below 3.0x breach). The probabilistic 69.4% and current amber ratio are COMPLEMENTARY: COV001 is not yet in breach (Q2 realised value), but the forward distribution has >50% of Monte Carlo paths breaching 3.0x by 2026-06-30 test date. Prior stale value 44.2% (amber) \u2014 superseded 2026-06-07.",
+          "description": "Forward probability of COV001 Net Debt/EBITDA covenant breach at the 2026-06-30 test date, derived from EBITDA Stress Monte Carlo (N=5,000). CURRENT STATUS: BREACH \u2014 69.4% exceeds the 50% breach threshold. Distinction: COV001 current-period ratio is 2.8\u00d7 (below the 3.0\u00d7 breach ceiling, so the ratio KRI is amber). The 69.4% forward probability and the 2.8\u00d7 current ratio are complementary metrics \u2014 the ratio measures where we are today; the Monte Carlo measures where we are likely to be at test date. Both must be presented to the board together. Full Monte Carlo rerun incorporating COV006 breach scenario in progress \u2014 CFO/Quant deadline 2026-06-20.",
           "amber_threshold": 30.0,
           "breach_threshold": 50.0,
           "recompute_required": false,
@@ -415,6 +415,18 @@
           "source": "compliance_metrics.csv / Trade-Compliance-System",
           "note": "EM-06 leading indicator KRI added 2026-06-07. 3 pending matches = amber (threshold: \u22652 amber, \u22654 breach). Up from 2 in prior period \u2014 deteriorating trend.",
           "panel_ref": "EM-06"
+        },
+        "export_licence_expiring_30d": {
+          "value": 2,
+          "status": "amber",
+          "unit": "count",
+          "direction": "higher_worse",
+          "source": "compliance_metrics.csv \u2014 export_licence_expiring_30d",
+          "description": "Count of export control licences expiring within the next 30 days and not yet renewed. AMBER: 2 licences expiring within 30 days (>= amber threshold of 2). Amber threshold = 2 (any expiring licence requires immediate CCO action). Breach threshold = 4 (multiple lapses indicate systemic renewal failure). CCO to confirm renewal status and escalate if either licence lapses.",
+          "amber_threshold": 2,
+          "breach_threshold": 4,
+          "panel_ref": "EM-08",
+          "formal_kri_added": "2026-06-07"
         }
       },
       "ctrl": 65,
