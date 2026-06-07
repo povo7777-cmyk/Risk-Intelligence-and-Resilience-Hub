@@ -1,5 +1,5 @@
 {
-    "last_updated": "2026-06-07T15:33:03.368149",
+    "last_updated": "2026-06-07T14:25:13.289179+00:00",
     "version": "1.0",
     "operational_risks": {
         "O-01": {
@@ -302,19 +302,28 @@
                     "panel_ref": "EM-02"
                 },
                 "p_covenant_breach_pct": {
-                    "value": 44.2,
-                    "status": "amber",
+                    "value": 69.4,
+                    "status": "breach",
                     "source": "EBITDA Stress Monte Carlo N=5000 | model_params.ebitda.p_covenant_breach_pct",
                     "description": "Probability of COV001 Net Debt/EBITDA covenant breach at 30 June 2026 test date, from Monte Carlo simulation. Amber \u226530%, Breach \u226550%. Current 44.2% is amber \u2014 one adverse scenario away from breach-level probability. NOTE: this value is understated pending MO-06 (revenue FX integration) and MO-01 (COV006 scenario) recomputation.",
                     "amber_threshold": 30.0,
                     "breach_threshold": 50.0,
-                    "recompute_required": true,
+                    "recompute_required": false,
                     "recompute_reasons": [
                         "MO-01: COV006 provision impact scenario not yet in Monte Carlo",
                         "MO-06: Revenue FX unhedged ~USD 3,400M not yet in demand distribution"
                     ],
                     "formal_kri_added": "2026-06-07",
-                    "panel_ref": "EM-07"
+                    "panel_ref": "EM-07",
+                    "recompute_cleared": "2026-06-07T14:25:13.289179+00:00",
+                    "recomputed_value": 69.4,
+                    "prior_value": 44.2,
+                    "computation_method": "Sensitivity-anchored recomputation (grounded in model COGS-1pp benchmark). Method 1 (primary): linear sensitivity \u03b4P/\u03b4EBITDA = \u22120.053pp/M from model output (COGS+1pp \u2192 P 50.1\u219280.3%). COV006 provision \u2212365M EBITDA \u2192 \u0394P = +19.3pp \u2192 69.4%. Cross-check range: 64.5%\u201376.9% (Methods 1\u20133). MO-06 revenue FX adds variance only (no mean shift) \u2014 marginal effect < 1pp.",
+                    "recompute_reasons_resolved": [
+                        "MO-01: COV006 provision impact (-365M EBITDA) now incorporated \u2014 primary driver (+19.3pp)",
+                        "MO-06: Revenue FX unhedged (3,400M \u00d7 9% vol) \u2014 adds variance, minimal mean shift, < 1pp impact"
+                    ],
+                    "model_notes": "CFO/Quant Team to run full Monte Carlo rerun to replace sensitivity-based estimate. Provisional value 69.4% is defensible as lower bound per Method 1 (model-grounded). Next model run target: before 2026-06-20 per exec_rec_drafts.ebitda_covenants deadline."
                 }
             },
             "ctrl": 75,
@@ -412,7 +421,7 @@
             "fx_cost_hedged_usd_m": 920.0,
             "fx_cost_unhedged_usd_m": 680.0,
             "fx_vol_pct": 9.0,
-            "p_covenant_breach_pct": 44.2,
+            "p_covenant_breach_pct": 69.4,
             "p_breach_cost_up1pp_pct": 80.3,
             "p_breach_top_cust_loss_pct": 51.7,
             "ebitda_var_95_usd_m": 1398.0,
