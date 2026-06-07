@@ -35,4 +35,9 @@ F-03,covenant_breach_count,0,1,higher_worse,count,Number of active covenant brea
 C-01,denied_party_matches_pending,2,4,higher_worse,count,Denied party screening matches awaiting resolution — leading indicator for sanctions risk; amber ≥2 matches pending; breach ≥4 matches pending
 F-03,p_covenant_breach_pct,30,50,higher_worse,%,Monte Carlo probability of COV001 Net Debt/EBITDA covenant breach at next test date (amber ≥30%; breach ≥50%)
 O-01,supplier_recovery_runway_weeks,8,4,lower_worse,weeks,Inventory cover weeks for the critical-path single-source supplier (TSMC 18-week lead time benchmark); amber <8w (below target); breach <4w (~22% of lead time — critical depletion)
+O-02,mttr_days,15,21,higher_worse,days,Mean time to recover from a security incident in days; amber ≥15 days; breach ≥21 days (3-week recovery crosses into operational resilience risk)
 O-02,cyber_supply_response_gap_days,0,0.1,higher_worse,days,Gap between combined MTTD+MTTR cyber response time and available supplier inventory cover (max(0,MTTD+MTTR-inventory_cover_days)); amber ≥0 (response meets inventory); breach >0 (response exceeds inventory — production halt guaranteed)
+S-01,high_severity_signals,3,5,higher_worse,count,Geopolitical and market intelligence signals rated HIGH or CRITICAL severity in the current period; amber ≥3; breach ≥5
+F-02,overdue_90d_pct,0.6,1.0,higher_worse,%,Accounts receivable overdue >90 days as percentage of total AR; amber ≥0.6%; breach ≥1.0% (loss provision territory)
+C-02,gdpr_dsr_resolution_rate_pct,95,90,lower_worse,%,GDPR data subject request resolution rate within statutory 30-day window; amber <95%; breach <90% (regulatory exposure threshold)
+C-03,csrd_scope3_disclosure_pct,80,60,lower_worse,%,Scope 3 emissions coverage disclosed under CSRD requirements as % of total supply chain spend; amber <80%; breach <60% (material disclosure gap)
