@@ -1,6 +1,6 @@
 {
     "_comment": "Single source of truth for quantitative model benchmark figures. Update this file when simulation parameters change \u2014 dashboard_updater will inject these values into the HTML automatically.",
-    "_updated": "2026-06-07T14:25:13.289179+00:00",
+    "_updated": "2026-06-07T16:27:43.935640+00:00",
     "supply_chain": {
         "baseline_var_95_usd_m": 2298,
         "dual_source_var_saving_usd_m": 415,
@@ -76,5 +76,28 @@
         "commodity_gross_usd_m": 1540,
         "_source": "Hedge Analyser Monte Carlo | FX (Revenue+Cost): 9% vol | Commodity (DRAM+NAND): 32% vol | M-03 panel recommendation implemented 2026-05-28",
         "var_95_unhedged_note": "1303 = gross VaR without hedge; 1050 = net VaR after hedge; improvement = 253 (MO-02 corrected 2026-06-07)"
+    },
+    "model_fx_revenue_reconciliation": {
+        "_description": "HIGH-07 2026-06-07: Reconciliation table for FX-exposed revenue across three models.",
+        "supply_chain_model": {
+            "figure_usd_b": 9.0,
+            "definition": "Total revenue at risk from supply chain disruption (NOT FX exposure). Equals single-source spend (7.9B) \u00d7 revenue multiplier (1.139). Represents production revenue loss if critical suppliers fail \u2014 a supply risk metric, not an FX metric.",
+            "metric_type": "Supply chain operational risk",
+            "source": "erp_supply_chain.csv single-source spend \u00d7 model multiplier"
+        },
+        "ebitda_stress_model": {
+            "figure_usd_m": 680,
+            "definition": "Unhedged FX COST exposure \u2014 JPY/KRW denominated COGS not covered by hedges. FX003 unhedged (980-600=380M) + FX004 unhedged (620-320=300M) = 680M. Represents COGS sensitivity to USD/JPY and USD/KRW movements.",
+            "metric_type": "FX cost risk (COGS)",
+            "source": "treasury_positions.csv FX003 + FX004 unhedged amounts"
+        },
+        "hedge_analyser_model": {
+            "figure_usd_m": 6000,
+            "definition": "Gross FX REVENUE exposure \u2014 CNY/EUR denominated revenue before hedging. FX001 gross (3,200M) + FX002 gross (2,800M) = 6,000M. Represents revenue sensitivity to USD/CNY and USD/EUR movements.",
+            "metric_type": "FX revenue risk",
+            "source": "treasury_positions.csv FX001 + FX002 gross exposure"
+        },
+        "reconciliation_summary": "No overlap or double-counting between the three figures \u2014 they measure distinct risk types: (1) supply chain operational loss, (2) COGS FX sensitivity, (3) revenue FX sensitivity. Board materials should present all three with clear labels. Combined FX exposure = 6,000M revenue FX + 1,600M cost FX gross = 7,600M total FX gross \u2014 consistent with treasury_positions.csv and model_benchmarks.fx_hedge.fx_gross_usd_m.",
+        "added": "2026-06-07T16:27:43.935640+00:00"
     }
 }
