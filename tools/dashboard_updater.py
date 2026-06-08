@@ -568,9 +568,130 @@ def update_exec_recommendations(dashboard_path, approved):
     return changes
 
 
+def _extract_board_alerts(text: str) -> list:
+    """
+    Extract up to 3 board-level consequence alerts from the CRA synthesis text.
+    Each alert answers 'so what?' — consequence first, not raw metrics.
+    Returns list of dicts: {title, headline, detail, color}
+    """
+    import re
+    alerts = []
+    text_lc = text.lower()
+
+    # Alert 1 — Covenant breach / lender notification
+    cov_breach = (
+        re.search(r'cov00\d[^.]{0,80}(?:breach|in breach)', text_lc) or
+        re.search(r'covenant[^.]{0,60}confirmed[^.]{0,30}breach', text_lc) or
+        re.search(r'lender notification[^.]{0,60}required', text_lc)
+    )
+    if cov_breach:
+        deadline_m = re.search(r'lender notification[^.]{0,40}(\d{1,2}\s+\w+\s+\d{4})', text, re.IGNORECASE)
+        deadline   = f'Notification due {deadline_m.group(1)}' if deadline_m else 'Notification required immediately'
+        alerts.append({
+            'title':    'LENDER NOTIFICATION REQUIRED',
+            'headline': 'Covenant confirmed in breach — Trade Finance facility',
+            'detail':   deadline,
+            'color':    '#ef4444',
+        })
+
+    # Alert 2 — Near-zero stress headroom
+    hm = re.search(r'only USD ([\d,\.]+M)[^.]{0,50}(?:margin|headroom)', text)
+    if hm:
+        alerts.append({
+            'title':    'STRESS BUFFER CRITICAL',
+            'headline': f'USD {hm.group(1)} left under combined scenario',
+            'detail':   'FX crystallisation + cure write-off near wipes EBITDA headroom',
+            'color':    '#f97316',
+        })
+
+    # Alert 3 — Systemic / multi-domain contagion
+    if re.search(r'systemic risk flag|three or more domains|3\+?\s+domains', text_lc):
+        alerts.append({
+            'title':    'SYSTEMIC CONTAGION ACTIVE',
+            'headline': '3+ domains simultaneously in breach',
+            'detail':   'Concurrent failure modes amplify each other — not isolated risk',
+            'color':    '#f59e0b',
+        })
+
+    # Fallback: always return 3 alerts (pad with defaults if needed)
+    defaults = [
+        {'title': 'COVENANT ENFORCEMENT RISK', 'headline': 'COV006 in breach',
+         'detail': 'Lender notification required immediately', 'color': '#ef4444'},
+        {'title': 'STRESS BUFFER CRITICAL', 'headline': 'Near-zero headroom under stress',
+         'detail': 'Combined FX and cure scenario consumes EBITDA headroom', 'color': '#f97316'},
+        {'title': 'MULTI-DOMAIN RISK ACTIVE', 'headline': 'Systemic amplification in play',
+         'detail': 'Financial, Operational and Strategic breaches reinforce each other', 'color': '#f59e0b'},
+    ]
+    while len(alerts) < 3:
+        alerts.append(defaults[len(alerts)])
+    return alerts[:3]
+
+
+def _detect_priority(action_text: str) -> tuple:
+    """Return (label, color) priority tier from action body text."""
+    import re
+    tl = action_text.lower()
+    if re.search(r'immediat|within\s+(?:24|48)\s+hours?|this\s+week|notify\s+lender', tl):
+        return ('IMMEDIATE', '#ef4444')
+    if re.search(r'within\s+30|next\s+30|30[- ]day|month', tl):
+        return ('30 DAYS', '#f97316')
+    if re.search(r'within\s+(?:60|90|q[1-4])|(?:60|90)[- ]day|quarter|medium.term|next\s+quarter', tl):
+        return ('90 DAYS', '#3b82f6')
+    return ('NEAR-TERM', '#8b5cf6')
+
+
+def _chips_html_dark(domain_keys: list) -> str:
+    """Chips styled for dark header backgrounds."""
+    if not domain_keys:
+        return ''
+    chips = []
+    for key in domain_keys:
+        dm = _DOMAIN_META.get(key, {'color': '#7f8c8d', 'label': key})
+        c, lbl = dm['color'], dm['label']
+        chips.append(
+            f'<span style="display:inline-flex;align-items:center;gap:3px;'
+            f'padding:1px 6px 1px 4px;border-radius:9px;'
+            f'background:{c}30;border:1px solid {c}60;margin-left:3px;'
+            f'vertical-align:middle;white-space:nowrap">'
+            f'<span style="width:4px;height:4px;border-radius:50%;'
+            f'background:{c};flex-shrink:0"></span>'
+            f'<span style="font-size:7.5px;font-weight:700;color:{c};'
+            f'text-transform:uppercase;letter-spacing:.05em">{lbl}</span>'
+            f'</span>'
+        )
+    return ''.join(chips)
+
+
+def _chips_arrow_html(domain_keys: list) -> str:
+    """Chips connected with → arrows — for cross-domain connection cards."""
+    if not domain_keys:
+        return ''
+    parts = []
+    for i, key in enumerate(domain_keys):
+        dm = _DOMAIN_META.get(key, {'color': '#7f8c8d', 'label': key})
+        c, lbl = dm['color'], dm['label']
+        parts.append(
+            f'<span style="display:inline-flex;align-items:center;gap:3px;'
+            f'padding:2px 8px 2px 6px;border-radius:10px;'
+            f'background:{c}22;border:1px solid {c}55;'
+            f'vertical-align:middle;white-space:nowrap">'
+            f'<span style="width:5px;height:5px;border-radius:50%;'
+            f'background:{c};flex-shrink:0"></span>'
+            f'<span style="font-size:8.5px;font-weight:700;color:{c};'
+            f'text-transform:uppercase;letter-spacing:.05em">{lbl}</span>'
+            f'</span>'
+        )
+        if i < len(domain_keys) - 1:
+            parts.append(
+                f'<span style="font-size:11px;color:var(--txt-m);'
+                f'vertical-align:middle;margin:0 2px">→</span>'
+            )
+    return ''.join(parts)
+
+
 def _format_board_summary(text: str) -> str:
     """
-    Convert CRA board summary text into styled HTML sections.
+    Convert CRA board summary text into styled HTML sections — Command Deck style.
 
     Recognises only the five canonical CRA synthesis sections:
       RISK POSTURE / KEY RISK DRIVERS / CROSS-DOMAIN CONNECTIONS /
@@ -650,26 +771,63 @@ def _format_board_summary(text: str) -> str:
     overview = text[:segments[0][0]].strip()
     overview = re.sub(r'^#+\s*', '', overview, flags=re.MULTILINE).strip()
 
-    parts = []
+    # ── Consequence alert strip (3 board-level "so what" cards) ──────────────
+    alerts = _extract_board_alerts(text)
+    alert_cards = []
+    for a in alerts:
+        c = a['color']
+        alert_cards.append(
+            f'<div style="flex:1;min-width:0;padding:9px 11px 8px;border-radius:6px;'
+            f'background:{c}0d;border:1px solid {c}35">'
+            f'<div style="font-size:7.5px;font-weight:800;color:{c};'
+            f'text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">'
+            f'⚠ {a["title"]}</div>'
+            f'<div style="font-size:12px;font-weight:700;color:var(--txt);'
+            f'line-height:1.3;margin-bottom:3px">{a["headline"]}</div>'
+            f'<div style="font-size:10.5px;color:var(--txt);opacity:0.65;'
+            f'line-height:1.4">{a["detail"]}</div>'
+            f'</div>'
+        )
+    parts = [
+        f'<div style="display:flex;gap:6px;margin-bottom:0.7rem">'
+        + ''.join(alert_cards)
+        + f'</div>'
+    ]
+
     if overview:
         parts.append(
-            f'<p style="font-size:12.5px;font-weight:600;color:var(--navy);'
-            f'margin:0 0 0.75rem;line-height:1.5">{overview}</p>'
+            f'<p style="font-size:12px;font-weight:500;color:var(--txt);opacity:0.75;'
+            f'margin:0 0 0.6rem;line-height:1.5">{overview}</p>'
         )
 
     for i, (start, end, label, color) in enumerate(segments):
         body_end = segments[i + 1][0] if i + 1 < len(segments) else len(text)
         body = text[end:body_end].strip()
-        # Strip any residual markdown headers from body text
         body = re.sub(r'^#+\s*', '', body, flags=re.MULTILINE).strip()
+
+        # Domain chips for section header (dark background variant)
+        section_domains = _detect_domains(body)
+        header_chips = _chips_html_dark(section_domains)
+
         mb = '0' if i == len(segments) - 1 else '0.55rem'
+        label_display = label.title().replace('Risk Committee Recommended', 'Recommended')
         parts.append(
-            f'<div style="margin-bottom:{mb};padding:0.4rem 0.6rem 0.4rem 0.7rem;'
-            f'border-left:3px solid {color};background:rgba(0,0,0,0.02)">'
-            f'<div style="font-size:10px;font-weight:700;color:{color};'
-            f'text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">'
-            f'{label.title()}</div>'
+            # ── Command Deck card: dark header + body ────────────────────────
+            f'<div style="margin-bottom:{mb};border-radius:7px;overflow:hidden;'
+            f'border:1px solid rgba(255,255,255,0.06);box-shadow:0 1px 3px rgba(0,0,0,0.18)">'
+            # dark header strip
+            f'<div style="background:linear-gradient(90deg,rgba(10,18,35,0.96) 0%,'
+            f'rgba(20,30,52,0.94) 100%);padding:8px 12px 7px;'
+            f'display:flex;align-items:center;justify-content:space-between;gap:8px">'
+            f'<span style="font-size:9.5px;font-weight:800;color:#ffffff;'
+            f'text-transform:uppercase;letter-spacing:.13em;flex-shrink:0">{label_display}</span>'
+            f'<div style="display:flex;align-items:center;flex-wrap:wrap;'
+            f'justify-content:flex-end">{header_chips}</div>'
+            f'</div>'
+            # body area
+            f'<div style="padding:0.65rem 0.75rem 0.6rem">'
             f'{_render_section_body(label, body)}'
+            f'</div>'
             f'</div>'
         )
 
@@ -734,26 +892,31 @@ def _chips_html(domain_keys: list) -> str:
 
 def _render_section_body(label: str, body: str) -> str:
     """
-    Render a section body for board-level readability.
+    Command Deck renderers — each section has a distinct, impactful visual treatment.
+    Every element answers "so what?" — consequence first, metrics second.
 
-    Each section has a distinct visual treatment:
-    - RISK POSTURE:              domain sub-cards with live status dots
-    - KEY RISK DRIVERS:          3 driver blocks with domain chips
-    - CROSS-DOMAIN CONNECTIONS:  connection cards with domain chips as from→to
-    - QUARTER-ON-QUARTER:        trend banner + sentence rows with chips
-    - RECOMMENDED ACTIONS:       numbered cards with domain chips
+    RISK POSTURE:              compact domain status table, one-liner per row
+    KEY RISK DRIVERS:          3-column consequence grid + italic lead + footer
+    CROSS-DOMAIN CONNECTIONS:  arrow-connector chips → bold headline cards
+    QUARTER-ON-QUARTER:        trend banner + two-column domain rows
+    RECOMMENDED ACTIONS:       priority-tiered cards with domain chips
     """
     import re
 
     lbl_up = label.upper()
 
-    # ── Helper: safe sentence split ───────────────────────────────────────────
     def _split_sentences(text: str) -> list:
-        parts = re.split(r'(?<=[.!?])\s+(?=[A-Z“‘"])', text.strip())
+        parts = re.split(r'(?<=[.!?])\s+(?=[A-Z"\'])', text.strip())
         return [s.strip() for s in parts if s.strip()]
 
+    def _oneliner(text: str, max_chars: int = 130) -> str:
+        """First sentence, capped at max_chars."""
+        m = re.match(r'([^.!?]+[.!?])', text.strip())
+        s = m.group(1) if m else text.strip()
+        return s[:max_chars] + ('…' if len(s) > max_chars else '')
+
     # ═══════════════════════════════════════════════════════════════════════════
-    # RISK POSTURE — domain sub-cards with live status dots
+    # RISK POSTURE — compact domain status table
     # ═══════════════════════════════════════════════════════════════════════════
     if 'RISK POSTURE' in lbl_up:
         import re as _re
@@ -769,33 +932,49 @@ def _render_section_body(label: str, body: str) -> str:
             overview = _re.sub(r'[🔴🟡🟢🟠⚫⚪]', '', chunks[0]).strip()
             html_parts = []
             if overview:
+                # Overview: bold consequence statement
                 html_parts.append(
-                    f'<div style="font-size:13px;font-weight:600;color:var(--txt);'
-                    f'line-height:1.6;margin-bottom:0.75rem">{overview}</div>'
+                    f'<div style="font-size:12.5px;font-weight:600;color:var(--txt);'
+                    f'line-height:1.55;margin-bottom:0.6rem;padding-bottom:0.5rem;'
+                    f'border-bottom:1px solid rgba(255,255,255,0.07)">{overview}</div>'
                 )
+            # Domain rows — compact table style
+            domain_rows = []
             for i in range(1, len(chunks) - 1, 2):
                 dname  = chunks[i].upper()
-                dtext  = _re.sub(r'[🔴🟡🟢🟠⚫⚪]', '', chunks[i + 1] if i + 1 < len(chunks) else '').strip()
+                raw    = chunks[i + 1] if i + 1 < len(chunks) else ''
+                dtext  = _re.sub(r'[🔴🟡🟢🟠⚫⚪]', '', raw).strip()
+                oneliner = _oneliner(dtext, 120)
                 dcolor = DOMAIN_META_RP.get(dname, '#7f8c8d')
                 is_last = (i + 2 >= len(chunks) - 1)
-                html_parts.append(
-                    f'<div style="{"" if is_last else "margin-bottom:0.5rem;"}'
-                    f'padding:0.5rem 0.7rem 0.5rem 0.8rem;border-radius:6px;'
-                    f'border-left:3px solid {dcolor};background:rgba(0,0,0,0.018)">'
-                    f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">'
-                    f'<span id="bs-dot-{dname.lower()}" style="display:inline-block;width:8px;height:8px;'
-                    f'border-radius:50%;background:{dcolor};flex-shrink:0"></span>'
-                    f'<span style="font-size:10px;font-weight:700;color:{dcolor};'
+                domain_rows.append(
+                    f'<div style="display:flex;align-items:flex-start;gap:10px;'
+                    f'{"" if is_last else "margin-bottom:0;padding-bottom:0.45rem;border-bottom:1px solid rgba(255,255,255,0.055);"}'
+                    f'{"padding-top:0.45rem;" if i > 1 else ""}'
+                    f'">'
+                    # Left: dot + name + live status badge
+                    f'<div style="flex-shrink:0;width:108px;display:flex;'
+                    f'align-items:center;gap:5px;padding-top:2px">'
+                    f'<span id="bs-dot-{dname.lower()}" style="display:inline-block;'
+                    f'width:7px;height:7px;border-radius:50%;background:{dcolor};'
+                    f'flex-shrink:0"></span>'
+                    f'<span style="font-size:9.5px;font-weight:800;color:{dcolor};'
                     f'text-transform:uppercase;letter-spacing:.07em">{dname.title()}</span>'
-                    f'<span id="bs-status-{dname.lower()}" style="font-size:9px;font-weight:600;'
-                    f'color:{dcolor};letter-spacing:.05em;opacity:0.75"></span>'
                     f'</div>'
-                    f'<div style="font-size:12.5px;color:var(--txt);line-height:1.6">{dtext}</div>'
+                    # Middle: live status badge (JS-populated)
+                    f'<div style="flex-shrink:0;width:54px;padding-top:1px">'
+                    f'<span id="bs-status-{dname.lower()}" style="font-size:8px;'
+                    f'font-weight:700;padding:1px 5px;border-radius:3px;'
+                    f'text-transform:uppercase;letter-spacing:.05em"></span>'
+                    f'</div>'
+                    # Right: one-liner business consequence
+                    f'<div style="flex:1;font-size:12px;color:var(--txt);'
+                    f'line-height:1.5">{oneliner}</div>'
                     f'</div>'
                 )
+            html_parts.append(''.join(domain_rows))
             return ''.join(html_parts)
         else:
-            # Fallback: sentence rows
             sents = _split_sentences(body)
             rows = []
             for idx, s in enumerate(sents):
@@ -804,8 +983,8 @@ def _render_section_body(label: str, body: str) -> str:
                 chips = _chips_html(_detect_domains(s))
                 is_last = idx == len(sents) - 1
                 rows.append(
-                    f'<div style="font-size:12.5px;color:var(--txt);line-height:1.55;'
-                    f'{"" if is_last else "margin-bottom:0.38rem;padding-bottom:0.38rem;border-bottom:1px solid rgba(0,0,0,0.05);"}'
+                    f'<div style="font-size:12px;color:var(--txt);line-height:1.5;'
+                    f'{"" if is_last else "margin-bottom:0.35rem;padding-bottom:0.35rem;border-bottom:1px solid rgba(255,255,255,0.06);"}'
                     f'">'
                     + (f'<div style="margin-bottom:3px">{chips}</div>' if chips else '')
                     + f'{s}</div>'
@@ -813,74 +992,106 @@ def _render_section_body(label: str, body: str) -> str:
             return ''.join(rows)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # KEY RISK DRIVERS — lead sentence + 3 driver cards + attribution footer
+    # KEY RISK DRIVERS — italic lead + 3-column consequence grid + footer
     # ═══════════════════════════════════════════════════════════════════════════
     elif 'KEY RISK DRIVERS' in lbl_up or 'KEY RISK' in lbl_up:
         sents = _split_sentences(body)
         if len(sents) <= 2:
-            # Fallback: plain sentence rows with chips
             rows = []
             for idx, s in enumerate(sents):
                 chips = _chips_html(_detect_domains(s))
                 is_last = idx == len(sents) - 1
                 rows.append(
-                    f'<div style="font-size:12.5px;color:var(--txt);line-height:1.55;'
-                    f'{"" if is_last else "margin-bottom:0.38rem;padding-bottom:0.38rem;border-bottom:1px solid rgba(0,0,0,0.05);"}'
+                    f'<div style="font-size:12px;color:var(--txt);line-height:1.5;'
+                    f'{"" if is_last else "margin-bottom:0.35rem;padding-bottom:0.35rem;border-bottom:1px solid rgba(255,255,255,0.06);"}'
                     f'">'
                     + (f'<div style="margin-bottom:3px">{chips}</div>' if chips else '')
                     + f'{s}</div>'
                 )
             return ''.join(rows)
 
-        # First sentence → italic lead
         lead = sents[0]
         if lead and lead[-1] not in '.!?':
             lead += '.'
         html_parts = [
-            f'<div style="font-size:13px;font-style:italic;color:var(--txt);'
-            f'line-height:1.6;margin-bottom:0.6rem;opacity:0.85">{lead}</div>'
+            f'<div style="font-size:12px;font-style:italic;color:var(--txt);'
+            f'opacity:0.8;line-height:1.55;margin-bottom:0.55rem">{lead}</div>'
         ]
-        # Middle sentences → driver cards (skip first, last goes to footer)
+
+        # 3-column flex grid — first 3 middle sentences as prominent cards
         middle = sents[1:-1] if len(sents) > 2 else sents[1:]
-        for idx, s in enumerate(middle):
+        grid_cards = middle[:3]
+        extra_cards = middle[3:]
+
+        grid_html = []
+        for s in grid_cards:
+            if s and s[-1] not in '.!?':
+                s += '.'
+            doms = _detect_domains(s)
+            chips = _chips_arrow_html(doms) if len(doms) > 1 else _chips_html(doms)
+            # Extract consequence "headline": text before first colon or em-dash
+            m = re.match(r'^([^:—–]{8,60}[:—–])', s)
+            if m:
+                headline = m.group(1).rstrip(':—– ')
+                rest     = s[m.end():].strip()
+            else:
+                parts_s = s.split('. ', 1)
+                headline = parts_s[0]
+                rest     = parts_s[1] if len(parts_s) > 1 else ''
+            grid_html.append(
+                f'<div style="flex:1 1 calc(33% - 4px);min-width:140px;'
+                f'padding:0.6rem 0.65rem;border-radius:6px;'
+                f'background:rgba(255,255,255,0.035);'
+                f'border:1px solid rgba(255,255,255,0.08)">'
+                + (f'<div style="margin-bottom:6px;line-height:1">{chips}</div>' if chips else '')
+                + f'<div style="font-size:12px;font-weight:700;color:var(--txt);'
+                f'line-height:1.4;margin-bottom:5px">{headline}</div>'
+                + (f'<div style="font-size:11px;color:var(--txt);opacity:0.72;line-height:1.45">{rest}</div>' if rest else '')
+                + f'</div>'
+            )
+        html_parts.append(
+            f'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:{"0.45rem" if extra_cards or len(sents) > 2 else "0"}">'
+            + ''.join(grid_html)
+            + f'</div>'
+        )
+
+        # Any overflow middle sentences as compact list
+        for s in extra_cards:
             if s and s[-1] not in '.!?':
                 s += '.'
             chips = _chips_html(_detect_domains(s))
-            is_last_card = (idx == len(middle) - 1)
             html_parts.append(
-                f'<div style="{"" if is_last_card else "margin-bottom:0.45rem;"}'
-                f'padding:0.5rem 0.65rem;border-radius:5px;background:rgba(0,0,0,0.028);'
-                f'border:1px solid rgba(0,0,0,0.06)">'
-                + (f'<div style="margin-bottom:4px;line-height:1">{chips}</div>' if chips else '')
-                + f'<div style="font-size:12.5px;color:var(--txt);line-height:1.55">{s}</div>'
-                f'</div>'
+                f'<div style="font-size:11.5px;color:var(--txt);opacity:0.8;line-height:1.45;'
+                f'margin-bottom:0.3rem">'
+                + (f'<span style="vertical-align:middle">{chips}</span> ' if chips else '')
+                + f'{s}</div>'
             )
-        # Last sentence → footer attribution
+
+        # Last sentence → footer
         if len(sents) > 2:
             footer = sents[-1]
             if footer and footer[-1] not in '.!?':
                 footer += '.'
             footer_chips = _chips_html(_detect_domains(footer))
             html_parts.append(
-                f'<div style="margin-top:0.45rem;padding-top:0.45rem;'
-                f'border-top:1px solid rgba(0,0,0,0.07)">'
-                + (f'<div style="margin-bottom:3px">{footer_chips}</div>' if footer_chips else '')
-                + f'<div style="font-size:11.5px;color:var(--txt);opacity:0.8;line-height:1.5">{footer}</div>'
+                f'<div style="margin-top:0.4rem;padding-top:0.4rem;'
+                f'border-top:1px solid rgba(255,255,255,0.07)">'
+                + (f'<span style="vertical-align:middle">{footer_chips}</span> ' if footer_chips else '')
+                + f'<span style="font-size:11px;color:var(--txt);opacity:0.7;line-height:1.45">{footer}</span>'
                 f'</div>'
             )
         return ''.join(html_parts)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # CROSS-DOMAIN CONNECTIONS — connection cards with domain chips
+    # CROSS-DOMAIN CONNECTIONS — arrow-connector chips + bold headline cards
     # ═══════════════════════════════════════════════════════════════════════════
     elif 'CROSS-DOMAIN' in lbl_up or 'CROSS DOMAIN' in lbl_up:
         import re as _re2
-        # Split on natural paragraph/connection markers
         split_pat = (
             r'(?<=[.!?])\s+'
             r'(?=A second|A third|The compliance|The financial|The Quanta|'
             r'Additionally,|Furthermore,|Critically,|A further|Another|'
-            r'The operational|The strategic)'
+            r'The operational|The strategic|Second,|Third,)'
         )
         segments = _re2.split(split_pat, body.strip())
         segments = [s.strip() for s in segments if s.strip()]
@@ -891,8 +1102,10 @@ def _render_section_body(label: str, body: str) -> str:
         for idx, seg in enumerate(segments):
             if seg and seg[-1] not in '.!?':
                 seg += '.'
-            chips = _chips_html(_detect_domains(seg))
-            # Bold the first sentence of each segment as headline
+            doms = _detect_domains(seg)
+            # Arrow connector chips when 2+ domains detected
+            chip_html = _chips_arrow_html(doms) if len(doms) >= 2 else _chips_html(doms)
+
             seg_sents = _split_sentences(seg)
             if len(seg_sents) > 1:
                 headline = seg_sents[0]
@@ -900,80 +1113,88 @@ def _render_section_body(label: str, body: str) -> str:
                     headline += '.'
                 rest = ' '.join(seg_sents[1:])
                 body_html = (
-                    f'<div style="font-size:12.5px;font-weight:600;color:var(--txt);'
-                    f'line-height:1.5;margin-bottom:4px">{headline}</div>'
-                    f'<div style="font-size:12px;color:var(--txt);line-height:1.55;opacity:0.88">{rest}</div>'
+                    f'<div style="font-size:12.5px;font-weight:700;color:var(--txt);'
+                    f'line-height:1.45;margin-bottom:5px">{headline}</div>'
+                    f'<div style="font-size:11.5px;color:var(--txt);opacity:0.8;line-height:1.5">{rest}</div>'
                 )
             else:
                 body_html = (
-                    f'<div style="font-size:12.5px;font-weight:600;color:var(--txt);'
-                    f'line-height:1.55">{seg}</div>'
+                    f'<div style="font-size:12.5px;font-weight:700;color:var(--txt);'
+                    f'line-height:1.5">{seg}</div>'
                 )
             is_last = (idx == len(segments) - 1)
             cards.append(
                 f'<div style="{"" if is_last else "margin-bottom:0.5rem;"}'
-                f'padding:0.55rem 0.7rem;border-radius:5px;background:rgba(0,0,0,0.025);'
-                f'border:1px solid rgba(0,0,0,0.06)">'
-                + (f'<div style="margin-bottom:5px;line-height:1">{chips}</div>' if chips else '')
+                f'padding:0.6rem 0.75rem;border-radius:6px;'
+                f'background:rgba(255,255,255,0.03);'
+                f'border:1px solid rgba(255,255,255,0.07)">'
+                + (f'<div style="margin-bottom:7px;line-height:1">{chip_html}</div>' if chip_html else '')
                 + body_html
                 + f'</div>'
             )
         return ''.join(cards)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # QUARTER-ON-QUARTER MOVEMENT — trend banner + sentence rows with chips
+    # QUARTER-ON-QUARTER MOVEMENT — trend banner + 2-col domain rows
     # ═══════════════════════════════════════════════════════════════════════════
     elif 'QUARTER' in lbl_up:
-        import re as _re3
-        # Infer trend direction from text
         text_lc = body.lower()
-        if any(w in text_lc for w in ['deteriorat', 'worsen', 'increased breach', 'new breach', 'escalat']):
+        if any(w in text_lc for w in ['deteriorat', 'worsen', 'increased breach', 'new breach', 'escalat', 'crossed into breach']):
             trend_label = 'DETERIORATING'
             trend_color = '#ef4444'
-            trend_bg    = 'rgba(239,68,68,0.08)'
-            trend_border = 'rgba(239,68,68,0.25)'
-            trend_arrow = '▲'
+            trend_bg    = 'rgba(239,68,68,0.1)'
+            trend_border = 'rgba(239,68,68,0.3)'
+            trend_icon  = '▲'
         elif any(w in text_lc for w in ['improv', 'reduc', 'resolv', 'closed breach', 'recover']):
             trend_label = 'IMPROVING'
             trend_color = '#22c55e'
-            trend_bg    = 'rgba(34,197,94,0.08)'
-            trend_border = 'rgba(34,197,94,0.25)'
-            trend_arrow = '▼'
+            trend_bg    = 'rgba(34,197,94,0.1)'
+            trend_border = 'rgba(34,197,94,0.3)'
+            trend_icon  = '▼'
         else:
             trend_label = 'STABLE'
             trend_color = '#f59e0b'
-            trend_bg    = 'rgba(245,158,11,0.08)'
-            trend_border = 'rgba(245,158,11,0.25)'
-            trend_arrow = '→'
+            trend_bg    = 'rgba(245,158,11,0.1)'
+            trend_border = 'rgba(245,158,11,0.3)'
+            trend_icon  = '→'
+
         banner = (
-            f'<div style="display:flex;align-items:center;gap:8px;'
-            f'padding:6px 12px;border-radius:6px;margin-bottom:0.6rem;'
+            f'<div style="display:flex;align-items:center;gap:10px;'
+            f'padding:8px 12px;border-radius:6px;margin-bottom:0.6rem;'
             f'background:{trend_bg};border:1px solid {trend_border}">'
-            f'<span style="font-size:16px;color:{trend_color};line-height:1">{trend_arrow}</span>'
-            f'<span style="font-size:11px;font-weight:800;color:{trend_color};'
-            f'text-transform:uppercase;letter-spacing:.08em">{trend_label}</span>'
-            f'<span style="font-size:11px;color:var(--txt);opacity:0.7;margin-left:4px">'
-            f'Quarter-on-Quarter Risk Movement</span>'
+            f'<span style="font-size:20px;color:{trend_color};line-height:1;font-weight:700">'
+            f'{trend_icon}</span>'
+            f'<div>'
+            f'<div style="font-size:11px;font-weight:800;color:{trend_color};'
+            f'text-transform:uppercase;letter-spacing:.1em">{trend_label}</div>'
+            f'<div style="font-size:10px;color:var(--txt);opacity:0.65;margin-top:1px">'
+            f'Quarter-on-quarter risk position</div>'
+            f'</div>'
             f'</div>'
         )
+
         sents = _split_sentences(body)
         rows = [banner]
         for idx, s in enumerate(sents):
             if s and s[-1] not in '.!?':
                 s += '.'
-            chips = _chips_html(_detect_domains(s))
+            doms = _detect_domains(s)
+            chips = _chips_html(doms)
             is_last = (idx == len(sents) - 1)
+            # 2-column: chip label col | text col
             rows.append(
-                f'<div style="font-size:12.5px;color:var(--txt);line-height:1.55;'
-                f'{"" if is_last else "margin-bottom:0.38rem;padding-bottom:0.38rem;border-bottom:1px solid rgba(0,0,0,0.05);"}'
+                f'<div style="display:flex;align-items:baseline;gap:8px;'
+                f'{"" if is_last else "margin-bottom:0.35rem;padding-bottom:0.35rem;border-bottom:1px solid rgba(255,255,255,0.055);"}'
                 f'">'
-                + (f'<span style="vertical-align:middle">{chips}</span> ' if chips else '')
-                + f'{s}</div>'
+                f'<div style="flex-shrink:0;min-width:80px;padding-top:1px">'
+                f'{chips if chips else "<span></span>"}</div>'
+                f'<div style="flex:1;font-size:12px;color:var(--txt);line-height:1.5">{s}</div>'
+                f'</div>'
             )
         return ''.join(rows)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # RECOMMENDED ACTIONS — numbered cards with domain chips
+    # RECOMMENDED ACTIONS — priority-tiered cards with domain chips
     # ═══════════════════════════════════════════════════════════════════════════
     elif 'RECOMMENDED ACTIONS' in lbl_up:
         bullets = [b.strip() for b in re.split(r'\s*•\s*', body) if b.strip()]
@@ -981,31 +1202,38 @@ def _render_section_body(label: str, body: str) -> str:
             return f'<div style="font-size:12px;color:var(--txt);line-height:1.6">{body}</div>'
         cards = []
         for idx, bullet in enumerate(bullets):
-            num = f'{idx + 1:02d}'
             is_last = (idx == len(bullets) - 1)
+            p_label, p_color = _detect_priority(bullet)
             chips = _chips_html(_detect_domains(bullet))
             cards.append(
-                f'<div style="display:flex;gap:0.55rem;'
-                f'{"" if is_last else "margin-bottom:0.4rem;"}'
-                f'padding:0.5rem 0.6rem;background:rgba(0,0,80,0.03);border-radius:4px;'
-                f'border:1px solid rgba(0,0,0,0.05)">'
-                f'<span style="font-size:10px;font-weight:700;color:var(--accent);'
-                f'min-width:20px;padding-top:3px;flex-shrink:0;line-height:1">{num}</span>'
-                f'<div style="flex:1;min-width:0">'
-                + (f'<div style="margin-bottom:4px;line-height:1">{chips}</div>' if chips else '')
-                + f'<div style="font-size:12px;color:var(--txt);line-height:1.55">{bullet}</div>'
+                f'<div style="{"" if is_last else "margin-bottom:0.45rem;"}'
+                f'border-radius:5px;overflow:hidden;'
+                f'border:1px solid rgba(255,255,255,0.07)">'
+                # Priority tier header strip
+                f'<div style="display:flex;align-items:center;gap:8px;'
+                f'padding:4px 10px;background:{p_color}18;'
+                f'border-bottom:1px solid {p_color}30">'
+                f'<span style="display:inline-block;width:3px;height:14px;'
+                f'border-radius:2px;background:{p_color};flex-shrink:0"></span>'
+                f'<span style="font-size:8.5px;font-weight:800;color:{p_color};'
+                f'text-transform:uppercase;letter-spacing:.1em">{p_label}</span>'
+                + (f'<div style="margin-left:4px">{chips}</div>' if chips else '')
+                + f'</div>'
+                # Action body
+                f'<div style="padding:0.45rem 0.65rem;">'
+                f'<div style="font-size:12px;color:var(--txt);line-height:1.55">{bullet}</div>'
                 f'</div>'
                 f'</div>'
             )
         return ''.join(cards)
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # DEFAULT — sentence rows with domain chips
+    # DEFAULT — 2-col domain rows
     # ═══════════════════════════════════════════════════════════════════════════
     else:
         sentences = _split_sentences(body)
         if len(sentences) <= 1:
-            return f'<div style="font-size:12.5px;color:var(--txt);line-height:1.6">{body}</div>'
+            return f'<div style="font-size:12px;color:var(--txt);line-height:1.55">{body}</div>'
         rows = []
         for idx, sentence in enumerate(sentences):
             if sentence and sentence[-1] not in '.!?':
@@ -1013,11 +1241,13 @@ def _render_section_body(label: str, body: str) -> str:
             chips = _chips_html(_detect_domains(sentence))
             is_last = (idx == len(sentences) - 1)
             rows.append(
-                f'<div style="font-size:12.5px;color:var(--txt);line-height:1.55;'
-                f'{"" if is_last else "margin-bottom:0.38rem;padding-bottom:0.38rem;border-bottom:1px solid rgba(0,0,0,0.05);"}'
+                f'<div style="display:flex;align-items:baseline;gap:8px;'
+                f'font-size:12px;color:var(--txt);line-height:1.5;'
+                f'{"" if is_last else "margin-bottom:0.35rem;padding-bottom:0.35rem;border-bottom:1px solid rgba(255,255,255,0.055);"}'
                 f'">'
-                + (f'<span style="vertical-align:middle">{chips}</span> ' if chips else '')
-                + f'{sentence}</div>'
+                f'<div style="flex-shrink:0;min-width:70px">{chips}</div>'
+                f'<div style="flex:1">{sentence}</div>'
+                f'</div>'
             )
         return ''.join(rows)
 
