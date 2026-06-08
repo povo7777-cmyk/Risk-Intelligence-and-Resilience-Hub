@@ -136,6 +136,23 @@ def run(kri_data: dict | None = None) -> dict:
         for r in ta_raw
     ) if ta_raw else "\n".join(f"  {k}: {v}" for k, v in ta.items() if k != "raw_rows")
 
+    # Load supply chain model params for traceability (MO-07)
+    try:
+        from tools.risk_writer import load_store as _load_store
+        _sc_mp = _load_store().get("model_params", {}).get("supply_chain", {})
+    except Exception:
+        _sc_mp = {}
+    _sc_model_context = (
+        f"  Supply Chain VaR Model fields (use these field names when citing values in exec_recs):\n"
+        f"    var_95_baseline_usd_m={_sc_mp.get('var_95_baseline_usd_m','N/A')} | "
+        f"rev_at_risk_usd_b={_sc_mp.get('rev_at_risk_usd_b','N/A')} | "
+        f"saving_dual_src_usd_m={_sc_mp.get('saving_dual_src_usd_m','N/A')} | "
+        f"saving_inv_buff_usd_m={_sc_mp.get('saving_inv_buff_usd_m','N/A')} | "
+        f"recovery_months={_sc_mp.get('recovery_months','N/A')} | "
+        f"demand_shock_prob_pct={_sc_mp.get('demand_shock_prob_pct','N/A')} | "
+        f"demand_shock_impact_pct={_sc_mp.get('demand_shock_impact_pct','N/A')}"
+    ) if _sc_mp else "  (supply chain model params not available this run)"
+
     user_prompt = f"""O-01 SUPPLY CHAIN DATA:
 Overall single-source concentration: {sc.get('overall_single_source_concentration_pct',0)}% of ${sc.get('total_spend_usd_m',0)}M spend
   (amber threshold: 40% | breach threshold: 50%)
@@ -151,10 +168,13 @@ Single-source suppliers ({len(single_source_rows)} of {sc.get('suppliers_assesse
 
 Multi-source suppliers: {ms_names}
 
+SUPPLY CHAIN STRESS MODEL OUTPUT (cite these field names when tracing KRI values in exec_recs):
+{_sc_model_context}
+
 O-02 CYBER AND IT DATA (all metrics from SIEM/ITSM):
 {cy_lines}
   (amber thresholds: MTTD 7d | patch 90% | critical_vulns 5 | RTO 4h)
-  (breach thresholds: MTTD 10d | patch 80% | critical_vulns 10 | RTO 8h)
+  (breach thresholds: MTTD 10d | patch 80% | critical_vulns 10 | RTO 6h)
 
 O-03 PRODUCT QUALITY DATA (all metrics from QMS):
 {qu_lines}

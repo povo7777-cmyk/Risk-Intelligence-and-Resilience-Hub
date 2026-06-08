@@ -145,6 +145,26 @@ def run(kri_data: dict | None = None) -> dict:
         overdue_90d_pct = actx.get("F-02", {}).get("overdue_90d_pct", overdue_90d_pct)
         overdue_90d_usd = actx.get("F-02", {}).get("overdue_90d_usd_m", overdue_90d_usd)
         mw              = actx.get("F-04", {}).get("material_weakness_count", f04.get("material_weakness_count", 0))
+        # Augment F-03 with model-calibrated breach KRIs (written by model_calibrator.py
+        # BEFORE agents run; kri_data_layer does not include these probability KRIs).
+        # Read directly from risk_store to ensure p_covenant_breach_pct and cross_default_risk
+        # are included in the agent breach count and board synthesis headline.
+        try:
+            from tools.risk_writer import load_store
+            _store = load_store()
+            _f03_store = _store.get("financial_risks", {}).get("F-03", {}).get("kris", {})
+            _model_kris = ["p_covenant_breach_pct", "cross_default_risk", "covenant_breach_count"]
+            _existing_names = {k["name"] for k in kri_updates.get("F-03", [])}
+            for _kri_name in _model_kris:
+                if _kri_name not in _existing_names and _kri_name in _f03_store:
+                    _kri_rec = _f03_store[_kri_name]
+                    kri_updates.setdefault("F-03", []).append({
+                        "name": _kri_name, "value": _kri_rec["value"],
+                        "unit": "%" if "pct" in _kri_name else "binary",
+                        "status": _kri_rec["status"]
+                    })
+        except Exception:
+            pass
     else:
         mw = f04.get("material_weakness_count", 0.0)
         kri_updates = {
@@ -248,9 +268,13 @@ def run(kri_data: dict | None = None) -> dict:
     unhedged_fx=${unhedged_fx}M, avg_hedge={avg_hedge_ratio}%, fx_unrealised_pnl=${unrealised_pnl}M
   TOTAL PORTFOLIO (FX + commodity — supplementary context only):
     total_unrealised_pnl=${portfolio_total_pnl}M (= FX ${unrealised_pnl}M + commodity ${commodity_pnl}M)
-  NOTE: KRI F-01 scope is FX-only. When citing unrealised P&L in the F-01 KRI context use FX-only figure
-        (${unrealised_pnl}M). When citing total treasury loss in F-03 covenant context use portfolio total
-        (${portfolio_total_pnl}M). Do NOT mix these two figures.
+  NOTE: KRI F-01 scope is FX-only. Cite figures as follows — DO NOT MIX:
+    F-01 KRI unrealised P&L:     FX-only = ${unrealised_pnl}M (Revenue+Cost positions only)
+    F-03 EBITDA covenant stress:  cite BOTH separately:
+      FX positions only: ${unrealised_pnl}M (flows through operating income → EBITDA)
+      Commodity positions: ${commodity_pnl}M (flows through COGS → gross profit → EBITDA)
+      Total portfolio: ${portfolio_total_pnl}M (= FX ${unrealised_pnl}M + commodity ${commodity_pnl}M)
+    Always show the split so covenant stress analysis is traceable to the hedge model FX-only figure.
   (amber: unhedged_fx>$4,000M | hedge_ratio<60% — breach: unhedged_fx>$5,000M | hedge_ratio<45%)
 
 F-02 AR AGING (all rows from ar_aging.csv):
@@ -271,6 +295,12 @@ F-03 COVENANTS (all rows from covenant_tracker.csv):
   MODEL SCOPE NOTE: The EBITDA Monte Carlo (p_covenant_breach_pct) stress-tests FORWARD probability
   of COV001 breach only. COV006 is already confirmed — no Monte Carlo needed; direct cure required.
   The executive recommendation must address COV006 cure/waiver independently of the Monte Carlo.
+  MANDATORY — LENDER NOTIFICATION exec_rec MUST include ALL of the following:
+    (a) BOARD DIRECTIVE REQUIRED — lender notification is a board-authorised act under credit facility terms
+    (b) Reference to required WRITTEN BOARD AUTHORISATION before Group Treasurer contacts lenders
+    (c) Hard deadline 2026-06-12 for board resolution
+    (d) Named joint owners: Group Treasurer AND CFO (CFO co-signature required per facility terms)
+    (e) Cross-default risk if notification obligation is not met before 2026-06-30 test date
 
 ⚠ CRITICAL — EBITDA HEADROOM IN USD TERMS (computed from covenant data):
   Net Debt = COV001 ratio {_nd_ratio}x × EBITDA {_ebitda_b}B = USD {_net_debt_b}B

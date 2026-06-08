@@ -86,7 +86,7 @@ def run(kri_data: dict | None = None) -> dict:
             ],
             "C-02": [
                 {"name": "ai_audit_coverage_pct", "value": ai_audit_pct, "unit": "%",
-                 "status": "breach" if ai_audit_pct < 80 else "amber" if ai_audit_pct < 95 else "ok"},
+                 "status": "breach" if ai_audit_pct < 90 else "amber" if ai_audit_pct < 95 else "ok"},
                 {"name": "gdpr_dsr_resolution_rate_pct", "value": dsr_rate, "unit": "%",
                  "status": "fyi"},  # archived: not in KRI framework; context only
                 {"name": "formal_investigation_open", "value": 1.0 if formal_investigation else 0.0, "unit": "count",
@@ -150,7 +150,7 @@ def run(kri_data: dict | None = None) -> dict:
 
 C-02 DATA PRIVACY & AI (all compliance_metrics.csv rows):
 {cm_lines}
-  (amber: ai_audit<95% — breach: ai_audit<90% | gdpr_dsr=FYI context only, no threshold)
+  (amber: ai_audit<95% — breach: ai_audit<90% | CURRENT ai_audit_coverage_pct={ai_audit_pct}% → KRI STATUS: {"BREACH" if ai_audit_pct < 90 else "AMBER" if ai_audit_pct < 95 else "OK"} | gdpr_dsr=FYI context only, no threshold)
 
 C-03 ANTI-BRIBERY & ESG:
   third_party_abac_coverage: {third_party_coverage}% (breach: <95% | amber: <100%)

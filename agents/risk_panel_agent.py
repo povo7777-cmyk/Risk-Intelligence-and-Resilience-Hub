@@ -630,7 +630,8 @@ def _format_model_params_for_brief(model_params: dict) -> str:
             f"  Parameters: revenue USD {ep.get('revenue_usd_b')}B | "
             f"cost ratio {ep.get('cost_ratio_pct')}% | "
             f"volatility {ep.get('volatility_pct')}% p.a. | "
-            f"demand var {ep.get('demand_var_pct')}%\n"
+            f"demand volatility σ={ep.get('demand_var_pct')}% (annualised std-dev — NOT demand shock impact; "
+            f"supply chain demand_shock_impact_pct is a separate parameter in Supply Chain Stress model)\n"
             f"  Outputs:    P(covenant breach) {ep.get('p_covenant_breach_pct')}% | "
             f"+1pp cost → {ep.get('p_breach_cost_up1pp_pct')}% | "
             f"top-cust loss → {ep.get('p_breach_top_cust_loss_pct')}% | "
@@ -653,13 +654,17 @@ def _format_model_params_for_brief(model_params: dict) -> str:
         )
 
     if sp:
+        _rev_method = sp.get("rev_at_risk_methodology", "")
         lines.append(
             f"Supply Chain Stress:\n"
             f"  Parameters: {sp.get('supplier_count')} suppliers | "
             f"MTBF {sp.get('mtbf_years')}yr | "
             f"recovery {sp.get('recovery_months')}mo | "
             f"revenue at risk USD {sp.get('rev_at_risk_usd_b')}B | "
-            f"demand shock {sp.get('demand_shock_prob_pct')}%/yr\n"
+            f"demand shock PROBABILITY {sp.get('demand_shock_prob_pct')}%/yr | "
+            f"demand shock SEVERITY {sp.get('demand_shock_impact_pct', 15)}% (revenue loss if event occurs — "
+            f"distinct from EBITDA model demand volatility σ={ep.get('demand_var_pct') if ep else '12.0'}%)\n"
+            f"  Rev-at-risk methodology: {_rev_method if _rev_method else 'min(single_spend/COGS×revenue, cap)'}\n"
             f"  Outputs:    VaR baseline USD {sp.get('var_95_baseline_usd_m', 0):,}M | "
             f"CVaR USD {sp.get('cvar_95_baseline_usd_m', 0):,}M | "
             f"dual-src saves USD {sp.get('saving_dual_src_usd_m', 0):,}M "

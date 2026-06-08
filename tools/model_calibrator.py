@@ -263,17 +263,32 @@ def calibrate_ebitda(raw: dict) -> dict:
     cov006_next_test_date  = cov6["next_test_date"] if cov6 else ""
     cov006_current_pct     = float(cov6["current_value"]) if cov6 else 0.0
     cov006_threshold_pct   = float(cov6["threshold"])     if cov6 else 0.80
+    cov006_full_writeoff_usd_m  = 0.0  # full bad-debt provision (worst-case scenario)
+    cov006_cure_derivation      = ""
     if cov006_breach:
         ar = _latest_rows(raw.get("ar_aging", []))
         total_ar_m = sum(
             float(r.get("current_usd_m", 0)) + float(r.get("overdue_90d_usd_m", 0))
             for r in ar
         )
-        bad_debt_m = sum(float(r.get("bad_debt_provision_usd_m", 0)) for r in ar)
+        bad_debt_m   = sum(float(r.get("bad_debt_provision_usd_m", 0)) for r in ar)
         cure_target_m = total_ar_m * cov006_threshold_pct / 100
-        cov006_cure_cost_usd_m = round(max(bad_debt_m - cure_target_m, 0), 0)
-    # Post-cure headroom = headroom net of COV006 cure charge (worst-case: full expensing)
-    ebitda_headroom_post_cure_m = round(ebitda_headroom_m - cov006_cure_cost_usd_m, 0)
+        # Incremental cure: excess bad_debt above covenant floor × AR
+        # = (current_pct - covenant_threshold_pct) × total_AR
+        cov006_cure_cost_usd_m = round(max(bad_debt_m - cure_target_m, 0), 1)
+        # Full write-off: total bad_debt provision balance (catastrophic scenario)
+        cov006_full_writeoff_usd_m = round(bad_debt_m, 1)
+        # Derivation string for panel traceability (MO-02)
+        cov006_cure_derivation = (
+            f"Incremental cure to covenant floor: total_AR={round(total_ar_m,1)}M × "
+            f"(current {cov006_current_pct}% − covenant {cov006_threshold_pct}%) = "
+            f"{round((cov006_current_pct - cov006_threshold_pct)/100 * total_ar_m, 1)}M ≈ USD {cov006_cure_cost_usd_m}M. "
+            f"Full write-off (worst case): sum(bad_debt_provision_usd_m) from ar_aging.csv "
+            f"period 2026-05-01 = USD {cov006_full_writeoff_usd_m}M. "
+            f"Sources: ar_aging.csv, covenant_tracker.csv COV006."
+        )
+    # Post-cure headroom — use FULL write-off for worst-case (more conservative)
+    ebitda_headroom_post_cure_m = round(ebitda_headroom_m - cov006_full_writeoff_usd_m, 1)
 
     return {
         # Slider parameters
@@ -290,14 +305,22 @@ def calibrate_ebitda(raw: dict) -> dict:
         # ALREADY IN CONFIRMED BREACH (current 1.44% > 0.80% threshold) — it requires
         # no forward probability; it requires immediate cure/waiver action by 2026-06-12.
         # The fields below capture COV006 confirmed-breach status and cure cost impact.
+        # Formal t=0 model condition: COV006 is an INPUT to the model, not just a detection.
+        # The EBITDA stress model starts from a state where COV006 is ALREADY IN BREACH.
+        # p_covenant_breach_pct therefore underestimates total covenant risk — it models
+        # P(COV001 breach at t+1) only, while COV006 breach exists at t=0.
+        "cov006_breach_at_model_t0":    cov006_breach,  # FORMAL MODEL INPUT: True = COV006 already breached
         "model_scope_note": (
             "p_covenant_breach_pct models forward P(COV001 breach) only. "
-            "COV006 is confirmed in active breach (1.44% > 0.80%) — cure/waiver action "
-            "required by 2026-06-12, not probabilistic modelling."
+            "COV006 is a CONFIRMED BREACH at model t=0 (input condition, not output). "
+            "Total covenant risk = COV006 active breach (t=0) + P(COV001 breach) forward probability. "
+            "COV006 cure/waiver action required by 2026-06-12, not probabilistic modelling."
         ),
         # COV006 active breach — cure cost reduces practical EBITDA headroom
         "cov006_breach":                cov006_breach,
-        "cov006_cure_cost_usd_m":       cov006_cure_cost_usd_m,
+        "cov006_cure_cost_usd_m":       cov006_cure_cost_usd_m,   # incremental: excess above covenant floor
+        "cov006_full_writeoff_usd_m":   cov006_full_writeoff_usd_m, # full provision balance (worst case)
+        "cov006_cure_derivation":       cov006_cure_derivation,   # traceable source derivation (MO-02)
         "cov006_next_test_date":        cov006_next_test_date,
         "cov006_current_pct":           cov006_current_pct,
         "cov006_threshold_pct":         cov006_threshold_pct,

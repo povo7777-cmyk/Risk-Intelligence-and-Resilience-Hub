@@ -119,9 +119,12 @@ def _compute_operational() -> dict:
     geo_conc = round(_taiwan_china_spend / _total_sc_spend * 100, 1) if _total_sc_spend else 0.0
 
     mttd         = cy["mttd_days"]
+    mttr         = cy.get("mttr_days") or 0.0
     patch        = cy["patch_compliance_pct"]
     vulns        = float(cy["critical_vulns_open_gt30d"])
     rto          = cy["it_rto_hours"]
+    mfa          = cy.get("mfa_coverage_pct") or 0.0
+    priv_access  = cy.get("privileged_access_unreviewed_days") or 0.0
     cyber_assess = cy.get("supplier_cyber_resilience_assess_pct", 0.0) or 0.0
 
     ffr       = qu["max_field_failure_rate_pct"]
@@ -142,10 +145,13 @@ def _compute_operational() -> dict:
             _kri("geo_concentration_pct",                geo_conc,     "%",     _status(geo_conc,     "geo_concentration_pct")),
         ],
         "O-02": [
-            _kri("mttd_days",                 mttd,  "days",  _status(mttd,  "mttd_days")),
-            _kri("patch_compliance_pct",      patch, "%",     _status(patch, "patch_compliance_pct")),
-            _kri("critical_vulns_open_gt30d", vulns, "count", _status(vulns, "critical_vulns_open_gt30d")),
-            _kri("it_rto_hours",              rto,   "hours", _status(rto,   "it_rto_hours")),
+            _kri("mttd_days",                         mttd,        "days",  _status(mttd,        "mttd_days")),
+            _kri("mttr_days",                         mttr,        "days",  _status(mttr,        "mttr_days")),
+            _kri("patch_compliance_pct",              patch,       "%",     _status(patch,       "patch_compliance_pct")),
+            _kri("critical_vulns_open_gt30d",         vulns,       "count", _status(vulns,       "critical_vulns_open_gt30d")),
+            _kri("it_rto_hours",                      rto,         "hours", _status(rto,         "it_rto_hours")),
+            _kri("mfa_coverage_pct",                  mfa,         "%",     _status(mfa,         "mfa_coverage_pct")),
+            _kri("privileged_access_unreviewed_days", priv_access, "days",  _status(priv_access, "privileged_access_unreviewed_days")),
         ],
         "O-03": [
             _kri("field_failure_rate_pct",           ffr,       "%",   _status(ffr,       "field_failure_rate_pct")),
