@@ -572,37 +572,31 @@ def _format_board_summary(text: str) -> str:
     """
     Convert CRA board summary text into styled HTML sections.
 
-    Handles two layouts:
-      • Current (cra_synthesis_v1): four plain-text headers
-        RISK POSTURE / KEY RISK DRIVERS / CROSS-DOMAIN CONNECTIONS / QUARTER-ON-QUARTER MOVEMENT
-        followed by RISK COMMITTEE RECOMMENDED ACTIONS appended by the graph.
-      • Legacy: domain-based headers  STRATEGIC / OPERATIONAL / FINANCIAL / COMPLIANCE
+    Recognises only the five canonical CRA synthesis sections:
+      RISK POSTURE / KEY RISK DRIVERS / CROSS-DOMAIN CONNECTIONS /
+      QUARTER-ON-QUARTER MOVEMENT / RISK COMMITTEE RECOMMENDED ACTIONS
 
-    Also tolerates stray markdown (## headers, # title lines, • bullets) that the
-    LLM sometimes emits despite being asked for plain text.
+    Domain labels (STRATEGIC / OPERATIONAL / FINANCIAL / COMPLIANCE) inside
+    the RISK POSTURE body are rendered as colour-coded domain sub-cards by
+    _render_section_body — they are NOT top-level section splits.
+
+    Also tolerates stray markdown (## headers, # title lines, • bullets) that
+    the LLM sometimes emits despite being asked for plain text.
     """
     import re
 
     # ── Step 1: strip any leading markdown title line (# BOARD RISK SUMMARY …) ──
     text = re.sub(r'^#[^\n]*\n?', '', text.strip())
 
-    # ── Step 2: normalise section headers to "SECTION NAME:" ──
-    # Handles three patterns the LLM might emit:
-    #   "## RISK POSTURE"   — markdown heading (with or without colon)
-    #   "RISK POSTURE\n\n"  — bare label on its own line (plain text, no colon)
-    #   "RISK POSTURE:"     — already has colon (already fine)
+    # ── Step 2: normalise the five CRA section headers to "SECTION NAME:" ──
+    # Only these five are treated as top-level splits. Domain labels (STRATEGIC:
+    # etc.) inside RISK POSTURE body are handled by _render_section_body.
     SECTION_NAMES = [
         'RISK POSTURE',
         'KEY RISK DRIVERS',
         'CROSS-DOMAIN CONNECTIONS',
         'QUARTER-ON-QUARTER MOVEMENT',
         'RISK COMMITTEE RECOMMENDED ACTIONS',
-        'COMPOUND SCENARIOS',
-        'COMPOUND',
-        'STRATEGIC',
-        'OPERATIONAL',
-        'FINANCIAL',
-        'COMPLIANCE',
     ]
     for name in SECTION_NAMES:
         # markdown heading: ## SECTION NAME (optional colon)
@@ -618,21 +612,14 @@ def _format_board_summary(text: str) -> str:
             text, flags=re.IGNORECASE
         )
 
-    # ── Step 3: section → colour map ──
+    # ── Step 3: section → colour map (five CRA sections only) ──
     SECTION_CONFIG = [
-        # Current synthesis sections (ordered longest-first to avoid prefix collisions)
+        # Ordered longest-first to avoid prefix collisions
         ('RISK COMMITTEE RECOMMENDED ACTIONS', 'var(--navy)'),
         ('QUARTER-ON-QUARTER MOVEMENT',        'var(--grn-md)'),
         ('CROSS-DOMAIN CONNECTIONS',           '#7f8c8d'),
         ('KEY RISK DRIVERS',                   'var(--amb-md)'),
         ('RISK POSTURE',                       'var(--red-md)'),
-        # Legacy domain sections
-        ('COMPOUND SCENARIOS',                 '#7f8c8d'),
-        ('COMPOUND',                           '#7f8c8d'),
-        ('STRATEGIC',                          'var(--red-md)'),
-        ('OPERATIONAL',                        'var(--amb-md)'),
-        ('FINANCIAL',                          'var(--grn-md)'),
-        ('COMPLIANCE',                         'var(--pur-md)'),
     ]
 
     segments = []
@@ -722,45 +709,57 @@ def _render_section_body(label: str, body: str) -> str:
         return ''.join(cards)
 
     elif 'RISK POSTURE' in label.upper():
-        # ── Risk Posture: domain-split rendering ──────────────────────────────
-        # If the body contains STRATEGIC/OPERATIONAL/FINANCIAL/COMPLIANCE labels,
-        # render each as a mini-section with domain colour. Otherwise fall back to
-        # sentence-level rows so it's still scannable.
+        # ── Risk Posture: aggregate sentence + domain grid ────────────────────
+        # Render the overview paragraph(s) first, then domain sub-cards if the
+        # body contains STRATEGIC/OPERATIONAL/FINANCIAL/COMPLIANCE labels.
+        # Domain status indicators (🔴/🟡/🟢) are injected from the KRI data
+        # JS layer at runtime (id="bs-domain-bar") — NOT from emoji in prose.
         import re as _re
-        DOMAIN_COLOURS = {
-            'STRATEGIC':   '#e8c547',
-            'OPERATIONAL': '#f97316',
-            'FINANCIAL':   '#3b82f6',
-            'COMPLIANCE':  '#a78bfa',
+        DOMAIN_META = {
+            'STRATEGIC':   {'color': '#e8c547', 'icon': 'ti-world'},
+            'OPERATIONAL': {'color': '#f97316', 'icon': 'ti-settings'},
+            'FINANCIAL':   {'color': '#3b82f6', 'icon': 'ti-chart-bar'},
+            'COMPLIANCE':  {'color': '#a78bfa', 'icon': 'ti-shield-check'},
         }
         domain_pattern = r'(?i)\b(STRATEGIC|OPERATIONAL|FINANCIAL|COMPLIANCE)\s*:'
         if _re.search(domain_pattern, body):
             chunks = _re.split(domain_pattern, body)
-            # chunks: [overview_text, domain_name, domain_text, domain_name, domain_text, ...]
             overview = chunks[0].strip()
+            # Strip any stray emoji from the overview (legacy runs may have left them)
+            overview = _re.sub(r'[🔴🟡🟢🟠⚫⚪]', '', overview).strip()
             html_parts = []
             if overview:
                 html_parts.append(
-                    f'<div style="font-size:12.5px;color:var(--txt);line-height:1.6;'
-                    f'margin-bottom:0.65rem">{overview}</div>'
+                    f'<div style="font-size:13px;font-weight:600;color:var(--navy);'
+                    f'line-height:1.6;margin-bottom:0.75rem">{overview}</div>'
                 )
             for i in range(1, len(chunks) - 1, 2):
                 dname = chunks[i].upper()
-                dtext = chunks[i + 1].strip() if i + 1 < len(chunks) else ''
-                dcolor = DOMAIN_COLOURS.get(dname, '#7f8c8d')
+                raw_text = chunks[i + 1].strip() if i + 1 < len(chunks) else ''
+                # Strip stray emoji from domain body text
+                dtext = _re.sub(r'[🔴🟡🟢🟠⚫⚪]', '', raw_text).strip()
+                dm = DOMAIN_META.get(dname, {'color': '#7f8c8d', 'icon': 'ti-point'})
+                dcolor = dm['color']
+                dicon  = dm['icon']
                 is_last = (i + 2 >= len(chunks) - 1)
                 html_parts.append(
-                    f'<div style="{"" if is_last else "margin-bottom:0.45rem;"}'
-                    f'padding:0.35rem 0.55rem 0.35rem 0.65rem;'
-                    f'border-left:2px solid {dcolor};background:rgba(0,0,0,0.015)">'
-                    f'<div style="font-size:10px;font-weight:700;color:{dcolor};'
-                    f'text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">{dname.title()}</div>'
-                    f'<div style="font-size:12.5px;color:var(--txt);line-height:1.55">{dtext}</div>'
+                    f'<div style="{"" if is_last else "margin-bottom:0.5rem;"}'
+                    f'padding:0.5rem 0.7rem 0.5rem 0.8rem;border-radius:6px;'
+                    f'border-left:3px solid {dcolor};background:rgba(0,0,0,0.018)">'
+                    f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">'
+                    f'<span id="bs-dot-{dname.lower()}" style="display:inline-block;width:8px;height:8px;'
+                    f'border-radius:50%;background:{dcolor};flex-shrink:0"></span>'
+                    f'<span style="font-size:10px;font-weight:700;color:{dcolor};'
+                    f'text-transform:uppercase;letter-spacing:.07em">{dname.title()}</span>'
+                    f'<span id="bs-status-{dname.lower()}" style="font-size:9px;font-weight:600;'
+                    f'color:{dcolor};letter-spacing:.05em;opacity:0.75"></span>'
+                    f'</div>'
+                    f'<div style="font-size:12.5px;color:var(--txt);line-height:1.6">{dtext}</div>'
                     f'</div>'
                 )
             return ''.join(html_parts)
         else:
-            # No domain labels — use sentence-level rows so it's at least scannable
+            # No domain labels — sentence-level rows
             sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', body.strip())
             sentences = [s.strip() for s in sentences if s.strip()]
             if len(sentences) <= 1:
