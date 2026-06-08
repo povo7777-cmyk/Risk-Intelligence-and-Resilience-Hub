@@ -470,6 +470,16 @@ def chief_risk_synthesis_node(state: RiskIntelligenceState) -> RiskIntelligenceS
 
     state["board_summary"] = board_summary
 
+    # Persist board_summary to risk_store.json so panel and future runs see consistent text
+    try:
+        from tools.risk_writer import load_store, save_store
+        store = load_store()
+        store["board_summary"] = board_summary
+        store["board_summary_source"] = f"pipeline run {state['run_id'][:8]} {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
+        save_store(store)
+    except Exception:
+        pass
+
     # Write to dashboard
     try:
         from tools.dashboard_updater import update_board_summary, update_signals_panel

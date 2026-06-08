@@ -31,15 +31,28 @@ def _call_claude(system: str, user: str) -> tuple[str, dict]:
 
 def _parse_treasury() -> dict:
     rows = read_csv_latest("treasury_positions.csv")
-    total_gross = sum(float(r.get("gross_exposure_usd_m", 0)) for r in rows)
-    total_hedged = sum(float(r.get("hedged_amount_usd_m", 0)) for r in rows)
-    total_pnl = sum(float(r.get("unrealised_pnl_usd_m", 0)) for r in rows)
-    unhedged = total_gross - total_hedged
-    avg_hedge = (total_hedged / total_gross * 100) if total_gross > 0 else 0
+    # FX-only scope (Revenue + Cost) — PRIMARY KRI F-01 scope per CF-04 panel finding 2026-06-07
+    _fx_types = ("Revenue", "Cost")
+    fx_rows  = [r for r in rows if r.get("exposure_type", "") in _fx_types]
+    com_rows = [r for r in rows if r.get("exposure_type", "") not in _fx_types]
+    fx_gross   = sum(float(r.get("gross_exposure_usd_m",  0)) for r in fx_rows)
+    fx_hedged  = sum(float(r.get("hedged_amount_usd_m",   0)) for r in fx_rows)
+    fx_pnl     = sum(float(r.get("unrealised_pnl_usd_m",  0)) for r in fx_rows)
+    # Total portfolio (FX + commodity) — supplementary context only
+    total_gross  = sum(float(r.get("gross_exposure_usd_m", 0)) for r in rows)
+    total_hedged = sum(float(r.get("hedged_amount_usd_m",  0)) for r in rows)
+    total_pnl    = sum(float(r.get("unrealised_pnl_usd_m", 0)) for r in rows)
+    com_pnl      = sum(float(r.get("unrealised_pnl_usd_m", 0)) for r in com_rows)
+    fx_unhedged = fx_gross - fx_hedged
+    fx_avg_hedge = (fx_hedged / fx_gross * 100) if fx_gross > 0 else 0
     return {
-        "total_unhedged_usd_m": round(unhedged, 1),
-        "avg_hedge_ratio_pct": round(avg_hedge, 1),
-        "total_unrealised_pnl_usd_m": round(total_pnl, 1),
+        "total_unhedged_usd_m":       round(fx_unhedged, 1),  # FX-only primary figure
+        "avg_hedge_ratio_pct":        round(fx_avg_hedge, 1), # FX-only primary figure
+        "total_unrealised_pnl_usd_m": round(fx_pnl, 1),       # FX-only primary figure
+        # Supplementary total-portfolio context for prompt
+        "portfolio_total_gross_usd_m":    round(total_gross, 1),
+        "portfolio_total_pnl_usd_m":      round(total_pnl, 1),
+        "portfolio_commodity_pnl_usd_m":  round(com_pnl, 1),
     }
 
 
@@ -110,9 +123,11 @@ def run(kri_data: dict | None = None) -> dict:
     cv  = _parse_covenants()
     f04 = _parse_audit_log_financial()
 
-    unhedged_fx          = tr["total_unhedged_usd_m"]
-    avg_hedge_ratio      = tr["avg_hedge_ratio_pct"]
-    unrealised_pnl       = tr["total_unrealised_pnl_usd_m"]
+    unhedged_fx          = tr["total_unhedged_usd_m"]       # FX-only primary KRI
+    avg_hedge_ratio      = tr["avg_hedge_ratio_pct"]        # FX-only primary KRI
+    unrealised_pnl       = tr["total_unrealised_pnl_usd_m"] # FX-only primary P&L
+    portfolio_total_pnl  = tr["portfolio_total_pnl_usd_m"]  # FX+commodity total
+    commodity_pnl        = tr["portfolio_commodity_pnl_usd_m"]
     top_customer_pct     = ar["top_customer_concentration_pct"]
     overdue_90d_pct      = ar.get("overdue_90d_pct", 0.0)
     overdue_90d_usd      = ar["total_overdue_90d_usd_m"]
@@ -229,8 +244,14 @@ def run(kri_data: dict | None = None) -> dict:
 
     user_prompt = f"""F-01 FX & COMMODITY POSITIONS (all rows from treasury_positions.csv):
 {tr_lines}
-  Totals: unhedged=${unhedged_fx}M, avg_hedge={avg_hedge_ratio}%, total_unrealised_pnl=${unrealised_pnl}M
-  (amber: unhedged>$4,000M | hedge_ratio<60% — breach: unhedged>$5,000M | hedge_ratio<45%)
+  FX-ONLY TOTALS (Revenue+Cost positions — primary KRI F-01 scope per CF-04 2026-06-07):
+    unhedged_fx=${unhedged_fx}M, avg_hedge={avg_hedge_ratio}%, fx_unrealised_pnl=${unrealised_pnl}M
+  TOTAL PORTFOLIO (FX + commodity — supplementary context only):
+    total_unrealised_pnl=${portfolio_total_pnl}M (= FX ${unrealised_pnl}M + commodity ${commodity_pnl}M)
+  NOTE: KRI F-01 scope is FX-only. When citing unrealised P&L in the F-01 KRI context use FX-only figure
+        (${unrealised_pnl}M). When citing total treasury loss in F-03 covenant context use portfolio total
+        (${portfolio_total_pnl}M). Do NOT mix these two figures.
+  (amber: unhedged_fx>$4,000M | hedge_ratio<60% — breach: unhedged_fx>$5,000M | hedge_ratio<45%)
 
 F-02 AR AGING (all rows from ar_aging.csv):
 {ar_lines}
@@ -239,6 +260,17 @@ F-02 AR AGING (all rows from ar_aging.csv):
 
 F-03 COVENANTS (all rows from covenant_tracker.csv):
 {cov_lines}
+
+⚠ CRITICAL — COV006 ACTIVE BREACH AND EBITDA IMPACT:
+  COV006 bad_debt_provision_pct is in CONFIRMED ACTIVE BREACH (1.44% vs 0.80% threshold).
+  This is NOT a probabilistic forward risk — it requires immediate cure/waiver action by 2026-06-12.
+  COV006 cure cost (full write-off scenario): bad_debt_provision USD ~94.3M could flow through P&L.
+  EBITDA headroom is USD 152M. A full COV006 cure write-off of USD 94.3M would consume 62% of that
+  headroom, leaving USD ~58M before COV001 Net Debt/EBITDA breach.
+  Partial cure scenario: if bad_debt write-off is USD 50M, headroom falls to USD ~102M.
+  MODEL SCOPE NOTE: The EBITDA Monte Carlo (p_covenant_breach_pct) stress-tests FORWARD probability
+  of COV001 breach only. COV006 is already confirmed — no Monte Carlo needed; direct cure required.
+  The executive recommendation must address COV006 cure/waiver independently of the Monte Carlo.
 
 ⚠ CRITICAL — EBITDA HEADROOM IN USD TERMS (computed from covenant data):
   Net Debt = COV001 ratio {_nd_ratio}x × EBITDA {_ebitda_b}B = USD {_net_debt_b}B

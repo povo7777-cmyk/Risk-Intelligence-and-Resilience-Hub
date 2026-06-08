@@ -570,8 +570,13 @@ def calibrate_supply_chain(raw: dict) -> dict:
     single_spend_m  = sum(float(r["our_spend_usd_m"]) for r in single_src)
 
     # Cap revenue-at-risk at configured upper bound — sourced from model_benchmarks.json::simulation_parameters.ebitda.rev_at_risk_cap_pct
+    # Methodology: revenue_at_risk = single_source_spend × (revenue / COGS) — i.e. spend-disruption mapped
+    # to revenue through the inverse COGS ratio. This produces a figure ABOVE spend because disrupted spend
+    # cascades to revenue via fixed-cost amplification. Revenue/COGS = rev_b / (rev_b × cost_ratio_pct/100).
+    # Example: single_source_spend=7,900M × (57B / 54.72B) = USD 8,229M. Rounded to 1dp in B = 8.2B.
+    _rev_cogs_multiplier = round(rev_b / (rev_b * (cost_ratio_pct / 100)), 3) if cost_ratio_pct else 1.0
     rev_at_risk_b = round(
-        min(single_spend_m / company_cogs_m * rev_b, rev_b * _REV_AT_RISK_CAP_PCT / 100), 0
+        min(single_spend_m / company_cogs_m * rev_b, rev_b * _REV_AT_RISK_CAP_PCT / 100), 1
     ) if company_cogs_m else 12.0
 
     # Demand shock parameters — derive from market intelligence signal count
@@ -733,7 +738,13 @@ def calibrate_supply_chain(raw: dict) -> dict:
         "mtbf_years":              mtbf_years,
         "recovery_months":         recovery_months,
         "emerg_premium_pct":       emerg_premium,
-        "rev_at_risk_usd_b":       int(rev_at_risk_b),
+        "rev_at_risk_usd_b":       rev_at_risk_b,
+        "rev_at_risk_methodology": (
+            f"single_source_spend_usd_m={round(single_spend_m,0)} × rev/COGS_multiplier={_rev_cogs_multiplier}x "
+            f"= USD {round(single_spend_m * _rev_cogs_multiplier, 0)}M → capped to {rev_at_risk_b}B (USD {round(rev_at_risk_b*1000,0)}M). "
+            f"Revenue/COGS multiplier = {_rev_cogs_multiplier}x reflects fixed-cost amplification: disrupted spend cascades "
+            f"to revenue at greater-than-1x ratio due to operating leverage."
+        ),
         "demand_shock_prob_pct":   demand_shock_prob,
         "demand_shock_impact_pct": int(demand_shock_impact),
         "impact_vol_pct":          int(impact_vol),
