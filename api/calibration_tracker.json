@@ -1,34 +1,34 @@
 {
   "open": {
     "MO-01": {
-      "title": "EBITDA Stress model omits COV006 active breach at t=0 \u2014 headline P(breach) 69.4% materially understates current reality of 100% on at least one covenant",
+      "title": "Confirmed COV006 Covenant Breach Absent from EBITDA Stress Model Starting Conditions \u2014 P(breach) Understated to Board",
       "severity": "HIGH",
-      "owner": "CFO",
+      "owner": "CFO / Model Owner",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 5
+      "times_seen": 6
     },
     "MO-04": {
-      "title": "Exec recommendation FX unrealised P&L USD 47.0M does not reconcile to model output USD 26.6M \u2014 USD 20.4M discrepancy consistent with commodity double-counting in board narrative",
+      "title": "Supply Chain Revenue-at-Risk Multiplier (1.042\u00d7) Undocumented and Potentially Understated vs Industry Norms",
       "severity": "HIGH",
-      "owner": "Group Treasurer",
+      "owner": "Supply Chain Model Owner and CFO",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 5
+      "times_seen": 7
     },
     "EM-03": {
-      "title": "COV001 forward breach probability 69.4% absent from board headline risk posture \u2014 directors see single active breach, not dual-breach trajectory",
+      "title": "No KRI for JPMorgan Single-Counterparty Hedge Concentration (USD 3,850M Gross Exposure)",
       "severity": "HIGH",
-      "owner": "CRO",
+      "owner": "CFO and Group Treasurer",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 3
+      "times_seen": 4
     },
     "EM-04": {
       "title": "O-03 field_failure_rate_pct Suspended KRI Continues to Drive 'Amber' Domain Status; Warranty System Value (1.90%) Would Imply Breach, Understating Product Liability Risk",
@@ -41,24 +41,24 @@
       "times_seen": 4
     },
     "EM-05": {
-      "title": "No registered KRI for MFA coverage (87%) or privileged access review age (45 days) \u2014 material cyber control failures lack formal escalation triggers",
+      "title": "Board Summary Understates High-Severity Geopolitical Signal Count \u2014 Narrative States 3, KRI Store Records 4",
       "severity": "HIGH",
-      "owner": "CISO",
+      "owner": "CEO / Chief Strategy Officer / CRO",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 3
+      "times_seen": 4
     },
     "EM-06": {
-      "title": "Lender notification action lacks documented board resolution authority \u2014 2026-06-12 deadline at risk, cross-default exposure if missed",
+      "title": "Board Narrative Incorrectly Cites Five High-Severity Geopolitical Signals (Actual: Three High-Severity of Five Total)",
       "severity": "HIGH",
-      "owner": "Board Chair / Company Secretary / CRO",
+      "owner": "CRO",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 5
+      "times_seen": 7
     },
     "MO-05": {
       "title": "Supply chain revenue-at-risk parameter USD 8.2B exceeds total single-source spend USD 7.9B \u2014 VaR USD 2,373M and CVaR USD 2,916M calibrated to overstated exposure base",
@@ -71,54 +71,54 @@
       "times_seen": 4
     },
     "MO-06": {
-      "title": "Hedge Analyser Unrealised FX P&L Overstated by USD 20.4M Due to Incorrect Inclusion of Commodity Swap P&L in FX Book",
+      "title": "Yangtze Memory (Health Score 55, MTBF 4.5yr \u2014 Lowest in Portfolio) Excluded from Single-Source Revenue-at-Risk Calculation",
       "severity": "HIGH",
-      "owner": "Group Treasurer / Model Owner",
+      "owner": "VP Supply Chain / Model Owner",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
-      "last_seen_run": "20260607",
-      "last_seen_date": "2026-06-07",
-      "times_seen": 3
+      "last_seen_run": "20260608",
+      "last_seen_date": "2026-06-08",
+      "times_seen": 4
     },
     "CYBER-SUPPLYCHAIN-OVERLAP": {
-      "title": "Cyber-supply chain overlap: combined MTTD+MTTR (29 days) exceeds Quanta inventory cover (27 days) \u2014 production halt guaranteed if cyber incident disrupts supplier communications",
+      "title": "MTTD+MTTR Combined Response Time (29 days) Exceeds Quanta Inventory Cover (27 days) \u2014 Production Halt Guaranteed on Cyber Incident",
       "severity": "HIGH",
-      "owner": "CISO / COO",
+      "owner": "CISO / VP Supply Chain / COO",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
+      "last_seen_run": "20260608",
+      "last_seen_date": "2026-06-08",
+      "times_seen": 8
+    },
+    "EM-02": {
+      "title": "Field Failure Rate KRI 40\u00d7 Data Conflict: Board Receiving Materially False Green Signal on Product Quality",
+      "severity": "HIGH",
+      "owner": "COO and VP Quality",
+      "first_seen_run": "20260607",
+      "first_seen_date": "2026-06-07",
+      "last_seen_run": "20260608",
+      "last_seen_date": "2026-06-08",
+      "times_seen": 6
+    },
+    "MO-02": {
+      "title": "Hedge Analyser Blends FX and Commodity Ratios: Segregated Commodity Ratio 44.2% Constitutes Unacknowledged KRI Breach",
+      "severity": "HIGH",
+      "owner": "Group Treasurer and CFO",
+      "first_seen_run": "20260607",
+      "first_seen_date": "2026-06-07",
+      "last_seen_run": "20260608",
+      "last_seen_date": "2026-06-08",
+      "times_seen": 6
+    },
+    "MO-03": {
+      "title": "Exec Rec Conflates MTM Unrealised Loss (USD 67.4M) with VaR (USD 811M) Without Definitional Separation",
+      "severity": "HIGH",
+      "owner": "CFO",
+      "first_seen_run": "20260607",
+      "first_seen_date": "2026-06-07",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
       "times_seen": 7
-    },
-    "EM-02": {
-      "title": "Field failure rate KRI unreliable \u2014 40x data discrepancy (QMS-SAP 0.048% vs warranty system 1.9%) renders O-03 status unvalidated",
-      "severity": "HIGH",
-      "owner": "COO / VP Quality",
-      "first_seen_run": "20260607",
-      "first_seen_date": "2026-06-07",
-      "last_seen_run": "20260608",
-      "last_seen_date": "2026-06-08",
-      "times_seen": 5
-    },
-    "MO-02": {
-      "title": "Hedge Analyser VaR (USD 811M) requires confirmation that commodity swap P&L (\u2212USD 20.4M) is not commingled with FX VaR \u2014 segregation unconfirmed",
-      "severity": "HIGH",
-      "owner": "Group Treasurer",
-      "first_seen_run": "20260607",
-      "first_seen_date": "2026-06-07",
-      "last_seen_run": "20260608",
-      "last_seen_date": "2026-06-08",
-      "times_seen": 5
-    },
-    "MO-03": {
-      "title": "Hedge Analyser gross FX exposure (USD 7,600M) includes commodity rows \u2014 pure FX gross is USD 6,060M; hedge ratio and unhedged exposure KRI alignment distorted",
-      "severity": "HIGH",
-      "owner": "Group Treasurer",
-      "first_seen_run": "20260607",
-      "first_seen_date": "2026-06-07",
-      "last_seen_run": "20260608",
-      "last_seen_date": "2026-06-08",
-      "times_seen": 5
     },
     "MO-06 / EM-05 (linked)": {
       "title": "Quanta three concurrent operational breaches not captured in supplier_distress_flags KRI; Yangtze Memory (health score 55, lowest in supply base) also absent from distress flag methodology",
@@ -169,6 +169,36 @@
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
       "times_seen": 2
+    },
+    "EM-01/MO-02": {
+      "title": "Board Summary FX P&L Materially Misstated \u2014 FX and Commodity P&L Conflated; FX Loss Overstated by USD 20.4M",
+      "severity": "HIGH",
+      "owner": "CFO / Group Treasurer",
+      "first_seen_run": "20260608",
+      "first_seen_date": "2026-06-08",
+      "last_seen_run": "20260608",
+      "last_seen_date": "2026-06-08",
+      "times_seen": 1
+    },
+    "EM-01 / MO-01": {
+      "title": "COV006 Covenant Breach: Escalation Flag Suppressed and EBITDA Model Omits Cure-Cost Shock",
+      "severity": "HIGH",
+      "owner": "CRO (escalation pathway override); CFO / Model Owner (EBITDA stress model rerun)",
+      "first_seen_run": "20260608",
+      "first_seen_date": "2026-06-08",
+      "last_seen_run": "20260608",
+      "last_seen_date": "2026-06-08",
+      "times_seen": 1
+    },
+    "MO-06 / CYBER-SUPPLYCHAIN-OVERLAP": {
+      "title": "Quanta Inventory Cover Breached; Supply Chain VaR Understates Quanta Tail Loss via Pooled MTBF Parameters; 29-Day Cyber Response Exceeds 27-Day Cover Window",
+      "severity": "HIGH",
+      "owner": "Supply Chain Model Owner and CISO",
+      "first_seen_run": "20260608",
+      "first_seen_date": "2026-06-08",
+      "last_seen_run": "20260608",
+      "last_seen_date": "2026-06-08",
+      "times_seen": 1
     }
   },
   "resolved": {}
