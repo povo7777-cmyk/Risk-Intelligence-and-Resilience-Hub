@@ -568,6 +568,88 @@ def update_exec_recommendations(dashboard_path, approved):
     return changes
 
 
+def _load_risk_titles() -> dict:
+    """
+    Load risk ID → title mapping from risk_register.csv.
+    Falls back to a hardcoded dict if the CSV is unavailable.
+    Returns e.g. {'S-01': 'Geopolitical & trade concentration', ...}
+    """
+    import csv
+    csv_path = Path(__file__).parent.parent / 'data' / 'risk_register.csv'
+    titles = {}
+    try:
+        with open(csv_path, newline='', encoding='utf-8') as f:
+            for row in csv.DictReader(f):
+                rid = row.get('risk_id', '').strip()
+                name = row.get('name', '').strip()
+                if rid and name:
+                    titles[rid] = name
+    except Exception:
+        pass
+    if not titles:
+        # Hardcoded fallback (mirrors risk_register.csv)
+        titles = {
+            'S-01': 'Geopolitical & Trade Concentration',
+            'S-02': 'AI Market Disruption',
+            'S-03': 'M&A Integration Risk',
+            'O-01': 'Supply Chain Disruption',
+            'O-02': 'Cyber & Information Security',
+            'O-03': 'Product Quality & Safety',
+            'O-04': 'Talent & Capability',
+            'F-01': 'Foreign Exchange',
+            'F-02': 'Revenue Concentration & Credit',
+            'F-03': 'Liquidity & Covenant',
+            'F-04': 'Accounting & Reporting',
+            'C-01': 'Export Controls & Sanctions',
+            'C-02': 'Data Privacy & AI Act',
+            'C-03': 'Anti-Bribery & Corruption',
+        }
+    return titles
+
+
+def _expand_risk_codes(text: str) -> str:
+    """
+    Replace bare risk-register codes (S-01, C-03, etc.) with
+    'CODE (Title)' so board members see the full risk name.
+
+    Only expands codes that appear WITHOUT an immediately following
+    parenthesis — avoids double-expanding on re-renders.
+    Pattern: word-boundary CODE not already followed by '('
+    """
+    import re
+    _SMALL_WORDS = {'and', 'or', 'of', 'the', 'in', 'a', 'an', 'to', 'for',
+                    'at', 'by', 'from', 'with', 'on', 'into', 'vs'}
+    titles = _load_risk_titles()
+
+    def _board_title(name: str) -> str:
+        """
+        Convert a CSV risk name to board-quality title-case:
+        - Keeps ALL-CAPS tokens intact (AI, EBITDA, FX …)
+        - Lowercases small conjunctions / prepositions mid-title
+        - Capitalises every other word (and the first word always)
+        """
+        words = name.split()
+        out = []
+        for i, w in enumerate(words):
+            if w.isupper() and len(w) > 1:
+                out.append(w)                     # preserve AI, FX, M&A …
+            elif i > 0 and w.lower() in _SMALL_WORDS:
+                out.append(w.lower())             # 'and', 'of', …
+            else:
+                out.append(w.capitalize())
+        return ' '.join(out)
+
+    for code, title in titles.items():
+        display = _board_title(title)
+        # Replace bare code not already followed by '('
+        text = re.sub(
+            r'\b' + re.escape(code) + r'\b(?!\s*\()',
+            f'{code} ({display})',
+            text
+        )
+    return text
+
+
 def _extract_board_alerts(text: str) -> list:
     """
     Extract up to 3 board-level consequence alerts from the CRA synthesis text.
@@ -722,6 +804,9 @@ def _format_board_summary(text: str) -> str:
     the LLM sometimes emits despite being asked for plain text.
     """
     import re
+
+    # ── Step 0: expand bare risk codes (S-01 → S-01 (Title)) ──
+    text = _expand_risk_codes(text.strip())
 
     # ── Step 1: strip any leading markdown title line (# BOARD RISK SUMMARY …) ──
     text = re.sub(r'^#[^\n]*\n?', '', text.strip())
