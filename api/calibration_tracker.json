@@ -11,24 +11,24 @@
       "times_seen": 6
     },
     "MO-04": {
-      "title": "Supply Chain Revenue-at-Risk Multiplier (1.042\u00d7) Undocumented and Potentially Understated vs Industry Norms",
+      "title": "Supply chain revenue-at-risk multiplier (1.042x) asserted not derived \u2014 fixed/variable cost split absent; dual-sourcing ROI of 24x correspondingly unvalidated",
       "severity": "HIGH",
-      "owner": "Supply Chain Model Owner and CFO",
+      "owner": "VP Supply Chain / Finance",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 7
+      "times_seen": 8
     },
     "EM-03": {
-      "title": "No KRI for JPMorgan Single-Counterparty Hedge Concentration (USD 3,850M Gross Exposure)",
+      "title": "p_covenant_breach_pct 69.4% presented as definitive in board materials despite explicit PROVISIONAL flag in model notes",
       "severity": "HIGH",
-      "owner": "CFO and Group Treasurer",
+      "owner": "CFO / CRO",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 4
+      "times_seen": 5
     },
     "EM-04": {
       "title": "O-03 field_failure_rate_pct Suspended KRI Continues to Drive 'Amber' Domain Status; Warranty System Value (1.90%) Would Imply Breach, Understating Product Liability Risk",
@@ -41,34 +41,34 @@
       "times_seen": 4
     },
     "EM-05": {
-      "title": "Board Summary Understates High-Severity Geopolitical Signal Count \u2014 Narrative States 3, KRI Store Records 4",
+      "title": "No KRI for FX003 USD/JPY 3-month maturity concentration risk despite largest single-position unrealised loss (-USD 15.6M) and imminent crystallisation",
       "severity": "HIGH",
-      "owner": "CEO / Chief Strategy Officer / CRO",
+      "owner": "Group Treasurer / CFO",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 4
+      "times_seen": 5
     },
     "EM-06": {
-      "title": "Board Narrative Incorrectly Cites Five High-Severity Geopolitical Signals (Actual: Three High-Severity of Five Total)",
+      "title": "Board summary and agent findings report conflicting high-severity geopolitical signal counts (3 vs 4); competitive signal (Dell AI laptop) mis-categorised as geopolitical",
       "severity": "HIGH",
-      "owner": "CRO",
+      "owner": "CRO / Chief Strategy Officer",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 7
+      "times_seen": 8
     },
     "MO-05": {
-      "title": "Supply chain revenue-at-risk parameter USD 8.2B exceeds total single-source spend USD 7.9B \u2014 VaR USD 2,373M and CVaR USD 2,916M calibrated to overstated exposure base",
+      "title": "FX volatility (9.0% p.a. in Hedge Analyser) and revenue volatility (12.0% p.a. in EBITDA Stress) not reconciled \u2014 FX contribution to revenue vol unattributed; P(covenant breach) and VaR potentially misstated",
       "severity": "HIGH",
-      "owner": "VP Supply Chain",
+      "owner": "Model Risk",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 4
+      "times_seen": 5
     },
     "MO-06": {
       "title": "Yangtze Memory (Health Score 55, MTBF 4.5yr \u2014 Lowest in Portfolio) Excluded from Single-Source Revenue-at-Risk Calculation",
@@ -91,34 +91,34 @@
       "times_seen": 8
     },
     "EM-02": {
-      "title": "Field Failure Rate KRI 40\u00d7 Data Conflict: Board Receiving Materially False Green Signal on Product Quality",
+      "title": "Board narrative suppresses 40x field_failure_rate discrepancy (QMS-SAP 0.048% vs warranty system 1.90%) \u2014 potential live safety breach masked",
       "severity": "HIGH",
-      "owner": "COO and VP Quality",
-      "first_seen_run": "20260607",
-      "first_seen_date": "2026-06-07",
-      "last_seen_run": "20260608",
-      "last_seen_date": "2026-06-08",
-      "times_seen": 6
-    },
-    "MO-02": {
-      "title": "Hedge Analyser Blends FX and Commodity Ratios: Segregated Commodity Ratio 44.2% Constitutes Unacknowledged KRI Breach",
-      "severity": "HIGH",
-      "owner": "Group Treasurer and CFO",
-      "first_seen_run": "20260607",
-      "first_seen_date": "2026-06-07",
-      "last_seen_run": "20260608",
-      "last_seen_date": "2026-06-08",
-      "times_seen": 6
-    },
-    "MO-03": {
-      "title": "Exec Rec Conflates MTM Unrealised Loss (USD 67.4M) with VaR (USD 811M) Without Definitional Separation",
-      "severity": "HIGH",
-      "owner": "CFO",
+      "owner": "COO / VP Quality",
       "first_seen_run": "20260607",
       "first_seen_date": "2026-06-07",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
       "times_seen": 7
+    },
+    "MO-02": {
+      "title": "Executive narrative cites combined FX+commodity unrealised loss of USD 67.4M \u2014 treasury data yields USD 47.0M; 43% overstatement of USD 20.4M is unreconciled",
+      "severity": "HIGH",
+      "owner": "CFO / Group Treasurer",
+      "first_seen_run": "20260607",
+      "first_seen_date": "2026-06-07",
+      "last_seen_run": "20260608",
+      "last_seen_date": "2026-06-08",
+      "times_seen": 7
+    },
+    "MO-03": {
+      "title": "FX and commodity risks conflated in executive narrative \u2014 FX VaR and commodity VaR not reported as separate line items; hedging remediation effort at risk of misallocation",
+      "severity": "HIGH",
+      "owner": "Group Treasurer",
+      "first_seen_run": "20260607",
+      "first_seen_date": "2026-06-07",
+      "last_seen_run": "20260608",
+      "last_seen_date": "2026-06-08",
+      "times_seen": 8
     },
     "MO-06 / EM-05 (linked)": {
       "title": "Quanta three concurrent operational breaches not captured in supplier_distress_flags KRI; Yangtze Memory (health score 55, lowest in supply base) also absent from distress flag methodology",
@@ -194,6 +194,26 @@
       "title": "Quanta Inventory Cover Breached; Supply Chain VaR Understates Quanta Tail Loss via Pooled MTBF Parameters; 29-Day Cyber Response Exceeds 27-Day Cover Window",
       "severity": "HIGH",
       "owner": "Supply Chain Model Owner and CISO",
+      "first_seen_run": "20260608",
+      "first_seen_date": "2026-06-08",
+      "last_seen_run": "20260608",
+      "last_seen_date": "2026-06-08",
+      "times_seen": 1
+    },
+    "EM-07": {
+      "title": "Exec rec inverts KRI names and values for geopolitical signals \u2014 breach attributed to wrong metric; executive response plan grounded in incorrect trigger",
+      "severity": "HIGH",
+      "owner": "CRO",
+      "first_seen_run": "20260608",
+      "first_seen_date": "2026-06-08",
+      "last_seen_run": "20260608",
+      "last_seen_date": "2026-06-08",
+      "times_seen": 1
+    },
+    "CYBER-SC-01": {
+      "title": "Cyber-supply chain overlap: MTTD+MTTR combined response time (29 days) exceeds Quanta inventory cover (27 days) by 2 days \u2014 production halt guaranteed under cyber-disruption scenario",
+      "severity": "HIGH",
+      "owner": "CISO / VP Supply Chain",
       "first_seen_run": "20260608",
       "first_seen_date": "2026-06-08",
       "last_seen_run": "20260608",

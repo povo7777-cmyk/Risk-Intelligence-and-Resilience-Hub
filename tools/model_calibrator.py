@@ -592,15 +592,18 @@ def calibrate_supply_chain(raw: dict) -> dict:
     company_cogs_m  = rev_b * 1000 * (cost_ratio_pct / 100)
     single_spend_m  = sum(float(r["our_spend_usd_m"]) for r in single_src)
 
-    # Cap revenue-at-risk at configured upper bound — sourced from model_benchmarks.json::simulation_parameters.ebitda.rev_at_risk_cap_pct
-    # Methodology: revenue_at_risk = single_source_spend × (revenue / COGS) — i.e. spend-disruption mapped
-    # to revenue through the inverse COGS ratio. This produces a figure ABOVE spend because disrupted spend
-    # cascades to revenue via fixed-cost amplification. Revenue/COGS = rev_b / (rev_b × cost_ratio_pct/100).
-    # Example: single_source_spend=7,900M × (57B / 54.72B) = USD 8,229M. Rounded to 1dp in B = 8.2B.
-    _rev_cogs_multiplier = round(rev_b / (rev_b * (cost_ratio_pct / 100)), 3) if cost_ratio_pct else 1.0
+    # Revenue-at-risk multiplier: convert disrupted spend to revenue impact.
+    # Default: 1/cost_ratio = 1/0.96 = 1.042× (pure COGS pass-through, no fixed-cost amplification).
+    # Override: model_benchmarks.json::simulation_parameters.supply_chain.rev_at_risk_multiplier_override
+    # Industry norm for hardware OEM: 1.1–1.3× (fixed-cost amplification not captured by cost-ratio alone).
+    # CRO decision 2026-06-08 (MO-04): use industry norm override when present.
+    _default_multiplier = round(rev_b / (rev_b * (cost_ratio_pct / 100)), 3) if cost_ratio_pct else 1.0
+    _rev_cogs_multiplier = float(
+        _SIM_PARAMS.get("supply_chain", {}).get("rev_at_risk_multiplier_override", _default_multiplier)
+    )
     rev_at_risk_b = round(
-        min(single_spend_m / company_cogs_m * rev_b, rev_b * _REV_AT_RISK_CAP_PCT / 100), 1
-    ) if company_cogs_m else 12.0
+        min(single_spend_m * _rev_cogs_multiplier / 1000, rev_b * _REV_AT_RISK_CAP_PCT / 100), 1
+    )
 
     # Demand shock parameters — derive from market intelligence signal count
     # Column is "signal_type", geopolitical signals use value "geopolitical"
