@@ -1,14 +1,14 @@
 {
   "open": {
     "MO-01": {
-      "title": "Confirmed COV006 Covenant Breach Absent from EBITDA Stress Model Starting Conditions \u2014 P(breach) Understated to Board",
+      "title": "COV006 active breach suppressed by probabilistic framing \u2014 P(any covenant breach) must be 100%",
       "severity": "HIGH",
       "owner": "CFO / Model Owner",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 6
+      "times_seen": 7
     },
     "MO-04": {
       "title": "Supply chain revenue-at-risk multiplier (1.042x) asserted not derived \u2014 fixed/variable cost split absent; dual-sourcing ROI of 24x correspondingly unvalidated",
@@ -41,34 +41,34 @@
       "times_seen": 4
     },
     "EM-05": {
-      "title": "No KRI for FX003 USD/JPY 3-month maturity concentration risk despite largest single-position unrealised loss (-USD 15.6M) and imminent crystallisation",
+      "title": "field_failure_rate_pct 40\u00d7 data discrepancy unresolved \u2014 board KRI is unreliable and not labelled provisional",
       "severity": "HIGH",
-      "owner": "Group Treasurer / CFO",
+      "owner": "COO / VP Quality / CRO",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 5
+      "times_seen": 6
     },
     "EM-06": {
-      "title": "Board summary and agent findings report conflicting high-severity geopolitical signal counts (3 vs 4); competitive signal (Dell AI laptop) mis-categorised as geopolitical",
+      "title": "Supply chain BCM exec rec cites stale model outputs \u2014 VaR understated by USD 261M",
       "severity": "HIGH",
-      "owner": "CRO / Chief Strategy Officer",
+      "owner": "COO / VP Supply Chain",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 8
+      "times_seen": 9
     },
     "MO-05": {
-      "title": "FX volatility (9.0% p.a. in Hedge Analyser) and revenue volatility (12.0% p.a. in EBITDA Stress) not reconciled \u2014 FX contribution to revenue vol unattributed; P(covenant breach) and VaR potentially misstated",
+      "title": "Revenue-at-risk 1.15\u00d7 operating leverage multiplier uncalibrated to actual contribution margin",
       "severity": "HIGH",
-      "owner": "Model Risk",
+      "owner": "COO / VP Supply Chain / Finance",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 5
+      "times_seen": 6
     },
     "MO-06": {
       "title": "Yangtze Memory (Health Score 55, MTBF 4.5yr \u2014 Lowest in Portfolio) Excluded from Single-Source Revenue-at-Risk Calculation",
@@ -81,44 +81,44 @@
       "times_seen": 4
     },
     "CYBER-SUPPLYCHAIN-OVERLAP": {
-      "title": "MTTD+MTTR Combined Response Time (29 days) Exceeds Quanta Inventory Cover (27 days) \u2014 Production Halt Guaranteed on Cyber Incident",
+      "title": "MTTD+MTTR combined response (29d) exceeds Quanta inventory cover (27d) \u2014 production halt guaranteed under coincident cyber-supply disruption",
       "severity": "HIGH",
-      "owner": "CISO / VP Supply Chain / COO",
+      "owner": "CISO / COO / VP Supply Chain",
       "first_seen_run": "20260606",
       "first_seen_date": "2026-06-06",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 8
+      "times_seen": 9
     },
     "EM-02": {
-      "title": "Board narrative suppresses 40x field_failure_rate discrepancy (QMS-SAP 0.048% vs warranty system 1.90%) \u2014 potential live safety breach masked",
+      "title": "p_covenant_breach_pct KRI carries stale 69.4% value in model_kri_linkage and board narrative",
       "severity": "HIGH",
-      "owner": "COO / VP Quality",
+      "owner": "Model Developer / CRO",
       "first_seen_run": "20260607",
       "first_seen_date": "2026-06-07",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 7
+      "times_seen": 8
     },
     "MO-02": {
-      "title": "Executive narrative cites combined FX+commodity unrealised loss of USD 67.4M \u2014 treasury data yields USD 47.0M; 43% overstatement of USD 20.4M is unreconciled",
+      "title": "EBITDA erosion arithmetic applies unrealised MTM to EBITDA without IFRS 9 hedge effectiveness substantiation",
       "severity": "HIGH",
       "owner": "CFO / Group Treasurer",
       "first_seen_run": "20260607",
       "first_seen_date": "2026-06-07",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 7
+      "times_seen": 8
     },
     "MO-03": {
-      "title": "FX and commodity risks conflated in executive narrative \u2014 FX VaR and commodity VaR not reported as separate line items; hedging remediation effort at risk of misallocation",
+      "title": "Hedge Analyser excludes commodity VaR \u2014 total unhedged portfolio risk understated",
       "severity": "HIGH",
-      "owner": "Group Treasurer",
+      "owner": "Model Owner / Group Treasurer",
       "first_seen_run": "20260607",
       "first_seen_date": "2026-06-07",
       "last_seen_run": "20260608",
       "last_seen_date": "2026-06-08",
-      "times_seen": 8
+      "times_seen": 9
     },
     "MO-06 / EM-05 (linked)": {
       "title": "Quanta three concurrent operational breaches not captured in supplier_distress_flags KRI; Yangtze Memory (health score 55, lowest in supply base) also absent from distress flag methodology",
@@ -214,6 +214,26 @@
       "title": "Cyber-supply chain overlap: MTTD+MTTR combined response time (29 days) exceeds Quanta inventory cover (27 days) by 2 days \u2014 production halt guaranteed under cyber-disruption scenario",
       "severity": "HIGH",
       "owner": "CISO / VP Supply Chain",
+      "first_seen_run": "20260608",
+      "first_seen_date": "2026-06-08",
+      "last_seen_run": "20260608",
+      "last_seen_date": "2026-06-08",
+      "times_seen": 1
+    },
+    "EM-01": {
+      "title": "Board narrative COV001 combined stress arithmetic contradicts corrected exec rec \u2014 irreconcilable breach signal",
+      "severity": "HIGH",
+      "owner": "CFO / CRO",
+      "first_seen_run": "20260608",
+      "first_seen_date": "2026-06-08",
+      "last_seen_run": "20260608",
+      "last_seen_date": "2026-06-08",
+      "times_seen": 1
+    },
+    "MO-08": {
+      "title": "EBITDA stress omits USD 3.4B unhedged revenue-side FX exposure \u2014 covenant breach probability potentially understated",
+      "severity": "HIGH",
+      "owner": "Model Owner / CFO",
       "first_seen_run": "20260608",
       "first_seen_date": "2026-06-08",
       "last_seen_run": "20260608",
