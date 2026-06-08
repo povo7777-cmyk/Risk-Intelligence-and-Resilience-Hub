@@ -1,6 +1,6 @@
 {
   "_comment": "Single source of truth for quantitative model benchmark figures AND simulation parameters. All hardcoded values in model_calibrator.py and risk_panel_agent.py must be sourced from this file. Update this file when any parameter changes \u2014 do not edit the Python files directly.",
-  "_updated": "2026-06-09T00:30:00.000000+00:00",
+  "_updated": "2026-06-09T00:45:00.000000+00:00",
   "simulation_parameters": {
     "_description": "Monte Carlo and model control parameters. All Python models read these at import time \u2014 do not hardcode in .py files.",
     "n_sims": 5000,
@@ -35,18 +35,18 @@
     }
   },
   "supply_chain": {
-    "baseline_var_95_usd_m": 2373,
-    "dual_source_var_saving_usd_m": 343,
+    "baseline_var_95_usd_m": 2634,
+    "dual_source_var_saving_usd_m": 382,
     "dual_source_cost_per_yr_usd_m": 14.4,
-    "dual_source_roi_x": 24,
-    "inventory_buffer_var_saving_usd_m": 275,
+    "dual_source_roi_x": 27,
+    "inventory_buffer_var_saving_usd_m": 305,
     "inventory_buffer_cost_per_yr_usd_m": 7.7,
-    "combined_var_saving_usd_m": 571,
-    "combined_roi_x": 26,
-    "revenue_at_risk_usd_m": 660,
+    "combined_var_saving_usd_m": 634,
+    "combined_roi_x": 29,
     "simulation_n": 5000,
-    "_source": "Python Monte Carlo N=5000 | 8 suppliers | supplier-specific MTBF (health-score quadratic: 15\u00d7(h/100)\u00b2) | demand_shock_prob=24%/yr | recovery 5mo | revenue_at_risk 8.2B | updated 2026-06-08 from calibrator output",
-    "rev_at_risk_derivation_note": "MO-07 2026-06-07: USD 9B = USD 7.9B single-source spend \u00d7 1.139 product-revenue multiplier. COO/VP Supply Chain to validate multiplier against product P&L. Conservative upper bound."
+    "_source": "Python Monte Carlo N=5000 | 8 suppliers | supplier-specific MTBF (health-score quadratic: 15\u00d7(h/100)\u00b2) | demand_shock_prob=24%/yr | recovery 5mo | revenue_at_risk 9.1B (7.9B \u00d7 1.15\u00d7 industry multiplier) | updated 2026-06-08/09 from calibrator output with rev_at_risk_multiplier_override=1.15",
+    "rev_at_risk_derivation_note": "MO-07 2026-06-07: USD 9B = USD 7.9B single-source spend \u00d7 1.139 product-revenue multiplier. COO/VP Supply Chain to validate multiplier against product P&L. Conservative upper bound.",
+    "revenue_at_risk_usd_b": 9.1
   },
   "ebitda": {
     "covenant_breach_probability_pct": 49.7,
