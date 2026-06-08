@@ -628,16 +628,33 @@ def _extract_board_alerts(text: str) -> list:
 
 
 def _detect_priority(action_text: str) -> tuple:
-    """Return (label, color) priority tier from action body text."""
+    """
+    Return (label, color) board-quarterly priority tier.
+
+    Three tiers that make sense at quarterly review cadence:
+      IMMEDIATE   — required at this meeting or within 2 weeks
+      IN-QUARTER  — complete within this 90-day review period (~30-60 days)
+      NEXT QUARTER — planning horizon beyond this quarter (Q+1)
+
+    Default is IN-QUARTER (the natural delivery window for a quarterly board cycle).
+    """
     import re
     tl = action_text.lower()
-    if re.search(r'immediat|within\s+(?:24|48)\s+hours?|this\s+week|notify\s+lender', tl):
+    if re.search(
+        r'at this meeting|this session|within\s+(?:7|14)\s+days?|'
+        r'immediat|this\s+week|before\s+(?:next|end\s+of)',
+        tl
+    ):
         return ('IMMEDIATE', '#ef4444')
-    if re.search(r'within\s+30|next\s+30|30[- ]day|month', tl):
-        return ('30 DAYS', '#f97316')
-    if re.search(r'within\s+(?:60|90|q[1-4])|(?:60|90)[- ]day|quarter|medium.term|next\s+quarter', tl):
-        return ('90 DAYS', '#3b82f6')
-    return ('NEAR-TERM', '#8b5cf6')
+    if re.search(
+        r'next\s+quarter|q\+1|within\s+90|90[- ]day|'
+        r'medium[- ]term|following\s+quarter|beyond\s+this\s+quarter',
+        tl
+    ):
+        return ('NEXT QUARTER', '#3b82f6')
+    # Default: in-quarter (covers "within 30 days", "within 60 days",
+    # "this quarter", or no explicit timing — all land in the current cycle)
+    return ('IN-QUARTER', '#f97316')
 
 
 def _chips_html_dark(domain_keys: list) -> str:
@@ -890,6 +907,72 @@ def _chips_html(domain_keys: list) -> str:
     return ''.join(chips)
 
 
+# ── CRO-style card title lookup for Key Risk Driver cards ─────────────────────
+# Ordered: more specific patterns first.  First match wins.
+_KRD_TITLE_RULES = [
+    # Specific patterns first — most distinctive signals
+    (r'covenant.*confirmed.*breach|confirmed.*breach.*covenant|trade finance.*breach',
+                                                                    'Covenant Breach Exposure'),
+    (r'EBITDA headroom|headroom.*(?:USD|million)|revolving credit.*covenant',
+                                                                    'EBITDA Headroom Pressure'),
+    (r'stress scenario|combined.*charge|crystallis.*covenant|trigger.*covenant|not remote',
+                                                                    'Compound Stress Scenario'),
+    (r'covenant|COV00\d|cure.*write|write.*cure|lender.*notif|notif.*lender',
+                                                                    'Covenant & Lender Risk'),
+    (r'hedge.*ratio|FX.*unrealised|unrealised.*FX|portfolio.*loss|commodity.*deriv',
+                                                                    'Portfolio Loss Exposure'),
+    (r'bad.debt|debt.*provision|receivable|overdue|credit.quality', 'Receivables Deterioration'),
+    (r'cyber|MTTD|mean.time.to.detect|detection.gap|SIEM|patch.compliance',
+                                                                    'Cyber Detection Gap'),
+    (r'supply.chain|single.source|Quanta|TSMC|Foxconn|inventory.cover|supplier.distress',
+                                                                    'Supply Chain Concentration'),
+    (r'talent|attrition|flight.risk|succession|open.roles|R&D.departure',
+                                                                    'Talent & Succession Risk'),
+    (r'geopolit|Taiwan|Entity List|export.*restrict|PRC.*concentrat',
+                                                                    'Geopolitical Exposure'),
+    (r'sanction|ABAC|denied.party|export.*screen|whistleblower',    'Sanctions & ABAC Risk'),
+    (r'audit.*coverage|ai.audit|GDPR|data.*privacy',               'Compliance Coverage Gap'),
+    (r'M&A|synergy|competitive|AI.native|product.*roadmap',        'Strategic Position Risk'),
+]
+
+
+def _krd_card_title(sentence: str) -> str:
+    """Return a CRO-quality card title by matching the sentence against _KRD_TITLE_RULES."""
+    import re as _re
+    for pattern, title in _KRD_TITLE_RULES:
+        if _re.search(pattern, sentence, _re.IGNORECASE):
+            return title
+    # Fallback: extract noun phrase from "The X is/are/has..."
+    m = _re.match(
+        r'(?:The |A |That |Against this backdrop, the )(\w[\w\s]{3,40}?)\s+'
+        r'(?:is\b|are\b|has\b|presents\b|remains\b|stands\b|compounds\b)',
+        sentence, _re.IGNORECASE
+    )
+    if m:
+        return m.group(1).strip().title()
+    # Last resort: first 4-5 content words
+    stop = {'the', 'a', 'an', 'that', 'this', 'is', 'are', 'has', 'against', 'backdrop'}
+    words = [w for w in sentence.split()[:9] if w.lower().rstrip('.,') not in stop][:5]
+    return ' '.join(words).rstrip('.,').title()
+
+
+def _board_brief(text: str, max_sents: int = 2) -> str:
+    """
+    Return the first N sentences — enough board context without a wall of text.
+    Strips any trailing executive-attribution sentence ("The CFO holds accountability...").
+    """
+    import re as _re
+    sents = _re.split(r'(?<=[.!?])\s+(?=[A-Z])', text.strip())
+    # Drop pure accountability/ownership sentences at the end
+    filtered = [s for s in sents if not _re.match(
+        r'The\s+(?:Chief|CFO|COO|CISO|CEO|CRO)\b.*(?:accountab|responsib|owner)',
+        s, _re.IGNORECASE
+    )]
+    selected = filtered[:max_sents]
+    out = ' '.join(s.rstrip('.') for s in selected)
+    return out + ('.' if out and out[-1] not in '.!?' else '')
+
+
 def _render_section_body(label: str, body: str) -> str:
     """
     Command Deck renderers — each section has a distinct, impactful visual treatment.
@@ -944,7 +1027,7 @@ def _render_section_body(label: str, body: str) -> str:
                 dname  = chunks[i].upper()
                 raw    = chunks[i + 1] if i + 1 < len(chunks) else ''
                 dtext  = _re.sub(r'[🔴🟡🟢🟠⚫⚪]', '', raw).strip()
-                oneliner = _oneliner(dtext, 120)
+                oneliner = _board_brief(dtext, 2)
                 dcolor = DOMAIN_META_RP.get(dname, '#7f8c8d')
                 is_last = (i + 2 >= len(chunks) - 1)
                 domain_rows.append(
@@ -1029,24 +1112,18 @@ def _render_section_body(label: str, body: str) -> str:
                 s += '.'
             doms = _detect_domains(s)
             chips = _chips_arrow_html(doms) if len(doms) > 1 else _chips_html(doms)
-            # Extract consequence "headline": text before first colon or em-dash
-            m = re.match(r'^([^:—–]{8,60}[:—–])', s)
-            if m:
-                headline = m.group(1).rstrip(':—– ')
-                rest     = s[m.end():].strip()
-            else:
-                parts_s = s.split('. ', 1)
-                headline = parts_s[0]
-                rest     = parts_s[1] if len(parts_s) > 1 else ''
+            # CRO-quality title from keyword lookup (never parsed from sentence fragments)
+            headline = _krd_card_title(s)
             grid_html.append(
                 f'<div style="flex:1 1 calc(33% - 4px);min-width:140px;'
                 f'padding:0.6rem 0.65rem;border-radius:6px;'
                 f'background:rgba(255,255,255,0.035);'
                 f'border:1px solid rgba(255,255,255,0.08)">'
                 + (f'<div style="margin-bottom:6px;line-height:1">{chips}</div>' if chips else '')
-                + f'<div style="font-size:12px;font-weight:700;color:var(--txt);'
-                f'line-height:1.4;margin-bottom:5px">{headline}</div>'
-                + (f'<div style="font-size:11px;color:var(--txt);opacity:0.72;line-height:1.45">{rest}</div>' if rest else '')
+                + f'<div style="font-size:11.5px;font-weight:800;color:var(--txt);'
+                f'text-transform:uppercase;letter-spacing:.04em;'
+                f'line-height:1.3;margin-bottom:6px">{headline}</div>'
+                + f'<div style="font-size:11px;color:var(--txt);opacity:0.75;line-height:1.45">{s}</div>'
                 + f'</div>'
             )
         html_parts.append(
