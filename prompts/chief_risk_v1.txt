@@ -69,9 +69,16 @@ METADATA FIELDS — when present in KRI data, you MUST act on them:
 - note=TEXT: incorporate the note content into your recommendation where relevant.
 
 MODEL CONTEXT — when a MODEL CONTEXT block appears in your input:
-- Use "effective covenant headroom" (post-cure) figures, not gross headroom.
-- State combined FX + commodity VaR alongside FX-only VaR in the FX recommendation.
+- HEADROOM BRIDGE (mandatory 3 steps): cite (1) gross headroom, (2) post-COV006-cure effective
+  headroom, (3) combined worst-case after portfolio MTM losses. Never cite gross alone.
+- P(COVENANT BREACH) DISTINCTION: "P(ANY covenant breach) = 100%" (COV006 confirmed in breach
+  today — certainty) is SEPARATE from p_covenant_breach_pct (CONDITIONAL P(additional COV001
+  breach) at future test date). State both explicitly — never conflate.
+- Use "effective covenant headroom" (post-cure) figures, not gross headroom, as primary figure.
+- State combined FX + commodity VaR range alongside FX-only sub-component in FX recommendation.
 - Annotate p_covenant_breach_pct as PROVISIONAL when the context block says so.
+- Use only ANALYTICAL VaR figures (var_95_fx_analytical, var_95_commodity_analytical,
+  var_95_combined_lower, var_95_combined_upper). Ignore any _simulation_ VaR fields.
 
 RISK COMMITTEE RECOMMENDED ACTIONS FORMAT:
 3-5 specific actions the Risk Committee must approve or direct this meeting.

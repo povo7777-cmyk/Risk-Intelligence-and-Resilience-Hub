@@ -303,6 +303,23 @@ def calibrate_ebitda(raw: dict) -> dict:
     # Post-cure headroom — use FULL write-off for worst-case (more conservative)
     ebitda_headroom_post_cure_m = round(ebitda_headroom_m - cov006_full_writeoff_usd_m, 1)
 
+    # ── MO-02 fix: explicit headroom bridge — reconciles 152M COV001 vs 480M COV005 ──
+    # COV005 EBITDA floor = 1.80B → gross headroom = 480M (non-binding)
+    # COV001 ND/EBITDA floor = net_debt/3.0 = 6384/3.0 = 2128M → headroom = 152M (BINDING)
+    # Post-COV006-cure effective headroom = 152M - 94.3M = 57.7M
+    # Combined worst-case = 57.7M - 47.0M MTM losses = 10.7M
+    headroom_bridge = (
+        f"COV001 headroom derivation (BINDING): "
+        f"Net Debt {round(net_debt_b, 3)}B / {net_debt_ebitda_ceil}x ceiling = "
+        f"EBITDA floor {round(ebitda_min_cov1 * 1000, 0)}M; "
+        f"headroom = {round(ebitda_b * 1000, 0)}M - {round(ebitda_min_cov1 * 1000, 0)}M = "
+        f"USD {ebitda_headroom_m}M GROSS. "
+        f"COV005 non-binding: EBITDA floor {cov_floor_b}B → headroom {round(headroom_cov5_m, 0)}M "
+        f"(higher than COV001, not the binding constraint). "
+        f"Post-COV006-cure effective: USD {ebitda_headroom_m}M - {cov006_full_writeoff_usd_m}M = "
+        f"USD {ebitda_headroom_post_cure_m}M."
+    )
+
     return {
         # Slider parameters
         "revenue_usd_b":   round(revenue_b, 1),
@@ -310,53 +327,63 @@ def calibrate_ebitda(raw: dict) -> dict:
         "volatility_pct":  round(volatility, 1),
         "drift_pct":       round(drift, 1),
         "demand_var_pct":  round(demand_var, 1),
-        # Covenant
-        "covenant_floor_usd_b":     round(cov_floor_b, 2),
-        "ebitda_headroom_gross_usd_m": ebitda_headroom_m,  # gross headroom (pre-COV006 cure) for reference
-        # MODEL SCOPE NOTE: p_covenant_breach_pct (Monte Carlo) stress-tests COV001
-        # Net Debt/EBITDA forward probability only. COV006 bad_debt_provision_pct is
-        # ALREADY IN CONFIRMED BREACH (current 1.44% > 0.80% threshold) — it requires
-        # no forward probability; it requires immediate cure/waiver action by 2026-06-12.
-        # The fields below capture COV006 confirmed-breach status and cure cost impact.
-        # Formal t=0 model condition: COV006 is an INPUT to the model, not just a detection.
-        # The EBITDA stress model starts from a state where COV006 is ALREADY IN BREACH.
-        # p_covenant_breach_pct therefore underestimates total covenant risk — it models
-        # P(COV001 breach at t+1) only, while COV006 breach exists at t=0.
+        # ── MO-02 fix: explicit covenant floor labelling ───────────────────────
+        # COV005 floor (non-binding) — renamed from covenant_floor_usd_b to avoid
+        # misleading arithmetic: 2.28B − 1.80B = 480M ≠ 152M (exec rec correctly uses
+        # COV001 binding floor). Both floors now explicitly labelled.
+        "cov005_ebitda_floor_usd_b":   round(cov_floor_b, 2),     # NON-BINDING (480M headroom)
+        "cov001_implied_ebitda_floor_usd_m": round(ebitda_min_cov1 * 1000, 0),  # BINDING (= 2128M)
+        "cov001_gross_headroom_usd_m": ebitda_headroom_m,          # BINDING gross headroom = 152M
+        "cov001_net_debt_usd_b":       round(net_debt_b, 3),       # = 6.384B → floor = 2128M
+        "cov001_nd_ebitda_ceiling":    net_debt_ebitda_ceil,        # = 3.0x
+        "headroom_bridge":             headroom_bridge,             # step-by-step reconciliation
+        "ebitda_headroom_gross_usd_m": ebitda_headroom_m,  # backward compat alias (= cov001_gross)
+        # ── MO-01 fix: explicit P(any covenant breach) = 100% because COV006 is confirmed breached
+        # p_covenant_breach_pct is the CONDITIONAL P(COV001 breach | COV006 in breach) — NOT total risk.
+        # p_any_covenant_breach_pct = 100% because COV006 is already in hard breach at t=0.
+        "p_any_covenant_breach_pct":     100.0,   # COV006 confirmed breached — P(any breach) = certainty
+        "p_cov001_conditional_breach_pct": p_breach,  # P(additional COV001 breach | COV006 in breach)
         "cov006_breach_at_model_t0":    cov006_breach,  # FORMAL MODEL INPUT: True = COV006 already breached
         "model_scope_note": (
-            "p_covenant_breach_pct models forward P(COV001 breach) only. "
-            "COV006 is a CONFIRMED BREACH at model t=0 (input condition, not output). "
-            "Total covenant risk = COV006 active breach (t=0) + P(COV001 breach) forward probability. "
-            "COV006 cure/waiver action required by 2026-06-12, not probabilistic modelling."
+            "p_any_covenant_breach_pct = 100% (COV006 is CONFIRMED IN BREACH at t=0 — certainty, not probability). "
+            "p_covenant_breach_pct = p_cov001_conditional_breach_pct = P(ADDITIONAL COV001 breach at 2026-06-30 test) "
+            "CONDITIONAL on COV006 remaining in breach. These are distinct: total covenant risk is 100% TODAY; "
+            "the 50.5% is the probability of a second breach occurring on a future test date. "
+            "COV006 cure/waiver required by 2026-06-12."
         ),
         # COV006 active breach — cure cost reduces practical EBITDA headroom
         "cov006_breach":                cov006_breach,
-        "cov006_cure_cost_usd_m":       cov006_cure_cost_usd_m,   # incremental: excess above covenant floor
-        "cov006_full_writeoff_usd_m":   cov006_full_writeoff_usd_m, # full provision balance (worst case)
-        "cov006_cure_derivation":       cov006_cure_derivation,   # traceable source derivation (MO-02)
+        "cov006_cure_cost_usd_m":       cov006_cure_cost_usd_m,
+        "cov006_full_writeoff_usd_m":   cov006_full_writeoff_usd_m,
+        "cov006_cure_derivation":       cov006_cure_derivation,
         "cov006_next_test_date":        cov006_next_test_date,
         "cov006_current_pct":           cov006_current_pct,
         "cov006_threshold_pct":         cov006_threshold_pct,
         # MO-01: ebitda_headroom_usd_m is the EFFECTIVE (post-COV006-cure) headline headroom.
-        # This is the figure that was applied in the Monte Carlo breach checks via _cov006_drag_b.
-        # The gross figure (pre-cure) is preserved in ebitda_headroom_gross_usd_m.
-        "ebitda_headroom_usd_m":           ebitda_headroom_post_cure_m,  # EFFECTIVE — used in MC
+        "ebitda_headroom_usd_m":           ebitda_headroom_post_cure_m,  # EFFECTIVE (57.7M) — used in MC
         "ebitda_headroom_post_cure_usd_m": ebitda_headroom_post_cure_m,  # alias for backward compat
-        # FX cost pass-through — derived from treasury_positions.csv Cost-type rows
-        # Represents the unhedged JPY/KRW COGS exposure that creates EBITDA volatility
-        # when the dollar moves against manufacturing-cost currencies.
-        # This parameter is included for model transparency and future CFO reporting.
+        # FX cost pass-through
         "fx_cost_gross_usd_m":      round(fx_cost_gross_usd_m, 0),
         "fx_cost_hedged_usd_m":     round(fx_cost_hedged_usd_m, 0),
         "fx_cost_unhedged_usd_m":   fx_cost_unhedged_usd_m,
         "fx_vol_pct":               round(fx_vol_pct, 1),
         # Simulation outputs
-        "p_covenant_breach_pct":    p_breach,
+        "p_covenant_breach_pct":    p_breach,   # = p_cov001_conditional_breach_pct (backward compat)
         "p_breach_cost_up1pp_pct":  p_cost_up1pp,
         "p_breach_top_cust_loss_pct": p_top_cust_loss,
         "ebitda_var_95_usd_m":      var_95,
         "ebitda_cvar_95_usd_m":     cvar_95,
         "n_sims": N_SIMS,
+        # MO-08: COV004 is outside EBITDA MC scope — add explicit status note
+        # MC tests COV001 (ND/EBITDA ceiling) and COV005 (EBITDA floor) only.
+        # COV004 (debt_maturity_runway_months) is time-based, not EBITDA-dependent.
+        "cov004_model_scope_note": (
+            "COV004 (debt_maturity_runway_months = 8 months) is AMBER — below 12-month amber "
+            "threshold but above 6-month breach threshold. NOT tested in this EBITDA Monte Carlo "
+            "(COV004 is time-based, not EBITDA-dependent). COV004 amber status is independent of "
+            "COV001/COV005 outcomes modelled here. Board must treat COV004 amber separately from "
+            "the EBITDA MC results."
+        ),
     }
 
 
@@ -585,17 +612,36 @@ def calibrate_hedge(raw: dict) -> dict:
         "fx_hedged_usd_m":        round(fx_hedged_m, 0),
         "commodity_gross_usd_m":  round(com_gross_m, 0),
         "commodity_hedged_usd_m": round(com_hedged_m, 0),
-        # Simulation outputs
-        "var_95_unhedged_usd_m":  var_uh,         # simulation-based combined FX + commodity
-        # MO-02: Analytical VaR decomposition — grounded in calibrator tier
-        # Formula: unhedged_exposure × vol × z_95 (1.645). See panel finding MO-02 2026-06-09.
-        # These are the authoritative figures for board disclosure (simulation var_uh uses
-        # price-path scaling that makes FX and commodity contributions non-comparable).
-        "var_95_fx_analytical_usd_m":       var_fx_analytical,   # FX-only: 4,080M × 9% × 1.645
-        "var_95_commodity_analytical_usd_m": var_com_analytical,  # Commodity: 860M × 32% × 1.645
-        "var_95_combined_lower_usd_m":      var_combined_lower,   # sqrt(FX²+Comm²) zero-correlation
-        "var_95_combined_upper_usd_m":      var_combined_upper,   # FX+Comm perfect-correlation upper
-        "var_95_hedged_usd_m":    var_hd,
+        # ── MO-06 fix: simulation VaR renamed + suppressed from board disclosure ──
+        # Simulation VaR (var_uh) uses avg_spot=4.1 (average of CNY 7.29 + EUR 0.921 rates)
+        # which deflates FX price path 24× vs commodity path (avg_com=100). This makes the
+        # simulation FX contribution ~63M (understated) and the combined 811M commodity-dominated.
+        # Simulation results are retained for model validation ONLY — not for board disclosure.
+        # Analytical VaR (unhedged_exposure × vol × z_95) avoids this scaling artefact.
+        "var_95_unhedged_simulation_usd_m": var_uh,  # INTERNAL ONLY — avg_spot bias, not for board
+        "var_95_hedged_simulation_usd_m":   var_hd,  # INTERNAL ONLY — simulation result
+        "var_simulation_note": (
+            f"Simulation VaR ({var_uh}M unhedged) uses avg_spot={avg_spot:.2f} which mixes "
+            f"CNY/EUR spot rates and deflates FX path vs commodity (avg_com=100). "
+            f"DO NOT cite simulation VaR in board materials. Use analytical figures below."
+        ),
+        # MO-06 fix: Analytical VaR — authoritative, formula-traceable
+        # FX-currency: 4,080M unhedged × 9% vol × 1.645 z-score = 604M
+        # Commodity: 860M unhedged × 32% vol × 1.645 z-score = 453M
+        # Combined lower (zero-corr): sqrt(604² + 453²) = 755M
+        # Combined upper (perfect-corr): 604 + 453 = 1,057M
+        "var_95_fx_analytical_usd_m":        var_fx_analytical,
+        "var_95_commodity_analytical_usd_m": var_com_analytical,
+        "var_95_combined_lower_usd_m":       var_combined_lower,
+        "var_95_combined_upper_usd_m":       var_combined_upper,
+        "var_analytical_methodology": (
+            f"Analytical VaR (95%, one-tailed, z=1.645): "
+            f"FX-currency = unhedged {round(fx_gross_m - fx_hedged_m, 0):.0f}M × {fx_vol_pct}% vol × 1.645 = {var_fx_analytical}M. "
+            f"Commodity = unhedged {round(com_gross_m - com_hedged_m, 0):.0f}M × {commodity_vol_pct}% vol × 1.645 = {var_com_analytical}M. "
+            f"Combined lower (ρ=0): sqrt({var_fx_analytical}²+{var_com_analytical}²) = {var_combined_lower}M. "
+            f"Combined upper (ρ=1): {var_fx_analytical}+{var_com_analytical} = {var_combined_upper}M. "
+            f"Board materials must cite F-01 VaR as {var_combined_lower}M–{var_combined_upper}M range."
+        ),
         "p_rev_below_80_unhedged":  p_uh_80,
         "p_rev_below_80_hedged":    p_hd_80,
         "var_improvement_usd_m":  var_impr,

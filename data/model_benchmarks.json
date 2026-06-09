@@ -1,19 +1,19 @@
 {
-  "_comment": "Single source of truth for quantitative model benchmark figures AND simulation parameters. All hardcoded values in model_calibrator.py and risk_panel_agent.py must be sourced from this file. Update this file when any parameter changes \u2014 do not edit the Python files directly.",
+  "_comment": "Single source of truth for quantitative model benchmark figures AND simulation parameters. All hardcoded values in model_calibrator.py and risk_panel_agent.py must be sourced from this file. Update this file when any parameter changes — do not edit the Python files directly.",
   "_updated": "2026-06-09T00:45:00.000000+00:00",
   "simulation_parameters": {
-    "_description": "Monte Carlo and model control parameters. All Python models read these at import time \u2014 do not hardcode in .py files.",
+    "_description": "Monte Carlo and model control parameters. All Python models read these at import time — do not hardcode in .py files.",
     "n_sims": 5000,
     "seed": 42,
     "mtbf_formula": {
-      "_description": "Supplier MTBF quadratic decay: MTBF = base_years \u00d7 (health/100)^exponent, clamped to [floor_years, ceiling_years]. Distressed suppliers (health <65) face disproportionately higher disruption probability \u2014 quadratic is more realistic than linear for financial-stress-driven failure.",
+      "_description": "Supplier MTBF quadratic decay: MTBF = base_years × (health/100)^exponent, clamped to [floor_years, ceiling_years]. Distressed suppliers (health <65) face disproportionately higher disruption probability — quadratic is more realistic than linear for financial-stress-driven failure.",
       "base_years": 15.0,
       "exponent": 2.0,
       "floor_years": 2.0,
       "ceiling_years": 15.0
     },
     "ebitda": {
-      "_description": "EBITDA stress model constants. margin_noise_std_pp is \u00b1pp margin volatility (not % of revenue). top_customer_revenue_loss_pct is the revenue fraction removed in the top-customer-loss sensitivity scenario.",
+      "_description": "EBITDA stress model constants. margin_noise_std_pp is ±pp margin volatility (not % of revenue). top_customer_revenue_loss_pct is the revenue fraction removed in the top-customer-loss sensitivity scenario.",
       "margin_noise_std_pp": 0.5,
       "demand_variability_pct": 12.0,
       "top_customer_revenue_loss_pct": 5.0,
@@ -31,7 +31,7 @@
       "inv_buffer_cost_fallback_usd_m": 8.0,
       "dual_cost_fallback_usd_m": 15.0,
       "rev_at_risk_multiplier_override": 1.15,
-      "rev_at_risk_multiplier_note": "Override to industry norm 1.15\u00d7 (hardware OEM range: 1.1\u20131.3\u00d7). Default calibrator value 1.042 = 1/cost_ratio ignores fixed-cost amplification. Panel finding MO-04: 1.042\u00d7 below industry norm; updated per CRO decision 2026-06-08. Revenue at risk: 7,900M \u00d7 1.15 = USD 9,085M \u2248 9.1B (vs 8.2B previously). VaR figures will update on next pipeline run."
+      "rev_at_risk_multiplier_note": "Override to industry norm 1.15× (hardware OEM range: 1.1–1.3×). Default calibrator value 1.042 = 1/cost_ratio ignores fixed-cost amplification. Panel finding MO-04: 1.042× below industry norm; updated per CRO decision 2026-06-08. Revenue at risk: 7,900M × 1.15 = USD 9,085M ≈ 9.1B (vs 8.2B previously). VaR figures will update on next pipeline run."
     }
   },
   "supply_chain": {
@@ -44,8 +44,8 @@
     "combined_var_saving_usd_m": 634,
     "combined_roi_x": 29,
     "simulation_n": 5000,
-    "_source": "Python Monte Carlo N=5000 | 8 suppliers | supplier-specific MTBF (health-score quadratic: 15\u00d7(h/100)\u00b2) | demand_shock_prob=24%/yr | recovery 5mo | revenue_at_risk 9.1B (7.9B \u00d7 1.15\u00d7 industry multiplier) | updated 2026-06-08/09 from calibrator output with rev_at_risk_multiplier_override=1.15",
-    "rev_at_risk_derivation_note": "MO-07 2026-06-07: USD 9B = USD 7.9B single-source spend \u00d7 1.139 product-revenue multiplier. COO/VP Supply Chain to validate multiplier against product P&L. Conservative upper bound.",
+    "_source": "Python Monte Carlo N=5000 | 8 suppliers | supplier-specific MTBF (health-score quadratic: 15×(h/100)²) | demand_shock_prob=24%/yr | recovery 5mo | revenue_at_risk 9.1B (7.9B × 1.15× industry multiplier) | updated 2026-06-08/09 from calibrator output with rev_at_risk_multiplier_override=1.15",
+    "rev_at_risk_derivation_note": "Revenue at risk = single-source spend USD 7.9B × industry-norm revenue multiplier 1.15× = USD 9.085B ≈ 9.1B. CRO decision 2026-06-08: rev_at_risk_multiplier_override=1.15 (hardware OEM industry range 1.1-1.3×). Default calibrator 1/cost_ratio = 1.042× was rejected (panel finding MO-04) as it ignores fixed-cost amplification in hardware OEM business model. Multiplier 1.15× is industry consensus mid-point and conservative vs upper bound 1.3×. COO/VP Supply Chain to validate against product P&L. Prior note 1.139× was stale — corrected to 1.15× MO-05 2026-06-09.",
     "revenue_at_risk_usd_b": 9.1
   },
   "ebitda": {
@@ -62,7 +62,7 @@
       "provision_impact_usd_m": 94.3,
       "ebitda_post_impact_usd_m": 2185.7,
       "cov001_breached": false,
-      "note": "Full write-off cure of COV006 bad debt provision: USD 94.3M actual provision balance (sum of all segment provisions) flows through P&L, reducing EBITDA from USD 2,280M to USD 2,185.7M \u2014 still above COV001 floor of USD 2,128M, leaving USD 57.7M residual headroom. COMBINED SCENARIO: cure USD 94.3M + combined portfolio MTM losses USD 47.0M (FX positions USD 26.6M + commodity positions USD 20.4M) = USD 141.3M total \u2014 COV001 headroom remaining USD 10.7M \u2014 NO DETERMINISTIC BREACH under combined scenario. NOTE: prior board materials cited USD 161.7M combined (94.3M + 67.4M) \u2014 the 67.4M figure incorrectly attributed the combined FX+commodity total to the FX component alone, then added commodity again; corrected to USD 47.0M (combined) per treasury_positions.csv data audit 2026-06-08 (MO-02 panel finding). CORRECTED 2026-06-08.",
+      "note": "Full write-off cure of COV006 bad debt provision: USD 94.3M actual provision balance (sum of all segment provisions) flows through P&L, reducing EBITDA from USD 2,280M to USD 2,185.7M — still above COV001 floor of USD 2,128M, leaving USD 57.7M residual headroom. COMBINED SCENARIO: cure USD 94.3M + combined portfolio MTM losses USD 47.0M (FX positions USD 26.6M + commodity positions USD 20.4M) = USD 141.3M total — COV001 headroom remaining USD 10.7M — NO DETERMINISTIC BREACH under combined scenario. NOTE: prior board materials cited USD 161.7M combined (94.3M + 67.4M) — the 67.4M figure incorrectly attributed the combined FX+commodity total to the FX component alone, then added commodity again; corrected to USD 47.0M (combined) per treasury_positions.csv data audit 2026-06-08 (MO-02 panel finding). CORRECTED 2026-06-08.",
       "added": "2026-06-07",
       "panel_ref": "MO-01"
     },
@@ -78,16 +78,16 @@
     "covenant_breach_probability_prior_pct": 44.2,
     "covenant_breach_probability_base_pct": 50.1,
     "covenant_breach_recomputed": "2026-06-07T14:25:13.289179+00:00",
-    "covenant_breach_computation_note": "RECOMPUTED 2026-06-07: 44.2% (interim) \u2192 69.4% incorporating MO-01 (COV006 -365M EBITDA) and MO-06 (rev FX variance). Method 1 sensitivity estimate; range 64.5%-76.9%. Full Monte Carlo rerun to follow per CFO/Quant deadline 2026-06-20.",
-    "covenant_breach_recomputed_2026_06_08": "CORRECTED AND PROVISIONAL 2026-06-08: 69.4% (wrong, used 365M provision impact) \u2192 49.7% (correct, uses 94.3M provision impact). Calculation: base 44.2% + COV006 correction +5.0pp (94.3M \u00d7 0.053pp/M) + MO-06 FX variance +0.5pp = 49.7%. This is borderline breach/amber (threshold 50%). PROVISIONAL \u2014 full Monte Carlo rerun required by 2026-06-20 for definitive figure. Maintain BREACH status conservatively. CONDITIONAL: 49.7% is P(additional COV001 breach) conditional on COV006 remaining in active breach.",
-    "covenant_breach_probability_pct_note": "REMOVED override (was 49.7%) \u2014 MC now runs with effective headroom USD 57.7M (post-COV006 drag); MC result is authoritative. MO-01 fix 2026-06-09."
+    "covenant_breach_computation_note": "RECOMPUTED 2026-06-07: 44.2% (interim) → 69.4% incorporating MO-01 (COV006 -365M EBITDA) and MO-06 (rev FX variance). Method 1 sensitivity estimate; range 64.5%-76.9%. Full Monte Carlo rerun to follow per CFO/Quant deadline 2026-06-20.",
+    "covenant_breach_recomputed_2026_06_08": "CORRECTED AND PROVISIONAL 2026-06-08: 69.4% (wrong, used 365M provision impact) → 49.7% (correct, uses 94.3M provision impact). Calculation: base 44.2% + COV006 correction +5.0pp (94.3M × 0.053pp/M) + MO-06 FX variance +0.5pp = 49.7%. This is borderline breach/amber (threshold 50%). PROVISIONAL — full Monte Carlo rerun required by 2026-06-20 for definitive figure. Maintain BREACH status conservatively. CONDITIONAL: 49.7% is P(additional COV001 breach) conditional on COV006 remaining in active breach.",
+    "covenant_breach_probability_pct_note": "REMOVED override (was 49.7%) — MC now runs with effective headroom USD 57.7M (post-COV006 drag); MC result is authoritative. MO-01 fix 2026-06-09."
   },
   "unified_fx_model": {
     "_description": "MO-06/MO-03 2026-06-07: Unified FX exposure model design. Both Hedge Analyser and EBITDA Stress model must derive all FX inputs from treasury_positions.csv as single source of truth. Eliminates structural divergence discovered by panel (MO-03, MO-06).",
     "single_source": "data/treasury_positions.csv",
     "architecture": {
-      "step_1_load": "Read treasury_positions.csv \u2014 all positions, all dates",
-      "step_2_split": "Split by asset_type: FX positions \u2192 hedge model; Revenue/Cost FX \u2192 EBITDA model",
+      "step_1_load": "Read treasury_positions.csv — all positions, all dates",
+      "step_2_split": "Split by asset_type: FX positions → hedge model; Revenue/Cost FX → EBITDA model",
       "step_3_aggregate": {
         "fx_gross_usd_m": "SUM(gross_exposure_usd_m) WHERE position_type IN (FX001,FX002,FX003,FX004) = 7600",
         "commodity_gross_usd_m": "SUM(gross_exposure_usd_m) WHERE position_type IN (COM001,COM002) = 1540",
@@ -103,7 +103,7 @@
       "csv_total_gross_usd_m": 9140,
       "panel_claimed_usd_m": 10140,
       "panel_error_usd_m": 1000,
-      "verdict": "Panel MO-03 arithmetic error \u2014 CSV data correct at USD 9,140M. No data change required.",
+      "verdict": "Panel MO-03 arithmetic error — CSV data correct at USD 9,140M. No data change required.",
       "mo03_resolved": true
     },
     "implementation_note": "dashboard_updater.py should call load_fx_positions(treasury_positions.csv) once and pass results to both HedgeModel.compute_var() and EBITDAModel.compute_p_breach(). Never hardcode gross totals in either model.",
@@ -121,7 +121,7 @@
     "fx_unhedged_exposure_usd_m": 4080,
     "commodity_unhedged_exposure_usd_m": 860,
     "commodity_var_95_estimate_usd_m": 171,
-    "commodity_var_derivation": "Estimated: 860M unhedged \u00d7 (811M FX VaR / 4,080M FX unhedged) = 860 \u00d7 19.9% \u2248 171M. Group Treasurer to produce authoritative commodity VaR by 2026-06-14. MO-02 panel finding 2026-06-09.",
+    "commodity_var_derivation": "Estimated: 860M unhedged × (811M FX VaR / 4,080M FX unhedged) = 860 × 19.9% ≈ 171M. Group Treasurer to produce authoritative commodity VaR by 2026-06-14. MO-02 panel finding 2026-06-09.",
     "combined_fx_commodity_var_range_usd_m": {
       "uncorrelated_lower": 829,
       "correlated_upper": 983,
@@ -134,23 +134,23 @@
     "_description": "HIGH-07 2026-06-07: Reconciliation table for FX-exposed revenue across three models.",
     "supply_chain_model": {
       "figure_usd_b": 9.0,
-      "definition": "Total revenue at risk from supply chain disruption (NOT FX exposure). Equals single-source spend (7.9B) \u00d7 revenue multiplier (1.139). Represents production revenue loss if critical suppliers fail \u2014 a supply risk metric, not an FX metric.",
+      "definition": "Total revenue at risk from supply chain disruption (NOT FX exposure). Equals single-source spend (7.9B) × revenue multiplier (1.139). Represents production revenue loss if critical suppliers fail — a supply risk metric, not an FX metric.",
       "metric_type": "Supply chain operational risk",
-      "source": "erp_supply_chain.csv single-source spend \u00d7 model multiplier"
+      "source": "erp_supply_chain.csv single-source spend × model multiplier"
     },
     "ebitda_stress_model": {
       "figure_usd_m": 680,
-      "definition": "Unhedged FX COST exposure \u2014 JPY/KRW denominated COGS not covered by hedges. FX003 unhedged (980-600=380M) + FX004 unhedged (620-320=300M) = 680M. Represents COGS sensitivity to USD/JPY and USD/KRW movements.",
+      "definition": "Unhedged FX COST exposure — JPY/KRW denominated COGS not covered by hedges. FX003 unhedged (980-600=380M) + FX004 unhedged (620-320=300M) = 680M. Represents COGS sensitivity to USD/JPY and USD/KRW movements.",
       "metric_type": "FX cost risk (COGS)",
       "source": "treasury_positions.csv FX003 + FX004 unhedged amounts"
     },
     "hedge_analyser_model": {
       "figure_usd_m": 6000,
-      "definition": "Gross FX REVENUE exposure \u2014 CNY/EUR denominated revenue before hedging. FX001 gross (3,200M) + FX002 gross (2,800M) = 6,000M. Represents revenue sensitivity to USD/CNY and USD/EUR movements.",
+      "definition": "Gross FX REVENUE exposure — CNY/EUR denominated revenue before hedging. FX001 gross (3,200M) + FX002 gross (2,800M) = 6,000M. Represents revenue sensitivity to USD/CNY and USD/EUR movements.",
       "metric_type": "FX revenue risk",
       "source": "treasury_positions.csv FX001 + FX002 gross exposure"
     },
-    "reconciliation_summary": "No overlap or double-counting between the three figures \u2014 they measure distinct risk types: (1) supply chain operational loss, (2) COGS FX sensitivity, (3) revenue FX sensitivity. Board materials should present all three with clear labels. Combined FX exposure = 6,000M revenue FX + 1,600M cost FX gross = 7,600M total FX gross \u2014 consistent with treasury_positions.csv and model_benchmarks.fx_hedge.fx_gross_usd_m.",
+    "reconciliation_summary": "No overlap or double-counting between the three figures — they measure distinct risk types: (1) supply chain operational loss, (2) COGS FX sensitivity, (3) revenue FX sensitivity. Board materials should present all three with clear labels. Combined FX exposure = 6,000M revenue FX + 1,600M cost FX gross = 7,600M total FX gross — consistent with treasury_positions.csv and model_benchmarks.fx_hedge.fx_gross_usd_m.",
     "added": "2026-06-07T16:27:43.935640+00:00"
   }
 }

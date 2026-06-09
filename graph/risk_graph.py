@@ -2260,31 +2260,49 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios,
 
     # ── Model context from calibrator outputs (model_params) ──────────────────
     # Authoritative calibrator-tier facts: p_covenant_breach, VaR decomposition.
-    # model_params comes directly from model_calibrator.calibrate_all() so these
+    # model_params comes directly from model_calibrator.run_calibration() so these
     # figures are grounded in the calibrator agent tier and pass validation.
     try:
         ctx_lines = ["MODEL CONTEXT (cite as provided — do not modify these figures):"]
         ep = (model_params or {}).get("ebitda", {})
         hp = (model_params or {}).get("hedge",  {})
 
-        # MO-01: effective headroom and p_covenant_breach from calibrator
-        p_breach  = ep.get("p_covenant_breach_pct")
-        eff_hd    = ep.get("ebitda_headroom_usd_m")          # effective (post-COV006) — PRIMARY
-        gross_hd  = ep.get("ebitda_headroom_gross_usd_m")    # gross (pre-COV006) — reference only
-        cov006_w  = ep.get("cov006_full_writeoff_usd_m")
-        if p_breach is not None and eff_hd is not None:
-            threshold_word = "more likely than not" if p_breach >= 50 else "materially elevated"
+        # MO-01 / MO-02: Full covenant status with explicit P(any) vs P(conditional) distinction
+        # and mandatory 3-step headroom bridge. These are the authoritative figures.
+        p_any    = ep.get("p_any_covenant_breach_pct", 100.0)  # COV006 confirmed → certainty
+        p_cov1   = ep.get("p_cov001_conditional_breach_pct", ep.get("p_covenant_breach_pct"))
+        gross_hd = ep.get("cov001_gross_headroom_usd_m", ep.get("ebitda_headroom_gross_usd_m"))
+        eff_hd   = ep.get("ebitda_headroom_usd_m")          # effective (post-COV006) — PRIMARY
+        cov006_w = ep.get("cov006_full_writeoff_usd_m")
+        pnl_loss = abs(hp.get("total_portfolio_pnl_usd_m", 0)) if hp else 0
+        combined_wc = round(eff_hd - pnl_loss, 1) if eff_hd is not None and pnl_loss else None
+
+        if p_cov1 is not None and eff_hd is not None:
+            threshold_word = "more likely than not" if p_cov1 >= 50 else "materially elevated"
+            bridge_step3 = (
+                f" (3) Combined worst-case USD {combined_wc}M after USD {pnl_loss}M portfolio MTM losses."
+                if combined_wc is not None else ""
+            )
             ctx_lines.append(
-                f"  EBITDA: p_covenant_breach = {p_breach}% ({threshold_word} at current trajectory). "
-                f"Effective COV001 headroom = USD {eff_hd}M "
-                f"(gross USD {gross_hd}M less COV006 full provision USD {cov006_w}M applied in model). "
-                f"Use USD {eff_hd}M as headroom in board materials. "
-                f"Annotate {p_breach}% as PROVISIONAL pending definitive Monte Carlo rerun by 2026-06-20."
+                f"  COVENANT STATUS — TWO DISTINCT METRICS (do NOT conflate):\n"
+                f"    P(ANY covenant breach TODAY) = {p_any}% — COV006 is CONFIRMED IN ACTIVE BREACH "
+                f"(certainty, not a probability — action required by 2026-06-12).\n"
+                f"    P(additional COV001 breach at 2026-06-30 test) = {p_cov1}% PROVISIONAL "
+                f"({threshold_word} — CONDITIONAL on COV006 remaining in breach).\n"
+                f"    These are DISTINCT — board must see both, not just the 50.5%.\n"
+                f"  COV001 HEADROOM BRIDGE — cite ALL THREE STEPS (mandatory):\n"
+                f"    (1) Gross USD {gross_hd}M [Net Debt 6.384B / 3.0x ceiling = EBITDA floor 2128M].\n"
+                f"    (2) Post-COV006-cure effective USD {eff_hd}M "
+                f"[gross USD {gross_hd}M less COV006 full provision USD {cov006_w}M].\n"
+                f"    {bridge_step3}\n"
+                f"  RULE: Never cite USD {gross_hd}M alone — always show step (2) USD {eff_hd}M qualifier.\n"
+                f"  {p_cov1}% is PROVISIONAL — full Monte Carlo rerun by 2026-06-20."
             )
 
-        # MO-02: analytical VaR decomposition — both sub-components are within F-01 scope.
+        # MO-06: analytical VaR decomposition — both sub-components are within F-01 scope.
         # F-01 covers two sub-KRIs: avg_hedge_ratio_pct (FX-currency) and commodity_hedge_ratio_pct
         # (commodity, added 2026-06-08 per CF-04). The decomposition below is F-01 internal.
+        # NOTE: simulation VaR fields renamed to _simulation_* — DO NOT use those for board materials.
         fx_var  = hp.get("var_95_fx_analytical_usd_m")
         com_var = hp.get("var_95_commodity_analytical_usd_m")
         comb_lo = hp.get("var_95_combined_lower_usd_m")
@@ -2292,14 +2310,27 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios,
         com_unh = round(hp.get("commodity_gross_usd_m", 0) - hp.get("commodity_hedged_usd_m", 0)) if hp else None
         if fx_var and com_var and comb_lo:
             ctx_lines.append(
-                f"  F-01 VaR decomposition (analytical, 95% confidence): "
-                f"FX-currency sub-component = USD {fx_var}M "
-                f"(FX001-FX004 unhedged USD {hp.get('unhedged_usd_m',4080)}M at {hp.get('fx_vol_pct',9.0)}% vol); "
-                f"Commodity sub-component = USD {com_var}M "
-                f"(COM001+COM002 unhedged USD {com_unh}M at {hp.get('commodity_vol_pct',32.0)}% vol — F-01 scope per CF-04); "
-                f"F-01 total VaR = USD {comb_lo}M-{comb_hi}M (zero-corr to perfect-corr range). "
-                f"Exec recs must cite F-01 total alongside the FX-currency sub-component."
+                f"  F-01 VaR decomposition (analytical, 95% confidence — USE THESE, not simulation figures):\n"
+                f"    FX-currency sub-component = USD {fx_var}M "
+                f"(FX001-FX004 unhedged USD {hp.get('unhedged_usd_m',4080)}M at {hp.get('fx_vol_pct',9.0)}% vol).\n"
+                f"    Commodity sub-component = USD {com_var}M "
+                f"(COM001+COM002 unhedged USD {com_unh}M at {hp.get('commodity_vol_pct',32.0)}% vol — F-01 scope per CF-04).\n"
+                f"    F-01 total VaR range = USD {comb_lo}M-{comb_hi}M (zero-corr lower to perfect-corr upper).\n"
+                f"    RULE: Exec recs must cite F-01 total VaR range, not the FX sub-component alone."
             )
+
+        # MO-08: COV004 scope note — outside EBITDA MC, must be cited separately
+        cov004_note = ep.get("cov004_model_scope_note")
+        if cov004_note:
+            ctx_lines.append(f"  COV004 SCOPE NOTE: {cov004_note}")
+
+        # EM-05: O-03 field_failure_rate_pct is PROVISIONAL — enforcement note
+        ctx_lines.append(
+            "  O-03 FIELD FAILURE RATE: field_failure_rate_pct is PROVISIONAL — "
+            "QMS-SAP reconciliation pending (COO/VP Quality, review_deadline 2026-06-14). "
+            "Board pack MUST label this value as PROVISIONAL. "
+            "Do NOT cite field_failure_rate as a confirmed figure without this label."
+        )
 
         if len(ctx_lines) > 1:
             parts.append("\n".join(ctx_lines))

@@ -211,6 +211,49 @@ Dollar figures, percentages relative to thresholds, and time-based urgency
 (number of days to covenant test, weeks of inventory cover) are always acceptable —
 they are business facts, not statistical constructs.
 
+COVENANT HEADROOM BRIDGE — mandatory rule (EM-02 root-cause fix):
+Any reference to COV001 EBITDA headroom in the Financial section MUST present all three steps:
+  (1) Gross headroom [Net Debt / 3.0x ceiling] — cite model_params.ebitda.cov001_gross_headroom_usd_m
+  (2) Post-COV006-cure effective headroom [gross less bad-debt full provision] — cite model_params.ebitda.ebitda_headroom_usd_m
+  (3) Combined worst-case [effective less portfolio MTM losses] — cite from model context if provided
+NEVER cite step (1) gross headroom alone without step (2) effective qualifier.
+NEVER cite "USD 480M headroom" — that is the non-binding COV005 EBITDA floor (1.8B), not the
+binding COV001 constraint. The binding constraint is COV001 (Net Debt/3.0x ceiling).
+If model_params.ebitda provides cov001_gross_headroom_usd_m and ebitda_headroom_usd_m, use those
+exact figures — do not derive headroom independently.
+
+P(COVENANT BREACH) PRECISION — mandatory rule (MO-01 root-cause fix):
+There are TWO distinct breach probability concepts — never conflate them:
+  P(ANY covenant breach TODAY) = 100% — COV006 is CONFIRMED IN ACTIVE BREACH (certainty, not probability).
+  P(additional COV001 breach at 2026-06-30 test) = model_params.ebitda.p_covenant_breach_pct
+    — this is a CONDITIONAL probability GIVEN COV006 remains in breach.
+When the board summary cites P(covenant breach), state BOTH:
+  "The company is already in confirmed covenant breach today (COV006). Separately, the Monte Carlo
+   model estimates [X]% probability of an additional COV001 Net Debt/EBITDA breach at the June test date."
+The [X]% figure is PROVISIONAL pending full Monte Carlo rerun by 2026-06-20.
+
+COV004 DEBT MATURITY STATUS PRECISION — mandatory rule (EM-03 root-cause fix):
+debt_maturity_runway_months thresholds: amber < 12 months; breach < 6 months.
+A value of 8 months = AMBER (below 12-month amber threshold, but above 6-month breach threshold).
+NEVER describe debt_maturity_runway at 8 months as "in breach" or "approaching breach threshold".
+Use "amber warning — 8 months of runway remains against a 12-month amber threshold."
+Only use "in breach" for this KRI if the value is below 6 months.
+
+O-03 FIELD FAILURE RATE — PROVISIONAL LABEL REQUIRED (EM-05 root-cause fix):
+The field_failure_rate_pct KRI is sourced from QMS-SAP system data.
+If the KRI entry carries provisional=true in the data, or if model_notes reference a
+QMS-SAP reconciliation pending, the board MUST label this value as PROVISIONAL.
+Write: "field failure rate [value]% — PROVISIONAL pending COO/VP Quality QMS-SAP confirmation"
+Do NOT present a provisional quality KRI as a confirmed board-quality figure without this label.
+
+S-01 vs S-02 SIGNAL COUNT SEPARATION — mandatory rule (EM-01 root-cause fix):
+agent_context provides separate counts: S-01.high_severity_signal_count (geopolitical/trade signals)
+and S-02.competitive_signals (competitive/market signals). These are SEPARATE pools.
+If the strategic agent narrative cites a combined count that differs from agent_context.S-01.high_severity_signal_count,
+use the agent_context value — it is computed directly from source CSV data by risk_id=S-01 filter.
+S-02 signals (Dell AI laptop, HP Chromebook, market share data) must NEVER be counted in S-01 totals.
+Report geopolitical signals and competitive signals as separate counts in separate domain sub-sections.
+
 DOMAIN EXECUTIVE OWNERSHIP — for use in RISK POSTURE enumeration:
 When naming the accountable executive for a domain in breach, use these mappings:
   Strategic domain (S-01, S-02, S-03):          Chief Executive Officer
