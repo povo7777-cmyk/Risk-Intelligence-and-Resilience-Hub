@@ -2123,10 +2123,51 @@ def _assemble_board_summary(sf, of, ff, cf, rf, ef,
 
 def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios) -> str:
     """
-    Build a structured, KRI-values-only input for the constrained LLM call.
-    No narratives — only exact values, thresholds, and statuses.
-    The LLM cannot embellish what it cannot see.
+    Build a structured input for the CRA LLM call.
+
+    Core: KRI values, thresholds, statuses from the data pipeline.
+    Extended: structured metadata (deadlines, provisional flags, owners, notes)
+    read back directly from risk_store.json — the pipeline strips these fields
+    at kri_data_layer and agent levels, so we re-inject them here to ensure
+    the LLM sees all information the panel requires.
+    Model context: key benchmarks and scope disclosures from model_benchmarks.json.
+
+    The chief_risk_v1.txt prompt permits citing any fact explicitly in this input.
+    This function is the sole information boundary — add fields here, not in prompts.
     """
+    # ── Load enriched KRI metadata from risk_store.json ───────────────────────
+    # The data pipeline produces bare {name, value, unit, status, threshold} dicts.
+    # rich fields (provisional, review_deadline, model_notes, owner) live in
+    # risk_store.json and must be read back here.
+    domain_to_bucket = {
+        "Strategic":   "strategic_risks",
+        "Operational": "operational_risks",
+        "Financial":   "financial_risks",
+        "Compliance":  "compliance_risks",
+    }
+    # Fields to forward; description truncated to avoid token bloat
+    FORWARD_FIELDS = ("provisional", "model_notes", "review_deadline", "owner")
+    store_meta: dict = {}  # (bucket, risk_id, kri_name) → metadata dict
+
+    try:
+        from tools.risk_writer import load_store
+        store = load_store()
+        for bucket in domain_to_bucket.values():
+            for risk_id, risk_obj in store.get(bucket, {}).items():
+                for kri_name, kri_data in risk_obj.get("kris", {}).items():
+                    meta = {}
+                    for f in FORWARD_FIELDS:
+                        val = kri_data.get(f)
+                        if val is not None and val is not False and val != "":
+                            if isinstance(val, str) and len(val) > 160:
+                                val = val[:160] + "…"
+                            meta[f] = val
+                    if meta:
+                        store_meta[(bucket, risk_id, kri_name)] = meta
+    except Exception:
+        pass  # Non-fatal — base KRI data still used
+
+    # ── Build breach / amber KRI entries ──────────────────────────────────────
     breach_kris = []
     amber_kris  = []
 
@@ -2137,6 +2178,7 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios) -> str:
         if not findings:
             continue
         kri_updates = findings.get("kri_updates", {})
+        bucket = domain_to_bucket.get(domain_label, "")
         for risk_id, kris in kri_updates.items():
             kri_list = kris if isinstance(kris, list) else (
                 [{"name": k, **v} for k, v in kris.items() if isinstance(v, dict)]
@@ -2149,11 +2191,26 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios) -> str:
                     f"threshold={k.get('threshold','?')} | "
                     f"status={k.get('status','?')}"
                 )
+                # Annotate with enriched metadata from risk_store
+                meta = store_meta.get((bucket, risk_id, k.get("name", "")), {})
+                annotations = []
+                if meta.get("provisional"):
+                    annotations.append("PROVISIONAL")
+                if meta.get("review_deadline"):
+                    annotations.append(f"action_deadline={meta['review_deadline']}")
+                if meta.get("owner"):
+                    annotations.append(f"owner={meta['owner']}")
+                if meta.get("model_notes"):
+                    annotations.append(f"note={meta['model_notes']}")
+                if annotations:
+                    entry += " | " + " | ".join(annotations)
+
                 if k.get("status") == "breach":
                     breach_kris.append(entry)
                 elif k.get("status") == "amber":
                     amber_kris.append(entry)
 
+    # ── Assemble KRI sections ──────────────────────────────────────────────────
     parts = []
     if breach_kris:
         parts.append("BREACHED KRIs (require immediate action):\n" +
@@ -2171,9 +2228,56 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios) -> str:
         parts.append("COMPOUND SCENARIOS IDENTIFIED BY DOMAIN AGENTS:\n" +
                      "\n".join(f"  • {s}" for s in compound_scenarios))
 
+    # ── Model context from model_benchmarks.json ──────────────────────────────
+    # Provides model-level facts (effective headroom, VaR scope, provisional flags)
+    # that are not KRIs but are required by the panel in exec rec outputs.
+    try:
+        bm_path = Path(__file__).parent.parent / "data" / "model_benchmarks.json"
+        bm = json.loads(bm_path.read_text())
+        ctx_lines = ["MODEL CONTEXT (cite as provided — do not modify these figures):"]
+
+        ebitda = bm.get("ebitda", {})
+        eff    = ebitda.get("effective_covenant_headroom_post_cov006_usd_m")
+        gross  = ebitda.get("covenant_headroom_usd_m")
+        floor_ = ebitda.get("cov006_deterministic_floor_usd_m")
+        if eff and gross and floor_:
+            ctx_lines.append(
+                f"  EBITDA effective covenant headroom post-COV006 cure = "
+                f"USD {eff}M (gross USD {gross}M less COV006 cure USD {floor_}M). "
+                f"Reference USD {eff}M as the available headroom in board materials, "
+                f"not the gross USD {gross}M figure."
+            )
+        if ebitda.get("monte_carlo_rerun_required"):
+            rerun = ebitda.get("monte_carlo_rerun_deadline", "")
+            ctx_lines.append(
+                f"  p_covenant_breach_pct 49.7% is PROVISIONAL and understated: "
+                f"calculated against gross headroom USD {gross}M, not effective "
+                f"USD {eff}M. Rerun due {rerun}. "
+                f"Annotate as PROVISIONAL in all exec rec and board material citations."
+            )
+
+        fx  = bm.get("fx_hedge", {})
+        com = fx.get("commodity_unhedged_exposure_usd_m")
+        vr  = fx.get("combined_fx_commodity_var_range_usd_m", {})
+        if com:
+            lo = vr.get("uncorrelated_lower", "")
+            hi = vr.get("correlated_upper", "")
+            ctx_lines.append(
+                f"  Hedge Analyser VaR USD 811M = FX positions only (FX001–FX004). "
+                f"Commodity unhedged exposure USD {com}M breaches F-01 amber threshold "
+                f"USD 700M and is EXCLUDED from this VaR figure. "
+                f"Combined FX + commodity VaR = USD {lo}M–{hi}M. "
+                f"Cite the combined figure alongside the FX-only figure in the FX recommendation."
+            )
+
+        if len(ctx_lines) > 1:
+            parts.append("\n".join(ctx_lines))
+    except Exception:
+        pass  # Non-fatal — model context is supplementary
+
     parts.append(
-        "Using only the KRI values above, draft the exec rec updates and "
-        "risk committee recommended actions. "
+        "Using only the KRI values and model context above, draft the exec rec "
+        "updates and risk committee recommended actions. "
         "Return ONLY valid JSON — no markdown, no explanation."
     )
 

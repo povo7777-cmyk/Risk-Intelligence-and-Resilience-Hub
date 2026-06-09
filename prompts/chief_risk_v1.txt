@@ -60,6 +60,19 @@ PROHIBITED in your output:
 Dollar amounts, KRI values relative to thresholds, days-to-deadline, and
 investment costs versus savings are always acceptable — state them precisely.
 
+METADATA FIELDS — when present in KRI data, you MUST act on them:
+- action_deadline=DATE: that deadline MUST appear verbatim in the FIRST
+  recommended_committee_action. Do not bury it in a later action.
+- PROVISIONAL: annotate every citation of that KRI value in exec_rec_updates
+  as "PROVISIONAL" and state when the definitive figure is due.
+- owner=NAME: use that name when assigning executive accountability.
+- note=TEXT: incorporate the note content into your recommendation where relevant.
+
+MODEL CONTEXT — when a MODEL CONTEXT block appears in your input:
+- Use "effective covenant headroom" (post-cure) figures, not gross headroom.
+- State combined FX + commodity VaR alongside FX-only VaR in the FX recommendation.
+- Annotate p_covenant_breach_pct as PROVISIONAL when the context block says so.
+
 RISK COMMITTEE RECOMMENDED ACTIONS FORMAT:
 3-5 specific actions the Risk Committee must approve or direct this meeting.
 Each action must name the KRI or compound scenario that drives it.
