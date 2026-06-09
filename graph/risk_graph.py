@@ -2268,21 +2268,23 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios,
         hp = (model_params or {}).get("hedge",  {})
 
         # MO-01: effective headroom and p_covenant_breach from calibrator
-        p_breach = ep.get("p_covenant_breach_pct")
-        eff_hd   = ep.get("ebitda_headroom_post_cure_usd_m")
-        gross_hd = ep.get("ebitda_headroom_usd_m")
-        cov006_w = ep.get("cov006_full_writeoff_usd_m")
+        p_breach  = ep.get("p_covenant_breach_pct")
+        eff_hd    = ep.get("ebitda_headroom_usd_m")          # effective (post-COV006) — PRIMARY
+        gross_hd  = ep.get("ebitda_headroom_gross_usd_m")    # gross (pre-COV006) — reference only
+        cov006_w  = ep.get("cov006_full_writeoff_usd_m")
         if p_breach is not None and eff_hd is not None:
             threshold_word = "more likely than not" if p_breach >= 50 else "materially elevated"
             ctx_lines.append(
                 f"  EBITDA: p_covenant_breach = {p_breach}% ({threshold_word} at current trajectory). "
-                f"Effective headroom post-COV006 = USD {eff_hd}M "
-                f"(gross USD {gross_hd}M less COV006 provision USD {cov006_w}M). "
-                f"Use effective headroom USD {eff_hd}M in board materials, not gross USD {gross_hd}M. "
-                f"Annotate {p_breach}% as PROVISIONAL pending Monte Carlo rerun on effective headroom by 2026-06-20."
+                f"Effective COV001 headroom = USD {eff_hd}M "
+                f"(gross USD {gross_hd}M less COV006 full provision USD {cov006_w}M applied in model). "
+                f"Use USD {eff_hd}M as headroom in board materials. "
+                f"Annotate {p_breach}% as PROVISIONAL pending definitive Monte Carlo rerun by 2026-06-20."
             )
 
-        # MO-02: analytical VaR decomposition — FX-only, commodity, combined
+        # MO-02: analytical VaR decomposition — both sub-components are within F-01 scope.
+        # F-01 covers two sub-KRIs: avg_hedge_ratio_pct (FX-currency) and commodity_hedge_ratio_pct
+        # (commodity, added 2026-06-08 per CF-04). The decomposition below is F-01 internal.
         fx_var  = hp.get("var_95_fx_analytical_usd_m")
         com_var = hp.get("var_95_commodity_analytical_usd_m")
         comb_lo = hp.get("var_95_combined_lower_usd_m")
@@ -2290,11 +2292,13 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios,
         com_unh = round(hp.get("commodity_gross_usd_m", 0) - hp.get("commodity_hedged_usd_m", 0)) if hp else None
         if fx_var and com_var and comb_lo:
             ctx_lines.append(
-                f"  HEDGE VaR decomposition (analytical, 95% confidence): "
-                f"FX-only = USD {fx_var}M (FX001–FX004 unhedged USD {hp.get('unhedged_usd_m',4080)}M × {hp.get('fx_vol_pct',9.0)}% vol); "
-                f"Commodity-only = USD {com_var}M (COM001+COM002 unhedged USD {com_unh}M × {hp.get('commodity_vol_pct',32.0)}% vol); "
-                f"Combined = USD {comb_lo}M–{comb_hi}M (zero-corr lower / perfect-corr upper). "
-                f"Board materials must cite combined range alongside FX-only figure."
+                f"  F-01 VaR decomposition (analytical, 95% confidence): "
+                f"FX-currency sub-component = USD {fx_var}M "
+                f"(FX001-FX004 unhedged USD {hp.get('unhedged_usd_m',4080)}M at {hp.get('fx_vol_pct',9.0)}% vol); "
+                f"Commodity sub-component = USD {com_var}M "
+                f"(COM001+COM002 unhedged USD {com_unh}M at {hp.get('commodity_vol_pct',32.0)}% vol — F-01 scope per CF-04); "
+                f"F-01 total VaR = USD {comb_lo}M-{comb_hi}M (zero-corr to perfect-corr range). "
+                f"Exec recs must cite F-01 total alongside the FX-currency sub-component."
             )
 
         if len(ctx_lines) > 1:

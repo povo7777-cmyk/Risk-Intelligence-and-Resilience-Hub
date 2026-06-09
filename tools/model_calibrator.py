@@ -312,7 +312,7 @@ def calibrate_ebitda(raw: dict) -> dict:
         "demand_var_pct":  round(demand_var, 1),
         # Covenant
         "covenant_floor_usd_b":     round(cov_floor_b, 2),
-        "ebitda_headroom_usd_m":    ebitda_headroom_m,
+        "ebitda_headroom_gross_usd_m": ebitda_headroom_m,  # gross headroom (pre-COV006 cure) for reference
         # MODEL SCOPE NOTE: p_covenant_breach_pct (Monte Carlo) stress-tests COV001
         # Net Debt/EBITDA forward probability only. COV006 bad_debt_provision_pct is
         # ALREADY IN CONFIRMED BREACH (current 1.44% > 0.80% threshold) — it requires
@@ -337,7 +337,11 @@ def calibrate_ebitda(raw: dict) -> dict:
         "cov006_next_test_date":        cov006_next_test_date,
         "cov006_current_pct":           cov006_current_pct,
         "cov006_threshold_pct":         cov006_threshold_pct,
-        "ebitda_headroom_post_cure_usd_m": ebitda_headroom_post_cure_m,
+        # MO-01: ebitda_headroom_usd_m is the EFFECTIVE (post-COV006-cure) headline headroom.
+        # This is the figure that was applied in the Monte Carlo breach checks via _cov006_drag_b.
+        # The gross figure (pre-cure) is preserved in ebitda_headroom_gross_usd_m.
+        "ebitda_headroom_usd_m":           ebitda_headroom_post_cure_m,  # EFFECTIVE — used in MC
+        "ebitda_headroom_post_cure_usd_m": ebitda_headroom_post_cure_m,  # alias for backward compat
         # FX cost pass-through — derived from treasury_positions.csv Cost-type rows
         # Represents the unhedged JPY/KRW COGS exposure that creates EBITDA volatility
         # when the dollar moves against manufacturing-cost currencies.
