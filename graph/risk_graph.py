@@ -896,6 +896,8 @@ def board_summary_correction_node(state: RiskIntelligenceState) -> RiskIntellige
         "component-vs-aggregate", "confusion flagged",
         "incorrect count", "miscounts", "wrong count",
         "primary driver", "sub-component", "aggregate confusion",
+        # P6 2026-06-09: capture completeness gaps (missing dates/deadlines) as correctable
+        "absent from", "missing from", "not present in", "omits the",
     }
     panel_verdict = panel_val.get("panel_verdict", {})
     all_panel = (
@@ -2277,7 +2279,8 @@ def build_graph():
     graph.add_node("completeness_gate",         completeness_gate_node)
     graph.add_node("risk_panel",                risk_panel_node)
     graph.add_node("panel_remediation",         panel_remediation_node)
-    graph.add_node("board_summary_correction",  board_summary_correction_node)  # Loop 1+2
+    graph.add_node("board_summary_correction_v1", board_summary_correction_node)  # Loop 1: pre-panel (fixes validation flags before panel sees board summary)
+    graph.add_node("board_summary_correction",  board_summary_correction_node)  # Loop 2: post-panel (fixes panel content-accuracy flags)
     graph.add_node("hitl_gate",                 hitl_gate_node)
     graph.add_node("update_exec_recs",          update_exec_recs_node)
     graph.add_node("github_push",               github_push_node)
@@ -2300,7 +2303,8 @@ def build_graph():
     graph.add_edge("write_approved",           "kri_validation")
     graph.add_edge("kri_validation",           "content_validation")
     graph.add_edge("content_validation",       "completeness_gate")
-    graph.add_edge("completeness_gate",        "risk_panel")
+    graph.add_edge("completeness_gate",          "board_summary_correction_v1")  # P1 2026-06-09: Loop 1 correction before panel so panel sees pre-corrected summary
+    graph.add_edge("board_summary_correction_v1", "risk_panel")
     graph.add_edge("risk_panel",               "panel_remediation")
     graph.add_edge("panel_remediation",        "board_summary_correction")  # ← Loop 1+2
     graph.add_edge("board_summary_correction", "hitl_gate")

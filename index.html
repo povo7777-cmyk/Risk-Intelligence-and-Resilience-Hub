@@ -912,12 +912,12 @@ input[type=range]{width:100%;accent-color:var(--navy)}
   <div style="background:#1a0808;border:1px solid #3a1515;border-radius:10px;padding:1rem 1.2rem;margin-bottom:1rem">
     <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:0.85rem">
       <i class="ti ti-alert-triangle" style="color:#ef4444;font-size:16px;margin-top:2px;flex-shrink:0"></i>
-      <div style="font-size:13px;font-weight:600;color:#ef4444;line-height:1.55">Under current conditions, there is a <strong>69% chance of breaching a bank covenant</strong> — a trigger that could allow lenders to demand early debt repayment. A single cost increase or major customer loss pushes this above 50%.</div>
+      <div style="font-size:13px;font-weight:600;color:#ef4444;line-height:1.55">Under current conditions, there is a <strong>49.7% chance of breaching a bank covenant</strong> — a trigger that could allow lenders to demand early debt repayment. A single cost increase or major customer loss pushes this above 50%.</div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.6rem;margin-bottom:0.8rem">
       <div style="background:#2a0a0a;border:1px solid #4a1515;border-radius:7px;padding:0.65rem 0.8rem;text-align:center">
         <div style="font-size:10px;color:#fca5a5;margin-bottom:3px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Base case today</div>
-        <div style="font-size:24px;font-weight:700;color:#ef4444;line-height:1">69.4%</div>
+        <div style="font-size:24px;font-weight:700;color:#ef4444;line-height:1">49.7%</div>
         <div style="font-size:10px;color:rgba(252,165,165,.6);margin-top:4px">covenant breach probability</div>
       </div>
       <div style="background:#2a0a0a;border:1px solid #4a1515;border-radius:7px;padding:0.65rem 0.8rem;text-align:center">
@@ -2152,7 +2152,7 @@ var AGENT_PROMPTS = {
   },
   financial: function(){
     var m = getModelOutputs();
-    return 'You are a CFO-level financial risk advisor reviewing the financial risk domain for the Risk Committee. Use ONLY the data provided.\n\nCURRENT KRI VALUES:\n'+getKRISummary('financial')+'\n\nMODEL OUTPUTS (live from simulators):\nEBITDA Stress: '+m.ebitda+'\nHedge Analyser: '+m.hedge+'\n\nVALIDATED BENCHMARKS (stress simulation, current settings):\n- At current settings: covenant breach probability = 69% (more likely than not at current trajectory)\n- COGS +1pp: covenant breach probability rises to 56.8% (+7.1pp)\n- Top customer loss: breach probability rises to 50.9% (+1.2pp)\n- Covenant headroom: USD 152M (Net debt ~USD 6.4B / 3.0x covenant)\n\nGenerate a concise Risk Committee financial recommendation: (1) covenant breach risk headline with 3 specific actions to reduce it, each with estimated probability improvement, (2) hedge ratio action with Hedge Analyser-backed rationale, (3) receivables/provision action. Maximum 280 words.';
+    return 'You are a CFO-level financial risk advisor reviewing the financial risk domain for the Risk Committee. Use ONLY the data provided.\n\nCURRENT KRI VALUES:\n'+getKRISummary('financial')+'\n\nMODEL OUTPUTS (live from simulators):\nEBITDA Stress: '+m.ebitda+'\nHedge Analyser: '+m.hedge+'\n\nVALIDATED BENCHMARKS (stress simulation, current settings):\n- At current settings: covenant breach probability = 49.7% (PROVISIONAL; borderline breach threshold 50%)\n- COGS +1pp: covenant breach probability rises to 56.8% (+7.1pp)\n- Top customer loss: breach probability rises to 50.9% (+1.2pp)\n- Covenant headroom: USD 152M (Net debt ~USD 6.4B / 3.0x covenant)\n\nGenerate a concise Risk Committee financial recommendation: (1) covenant breach risk headline with 3 specific actions to reduce it, each with estimated probability improvement, (2) hedge ratio action with Hedge Analyser-backed rationale, (3) receivables/provision action. Maximum 280 words.';
   },
   compliance: function(){
     var today = new Date();

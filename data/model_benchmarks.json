@@ -69,6 +69,12 @@
     "fx_revenue_unhedged_usd_m": 3400,
     "fx_revenue_gross_usd_m": 6000,
     "mo06_note": "MO-06 2026-06-07: Revenue FX unhedged USD 3,400M (FX001+FX002) added to EBITDA model. Current demand_var does not capture USD appreciation impact on CNY/EUR revenue streams. Rerun Monte Carlo with revenue_fx_unhedged included in revenue distribution.",
+    "cov006_deterministic_floor_usd_m": 94.3,
+    "effective_covenant_headroom_post_cov006_usd_m": 57.7,
+    "cov006_deterministic_floor_embedded": true,
+    "monte_carlo_rerun_required": true,
+    "monte_carlo_rerun_deadline": "2026-06-20",
+    "p_covenant_breach_pct_understatement_note": "P(covenant breach) 49.7% is UNDERSTATED: base Monte Carlo uses gross COV001 headroom USD 152M without COV006 deterministic floor (USD 94.3M write-off). Effective headroom post-COV006 cure = USD 57.7M. Monte Carlo must be rerun with effective_covenant_headroom_post_cov006_usd_m = 57.7 as the base-case floor by 2026-06-20. MO-01 panel finding 2026-06-09.",
     "covenant_breach_probability_prior_pct": 44.2,
     "covenant_breach_probability_base_pct": 50.1,
     "covenant_breach_recomputed": "2026-06-07T14:25:13.289179+00:00",
@@ -109,7 +115,19 @@
     "fx_gross_usd_m": 7600,
     "commodity_gross_usd_m": 1540,
     "_source": "Hedge Analyser Monte Carlo | FX (Revenue+Cost): 9% vol | Commodity (DRAM+NAND): 32% vol | M-03 panel recommendation implemented 2026-05-28",
-    "var_95_unhedged_note": "1303 = gross VaR without hedge; 1050 = net VaR after hedge; improvement = 253 (MO-02 corrected 2026-06-07)"
+    "var_95_unhedged_note": "1303 = gross VaR without hedge; 1050 = net VaR after hedge; improvement = 253 (MO-02 corrected 2026-06-07)",
+    "fx_var_95_usd_m": 811,
+    "fx_unhedged_exposure_usd_m": 4080,
+    "commodity_unhedged_exposure_usd_m": 860,
+    "commodity_var_95_estimate_usd_m": 171,
+    "commodity_var_derivation": "Estimated: 860M unhedged × (811M FX VaR / 4,080M FX unhedged) = 860 × 19.9% ≈ 171M. Group Treasurer to produce authoritative commodity VaR by 2026-06-14. MO-02 panel finding 2026-06-09.",
+    "combined_fx_commodity_var_range_usd_m": {
+      "uncorrelated_lower": 829,
+      "correlated_upper": 983,
+      "derivation": "Lower: sqrt(811^2 + 171^2) = 829M (zero correlation); Upper: 811 + 171 = 982M (perfect correlation)."
+    },
+    "combined_unhedged_exposure_usd_m": 4940,
+    "var_scope_disclosure": "Hedge Analyser VaR USD 811M covers FX positions only (FX001-FX004). Commodity positions (COM001 DRAM USD 890M gross, COM002 NAND USD 650M gross) are EXCLUDED. Combined FX + commodity unhedged exposure = USD 4,940M. Combined VaR (estimated): USD 829M-982M. Board materials must cite combined figure alongside FX-only. MO-02 panel finding 2026-06-09."
   },
   "model_fx_revenue_reconciliation": {
     "_description": "HIGH-07 2026-06-07: Reconciliation table for FX-exposed revenue across three models.",
