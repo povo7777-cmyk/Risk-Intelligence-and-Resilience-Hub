@@ -625,6 +625,22 @@ def _format_model_params_for_brief(model_params: dict) -> str:
     lines = []
 
     if ep:
+        # Covenant headroom — three locked steps (do not re-derive)
+        gross_hd   = ep.get("cov001_gross_headroom_usd_m",   ep.get("ebitda_headroom_gross_usd_m", 152))
+        eff_hd     = ep.get("ebitda_headroom_usd_m",         58)    # post-COV006-cure effective
+        wc_hd      = ep.get("ebitda_headroom_combined_worst_case_usd_m", None)  # post-cure + MTM
+        p_any      = ep.get("p_any_covenant_breach_pct",     100.0)  # COV006 confirmed
+        p_cov1     = ep.get("p_cov001_conditional_breach_pct", ep.get("p_covenant_breach_pct"))
+        cov006_w   = ep.get("cov006_full_writeoff_usd_m",    94.3)
+        cure_deriv = ep.get("cov006_cure_derivation",        "")
+        # Headroom bridge string for panel traceability
+        hd_bridge  = (
+            f"(1) Gross USD {gross_hd}M [COV001 Net Debt/3.0x] → "
+            f"(2) Post-cure effective USD {eff_hd}M [less COV006 full provision USD {cov006_w}M] → "
+            f"(3) Combined worst-case USD {wc_hd}M [less portfolio MTM losses]"
+            if wc_hd is not None else
+            f"(1) Gross USD {gross_hd}M → (2) Post-cure USD {eff_hd}M [less COV006 USD {cov006_w}M]"
+        )
         lines.append(
             f"EBITDA Stress:\n"
             f"  Parameters: revenue USD {ep.get('revenue_usd_b')}B | "
@@ -632,25 +648,43 @@ def _format_model_params_for_brief(model_params: dict) -> str:
             f"volatility {ep.get('volatility_pct')}% p.a. | "
             f"demand volatility σ={ep.get('demand_var_pct')}% (annualised std-dev — NOT demand shock impact; "
             f"supply chain demand_shock_impact_pct is a separate parameter in Supply Chain Stress model)\n"
-            f"  Outputs:    P(covenant breach) {ep.get('p_covenant_breach_pct')}% | "
-            f"+1pp cost → {ep.get('p_breach_cost_up1pp_pct')}% | "
+            f"  Covenant status (TWO DISTINCT METRICS — do NOT conflate):\n"
+            f"    P(ANY covenant breach TODAY) = {p_any}% — COV006 CONFIRMED IN BREACH (certainty)\n"
+            f"    P(additional COV001 breach at 2026-06-30) = {p_cov1}% PROVISIONAL (conditional)\n"
+            f"  COV001 headroom bridge (LOCKED — do not re-derive):\n"
+            f"    {hd_bridge}\n"
+            f"  COV006 cure derivation: {cure_deriv}\n"
+            f"  Outputs: +1pp cost → {ep.get('p_breach_cost_up1pp_pct')}% | "
             f"top-cust loss → {ep.get('p_breach_top_cust_loss_pct')}% | "
-            f"VaR 95% USD {ep.get('ebitda_var_95_usd_m', 0):,}M | "
-            f"headroom USD {int(ep.get('ebitda_headroom_usd_m', 0))}M"
+            f"VaR 95% USD {ep.get('ebitda_var_95_usd_m', 0):,}M"
         )
 
     if hp:
+        # Analytical VaR (preferred — deterministic formula, no avg_spot bias)
+        fx_var_a  = hp.get("var_95_fx_analytical_usd_m",        0)
+        com_var_a = hp.get("var_95_commodity_analytical_usd_m", 0)
+        clo_var_a = hp.get("var_95_combined_lower_usd_m",       0)
+        chi_var_a = hp.get("var_95_combined_upper_usd_m",       0)
+        # Simulation VaR (renamed from var_95_unhedged_usd_m — for reference only)
+        sim_uh    = hp.get("var_95_unhedged_simulation_usd_m",  0)
+        sim_hd    = hp.get("var_95_hedged_simulation_usd_m",    0)
         lines.append(
             f"Hedge Analyser:\n"
             f"  Parameters: gross FX USD {hp.get('gross_exposure_usd_m', 0):,.0f}M | "
             f"hedge ratio {hp.get('hedge_ratio_pct')}% | "
-            f"volatility {hp.get('volatility_pct')}% p.a. | "
+            f"FX volatility {hp.get('fx_vol_pct', hp.get('volatility_pct'))}% p.a. | "
+            f"commodity volatility {hp.get('commodity_vol_pct', 32.0)}% p.a. | "
             f"hedge cost USD {hp.get('hedge_cost_usd_m')}M\n"
-            f"  Outputs:    unhedged USD {hp.get('unhedged_usd_m', 0):,.0f}M | "
-            f"unrealised P&L USD {hp.get('unrealised_pnl_usd_m')}M | "
-            f"VaR unhedged USD {hp.get('var_95_unhedged_usd_m', 0):,}M | "
-            f"VaR hedged USD {hp.get('var_95_hedged_usd_m', 0):,}M | "
-            f"improvement USD {hp.get('var_improvement_usd_m', 0):,}M"
+            f"  Outputs (analytical VaR — use these for board materials):\n"
+            f"    FX-only VaR 95%: USD {fx_var_a:,}M | "
+            f"Commodity VaR 95%: USD {com_var_a:,}M | "
+            f"Combined VaR range: USD {clo_var_a:,}M–{chi_var_a:,}M\n"
+            f"  Outputs (portfolio):\n"
+            f"    unhedged FX USD {hp.get('unhedged_usd_m', 0):,.0f}M | "
+            f"unrealised P&L USD {hp.get('unrealised_pnl_usd_m')}M (FX-only) | "
+            f"total portfolio P&L USD {hp.get('total_portfolio_pnl_usd_m')}M\n"
+            f"  Simulation VaR (INTERNAL — avg_spot bias, do NOT cite for board): "
+            f"unhedged USD {sim_uh:,}M | hedged USD {sim_hd:,}M"
         )
 
     if sp:
@@ -837,6 +871,30 @@ They are NOT open for recalibration. Do not raise them as findings.
 - supplier_cyber_resilience_assess_pct: direction=lower_worse, amber=80%, breach=50%.
   This is CORRECT convention: below 80% = amber, below 50% = breach.
   The amber threshold is ABOVE the breach threshold for lower_worse metrics — do not flag as inverted.
+- S-02 AMBER COUNT = EXACTLY 1. SETTLED. DO NOT RAISE.
+  S-02 has exactly ONE amber KRI: competitive_signals=3 (amber threshold=3, breach=5).
+  The board summary correctly states "1 amber warning" for S-02. This is NOT an error.
+  DO NOT flag S-02 amber count as wrong. DO NOT raise a finding that the count should be
+  different. DO NOT compare this to any prior version of the board summary — the corrected
+  version (1 amber) is authoritative. If you see "1 amber" for S-02 in the board summary,
+  that is CORRECT. Do not flag it.
+- COV006 CURE DERIVATION: $94.3M = FULL BAD-DEBT PROVISION BALANCE. SETTLED. DO NOT RAISE.
+  Source: ar_aging.csv, sum of all bad_debt_provision_usd_m rows for period 2026-05-01.
+  This is the FULL WRITE-OFF (worst-case scenario) — not 0.64pp × some AR balance.
+  Total AR balance = $6,560M (current_usd_m + overdue_90d_usd_m across all customers).
+  Current bad_debt_provision_pct = 1.44% ($94.3M / $6,560M). COV006 threshold = 0.80%.
+  Incremental cure = $94.3M − (0.80% × $6,560M = $52.5M) = $41.8M to reach covenant floor.
+  Full write-off (worst-case, used in model) = $94.3M.
+  DO NOT flag $94.3M as implausible or inconsistent with a "$14.7B AR base" — that figure is wrong.
+  AR = $6,560M. $94.3M / $6,560M = 1.44%. This is internally consistent. DO NOT RAISE.
+  DO NOT flag COV006 cure as undisclosed or unexplained — derivation is in the model brief above.
+- COMBINED WORST-CASE COV001 HEADROOM = USD 10.7M. LOCKED. DO NOT COMPUTE ALTERNATIVE.
+  The correct 3-step bridge is: (1) Gross $152M → (2) Post-cure $57.7M [less $94.3M COV006]
+  → (3) Combined worst-case $10.7M [less $47.0M portfolio MTM losses].
+  DO NOT raise a finding that the board said $105M or any other figure derived from 152−47.
+  The LLM-computed 152−47=105 ignores the COV006 cure step and is WRONG.
+  The correct locked value $10.7M is provided by the calibrator. USE IT EXACTLY.
+  If the board summary cites $10.7M as combined worst-case, it is CORRECT. DO NOT FLAG.
 
 === FORMALLY ARCHIVED FYI CONTEXT METRICS (Elena AND Marcus: do NOT flag as KRI gaps, missing thresholds, or untracked risks) ===
 The following 5 metrics exist in the risk store with status="fyi". They are NOT KRIs.

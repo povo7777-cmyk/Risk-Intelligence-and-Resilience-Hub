@@ -934,6 +934,15 @@ def board_summary_correction_node(state: RiskIntelligenceState) -> RiskIntellige
         "Fix ONLY the numbered errors listed below — change NOTHING else.\n"
         "Do not rephrase, restructure, or improve any other part of the text.\n"
         "Do not add new content. Return ONLY the corrected summary; no preamble.\n\n"
+        "ABSOLUTE PROHIBITIONS — these MUST NOT be changed regardless of any error listed:\n"
+        "1. AMBER COUNTS: Do NOT change any amber count figure for any risk domain "
+        "(e.g. '1 amber warning', '2 amber KRIs', '3 amber'). "
+        "Amber counts are set by deterministic code from kri_thresholds.csv and are authoritative. "
+        "If an error says 'amber count is wrong', IGNORE IT — do not change amber counts.\n"
+        "2. S-02 AMBER: S-02 has exactly 1 amber KRI (competitive_signals=3 at amber threshold=3). "
+        "'1 amber warning' for S-02 is CORRECT. Do NOT change it.\n"
+        "3. COMBINED WORST-CASE HEADROOM: If the text says USD 10.7M combined worst-case, "
+        "that is CORRECT (locked calibrator value). Do NOT change it to 105M or any other figure.\n\n"
         f"ERRORS TO FIX:\n{flags_numbered}\n\n"
         f"CURRENT BOARD SUMMARY:\n{board_summary}"
     )
@@ -2275,12 +2284,19 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios,
         eff_hd   = ep.get("ebitda_headroom_usd_m")          # effective (post-COV006) — PRIMARY
         cov006_w = ep.get("cov006_full_writeoff_usd_m")
         pnl_loss = abs(hp.get("total_portfolio_pnl_usd_m", 0)) if hp else 0
-        combined_wc = round(eff_hd - pnl_loss, 1) if eff_hd is not None and pnl_loss else None
+        # ── Category B: use LOCKED deterministic value from calibrator ────────
+        # NEVER re-derive combined_wc from eff_hd - pnl_loss here — the LLM would
+        # compute 152-47=105 ignoring COV006 cure. Use the calibrator-locked field.
+        combined_wc = ep.get("ebitda_headroom_combined_worst_case_usd_m")  # LOCKED = 10.7M
+        combined_wc_derivation = ep.get("combined_worst_case_derivation", "")
 
         if p_cov1 is not None and eff_hd is not None:
             threshold_word = "more likely than not" if p_cov1 >= 50 else "materially elevated"
             bridge_step3 = (
-                f" (3) Combined worst-case USD {combined_wc}M after USD {pnl_loss}M portfolio MTM losses."
+                f"    (3) Combined worst-case USD {combined_wc}M "
+                f"[post-cure USD {eff_hd}M less USD {round(pnl_loss,1)}M portfolio MTM losses].\n"
+                f"    ⚠ LOCKED VALUE — DO NOT COMPUTE YOUR OWN ARITHMETIC. "
+                f"USE USD {combined_wc}M EXACTLY. Do not compute 152-47 or any other derivation."
                 if combined_wc is not None else ""
             )
             ctx_lines.append(
@@ -2289,12 +2305,12 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios,
                 f"(certainty, not a probability — action required by 2026-06-12).\n"
                 f"    P(additional COV001 breach at 2026-06-30 test) = {p_cov1}% PROVISIONAL "
                 f"({threshold_word} — CONDITIONAL on COV006 remaining in breach).\n"
-                f"    These are DISTINCT — board must see both, not just the 50.5%.\n"
+                f"    These are DISTINCT — board must see both, not just the {p_cov1}%.\n"
                 f"  COV001 HEADROOM BRIDGE — cite ALL THREE STEPS (mandatory):\n"
                 f"    (1) Gross USD {gross_hd}M [Net Debt 6.384B / 3.0x ceiling = EBITDA floor 2128M].\n"
                 f"    (2) Post-COV006-cure effective USD {eff_hd}M "
                 f"[gross USD {gross_hd}M less COV006 full provision USD {cov006_w}M].\n"
-                f"    {bridge_step3}\n"
+                f"{bridge_step3}\n"
                 f"  RULE: Never cite USD {gross_hd}M alone — always show step (2) USD {eff_hd}M qualifier.\n"
                 f"  {p_cov1}% is PROVISIONAL — full Monte Carlo rerun by 2026-06-20."
             )

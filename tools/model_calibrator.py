@@ -1249,6 +1249,29 @@ def run_calibration(dashboard_path: Path | None = None) -> dict:
     hedge_params  = calibrate_hedge(raw)
     sc_params     = calibrate_supply_chain(raw)
 
+    # ── Category B: lock combined worst-case headroom as DETERMINISTIC value ────
+    # This prevents LLM agents from independently computing 152-47=105 (ignoring
+    # COV006 cure). The correct 3-step bridge is:
+    #   (1) Gross = 152M  (2) Post-cure = 57.7M  (3) Combined worst-case = 10.7M
+    # All three steps are now locked deterministic fields — no LLM arithmetic needed.
+    _eff_hd   = ebitda_params.get("ebitda_headroom_usd_m", 57.7)      # post-COV006-cure
+    _pnl_loss = abs(hedge_params.get("total_portfolio_pnl_usd_m", 0)) # portfolio MTM loss (positive)
+    _combined_wc = round(_eff_hd - _pnl_loss, 1)                      # = 57.7 - 47.0 = 10.7M
+    ebitda_params["ebitda_headroom_combined_worst_case_usd_m"] = _combined_wc
+    ebitda_params["combined_worst_case_derivation"] = (
+        f"Locked deterministic value — DO NOT RECOMPUTE. "
+        f"(1) Gross COV001 headroom = {ebitda_params.get('cov001_gross_headroom_usd_m', 152)}M "
+        f"[Net Debt {ebitda_params.get('cov001_net_debt_usd_b', 6.384)}B / "
+        f"{ebitda_params.get('cov001_nd_ebitda_ceiling', 3.0)}x]. "
+        f"(2) Post-COV006-cure effective = {_eff_hd}M "
+        f"[less COV006 full provision {ebitda_params.get('cov006_full_writeoff_usd_m', 94.3)}M]. "
+        f"(3) Combined worst-case = {_combined_wc}M "
+        f"[less portfolio MTM losses {round(_pnl_loss, 1)}M from treasury_positions.csv]. "
+        f"Board must cite {_combined_wc}M as combined worst-case — never 152-47=105 (omits COV006 cure)."
+    )
+    print(f"    EBITDA  → combined worst-case headroom LOCKED = USD {_combined_wc}M "
+          f"(eff {_eff_hd}M − MTM {round(_pnl_loss,1)}M)")
+
     params = {
         "ebitda":       ebitda_params,
         "hedge":        hedge_params,
