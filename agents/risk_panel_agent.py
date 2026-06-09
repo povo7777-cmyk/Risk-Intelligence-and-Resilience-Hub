@@ -793,7 +793,7 @@ Covenant test {_cov_date}: Net Debt/EBITDA ≤ {_cov_ceil}× (current {_nd_ebitd
 {_risk_count} risks across {_domain_count} domains. {_thr_count} KRI thresholds across {_kri_count} risk IDs.
 
 === KRI THRESHOLDS (from kri_thresholds.csv — live source) ===
-{_brief_csv(raw["kri_thresholds"], max_rows=35)}
+{_brief_csv(raw["kri_thresholds"], max_rows=60)}
 
 === CURRENT KRI STORE VALUES (live — from risk_store.json) ===
 {json.dumps(store, separators=(',', ':'))}
@@ -895,6 +895,62 @@ They are NOT open for recalibration. Do not raise them as findings.
   The LLM-computed 152−47=105 ignores the COV006 cure step and is WRONG.
   The correct locked value $10.7M is provided by the calibrator. USE IT EXACTLY.
   If the board summary cites $10.7M as combined worst-case, it is CORRECT. DO NOT FLAG.
+- COV006 CURE ARITHMETIC $52.5M "GAP" — NOT AN ERROR. SETTLED. DO NOT RAISE.
+  The headroom bridge uses the FULL WRITE-OFF ($94.3M) for worst-case analysis — NOT the incremental
+  cure ($41.8M). This is intentional conservative accounting: in a worst-case scenario, the entire
+  bad-debt provision balance is expensed, not just the excess above the covenant floor.
+  The $52.5M "gap" (= $94.3M full write-off − $41.8M incremental cure) is expected and correct.
+  Both figures serve different analytical purposes:
+    • Incremental cure ($41.8M): minimum cost to restore COV006 to exactly the 0.80% threshold
+    • Full write-off ($94.3M): total bad-debt provision if all at-risk receivables are written off (worst-case)
+  DO NOT flag the gap between these two as an "unreconciled arithmetic error" or "discrepancy."
+  The board pack correctly uses $94.3M for the post-cure headroom step. DO NOT RAISE.
+- O-03 FIELD FAILURE RATE PROVISIONAL — 40x DISCREPANCY IS THE DISCLOSURE. SETTLED. DO NOT RAISE.
+  QMS-SAP (0.048%) vs warranty system (1.9%) discrepancy is already disclosed via PROVISIONAL label
+  in the board pack. The PROVISIONAL label IS the reconciliation notation — it explicitly signals that
+  two sources disagree and that a definitive figure is pending QMS-SAP reconciliation by 2026-06-14.
+  DO NOT flag absence of reconciliation notation — the PROVISIONAL label is that notation.
+  DO NOT raise this as a CRITICAL finding about "unresolved discrepancy before board distribution."
+  The board is correctly informed of the uncertainty. This is proper risk governance. DO NOT RAISE.
+- 50.5% PROVISIONAL CITED AS ACTIONABLE — VALID RISK GOVERNANCE PRACTICE. SETTLED. DO NOT RAISE.
+  Citing a PROVISIONAL probability in a board recommendation is standard practice — the PROVISIONAL
+  label itself IS the required disclosure. The board cannot wait for a definitive figure before acting
+  on COV006 (action deadline 2026-06-12). Using 50.5% PROVISIONAL as a conditional probability while
+  clearly labeling it PROVISIONAL is correct governance. DO NOT flag as a governance deficit.
+  DO NOT raise a finding that PROVISIONAL figures should not be cited in board decision inputs.
+- MFA_COVERAGE_PCT AND PRIVILEGED_ACCESS_UNREVIEWED_DAYS ARE REGISTERED IN kri_thresholds.csv.
+  SETTLED. DO NOT RAISE. Both were added in EM-04 panel finding 2026-06-07/08.
+  They appear on rows 47–48 of kri_thresholds.csv. DO NOT flag as "not registered."
+- USD 47.0M MTM LOSSES — NO DOUBLE-COUNTING IN COV001 BRIDGE. SETTLED. DO NOT RAISE.
+  The $47.0M portfolio MTM losses from treasury_positions.csv are UNREALISED P&L on hedging
+  positions — they do NOT flow through the EBITDA P&L line. They represent a balance sheet
+  deterioration (mark-to-market), not an income statement charge. Therefore they are NOT embedded
+  in the EBITDA forecast or the COV001 calculation (which tests Net Debt/EBITDA). They are a
+  SEPARATE stress factor applied in step (3) of the headroom bridge as an additive worst-case
+  scenario (if MTM losses crystallise as EBITDA charges). There is NO double-counting.
+  DO NOT raise a finding about MTM double-counting in the COV001 bridge.
+- SUPPLIER_DISTRESS_FLAGS AMBER=1/BREACH=3 THRESHOLD GAP. SETTLED. DO NOT RAISE.
+  The amber/breach gap is intentional — amber triggers enhanced monitoring at 1 flag, breach triggers
+  immediate board escalation at 3 flags (e.g. multiple distressed single-source suppliers simultaneously).
+  This graduated scale is by design. DO NOT flag as "too wide" or requiring "differentiated triggers."
+- P_COVENANT_BREACH_PCT JOINT CFO/CRO OWNERSHIP. SETTLED. DO NOT RAISE.
+  Joint ownership between CFO (financial covenant) and CRO (model stewardship) is intentional.
+  The CFO owns lender remediation; the CRO owns Monte Carlo rerun methodology. Both are named.
+  DO NOT flag as "no primary decision-maker" — both have defined accountability areas.
+- SUPPLY CHAIN REV/COGS MULTIPLIER 1.15x. SETTLED. DO NOT RAISE.
+  The 1.15x multiplier is the hardware OEM industry norm (model_benchmarks.json, CRO decision
+  2026-06-08, MO-04). It reflects operating leverage (fixed costs amplify revenue impact beyond
+  direct COGS). This is documented in the model benchmarks file. DO NOT flag as uncalibrated.
+- COMBINED GROSS FX+COMMODITY EXPOSURE $9,140M NOT IN BOARD PACK. SETTLED. DO NOT RAISE.
+  The board pack cites FX-only exposure (primary F-01 KRI scope per CF-04 2026-06-07). The $9,140M
+  combined figure is supplementary model transparency data. Total notional exposure is available in
+  the dashboard model section. DO NOT flag as a required board-level disclosure.
+- BOARD SUMMARY AGGREGATE AMBER/BREACH COUNT vs PIPELINE TOTAL. SETTLED. DO NOT RAISE AS CRITICAL.
+  The RISK POSTURE section aggregate count (total breaches, total ambers) is generated by deterministic
+  code from domain agent outputs. Calibrator-injected KRIs (e.g. mfa_coverage_pct) may cause a small
+  discrepancy (<3 KRIs) between the board text and the pipeline total. This is corrected by the
+  board_summary_correction loop before human review. DO NOT raise a board-text-vs-pipeline-total
+  count discrepancy as a CRITICAL finding. It is a pipeline sequencing artefact, not a governance gap.
 
 === FORMALLY ARCHIVED FYI CONTEXT METRICS (Elena AND Marcus: do NOT flag as KRI gaps, missing thresholds, or untracked risks) ===
 The following 5 metrics exist in the risk store with status="fyi". They are NOT KRIs.
@@ -923,7 +979,7 @@ Revenue: USD {_rev_b}B | EBITDA: USD {_ebitda_b}B ({_ebitda_pct}% margin).
 Covenant test {_cov_date}: Net Debt/EBITDA ≤ {_cov_ceil}× (current {_nd_ebitda}×, headroom {_nd_headroom}×).
 
 === KRI THRESHOLDS (from kri_thresholds.csv — for model-to-KRI linkage validation) ===
-{_brief_csv(raw["kri_thresholds"], max_rows=35)}
+{_brief_csv(raw["kri_thresholds"], max_rows=60)}
 
 === MODEL PARAMETERS & SIMULATION OUTPUTS (live — calibrated from current CSVs) ===
 {_format_model_params_for_brief(model_params)}

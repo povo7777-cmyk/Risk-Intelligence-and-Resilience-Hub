@@ -436,7 +436,8 @@ def chief_risk_synthesis_node(state: RiskIntelligenceState) -> RiskIntelligenceS
     qoq_deltas         = state.get("qoq_deltas", {})
     qoq_fact_block     = _build_qoq_fact_block(qoq_deltas)
     risk_posture_facts = _build_risk_posture_facts(
-        sf, of, ff, cf, compound_scenarios, systemic
+        sf, of, ff, cf, compound_scenarios, systemic,
+        kri_gt=state.get("kri_ground_truth", {})
     )
     risk_posture_text  = _render_risk_posture(client, risk_posture_facts, cost)
     synthesis_sections = _run_board_synthesis(
@@ -935,14 +936,11 @@ def board_summary_correction_node(state: RiskIntelligenceState) -> RiskIntellige
         "Do not rephrase, restructure, or improve any other part of the text.\n"
         "Do not add new content. Return ONLY the corrected summary; no preamble.\n\n"
         "ABSOLUTE PROHIBITIONS — these MUST NOT be changed regardless of any error listed:\n"
-        "1. AMBER COUNTS: Do NOT change any amber count figure for any risk domain "
-        "(e.g. '1 amber warning', '2 amber KRIs', '3 amber'). "
-        "Amber counts are set by deterministic code from kri_thresholds.csv and are authoritative. "
-        "If an error says 'amber count is wrong', IGNORE IT — do not change amber counts.\n"
-        "2. S-02 AMBER: S-02 has exactly 1 amber KRI (competitive_signals=3 at amber threshold=3). "
-        "'1 amber warning' for S-02 is CORRECT. Do NOT change it.\n"
-        "3. COMBINED WORST-CASE HEADROOM: If the text says USD 10.7M combined worst-case, "
-        "that is CORRECT (locked calibrator value). Do NOT change it to 105M or any other figure.\n\n"
+        "1. S-02 AMBER COUNT: S-02 has exactly 1 amber KRI (competitive_signals=3 at amber threshold=3). "
+        "Do NOT change '1 amber warning' for S-02 to any other number.\n"
+        "2. COMBINED WORST-CASE HEADROOM: If the text says USD 10.7M combined worst-case, "
+        "that is CORRECT (locked calibrator value). Do NOT change it to 105M or any other figure.\n"
+        "Note: Correcting a wrong total amber count (e.g. 18 → 20) IS allowed and correct.\n\n"
         f"ERRORS TO FIX:\n{flags_numbered}\n\n"
         f"CURRENT BOARD SUMMARY:\n{board_summary}"
     )
@@ -1684,11 +1682,17 @@ _DOMAIN_OWNERS = {
 }
 
 
-def _build_risk_posture_facts(sf, of, ff, cf, compound_scenarios, systemic) -> dict:
+def _build_risk_posture_facts(sf, of, ff, cf, compound_scenarios, systemic,
+                              kri_gt: dict | None = None) -> dict:
     """
     Compute all RISK POSTURE facts deterministically from agent outputs.
     Returns a structured dict — the single source of truth for RISK POSTURE content.
     No LLM involved; these facts are locked before any rendering step.
+
+    kri_gt (kri_ground_truth): if provided, use its authoritative breach/amber totals
+    instead of summing domain agent outputs. Domain agents may undercount KRIs added by
+    the calibrator (e.g. mfa_coverage_pct, privileged_access_unreviewed_days) that go
+    directly into risk_store.json after the domain agents run.
     """
     domain_data = [
         ("Strategic",   sf),
@@ -1696,8 +1700,39 @@ def _build_risk_posture_facts(sf, of, ff, cf, compound_scenarios, systemic) -> d
         ("Financial",   ff),
         ("Compliance",  cf),
     ]
-    total_b = sum((f or {}).get("breach_count", 0) for _, f in domain_data)
-    total_a = sum((f or {}).get("amber_count",  0) for _, f in domain_data)
+    # Start from domain agent totals
+    total_b_agents = sum((f or {}).get("breach_count", 0) for _, f in domain_data)
+    total_a_agents = sum((f or {}).get("amber_count",  0) for _, f in domain_data)
+
+    # Override with authoritative kri_ground_truth counts if available.
+    # Structure: kri_gt["dashboard_kris"] → {domain_key → {risk_id → [kri_dicts]}}
+    total_b = total_b_agents
+    total_a = total_a_agents
+    if kri_gt:
+        db_kris = kri_gt.get("dashboard_kris", {})
+        if db_kris:
+            gt_breaches = sum(
+                1
+                for domain_risks in db_kris.values()
+                for kris_list in domain_risks.values()
+                for k in kris_list
+                if isinstance(k, dict) and k.get("status") == "breach"
+            )
+            gt_ambers = sum(
+                1
+                for domain_risks in db_kris.values()
+                for kris_list in domain_risks.values()
+                for k in kris_list
+                if isinstance(k, dict) and k.get("status") == "amber"
+            )
+            if gt_breaches > 0 or gt_ambers > 0:
+                total_b = gt_breaches
+                total_a = gt_ambers
+                if gt_breaches != total_b_agents or gt_ambers != total_a_agents:
+                    print(f"  [BOARD SYNTHESIS] KRI count override: "
+                          f"breaches {total_b_agents}→{gt_breaches}, "
+                          f"ambers {total_a_agents}→{gt_ambers} "
+                          f"(kri_ground_truth authoritative — domain agents may miss calibrator KRIs)")
     domains_in_breach = [
         {
             "name":      lbl,
