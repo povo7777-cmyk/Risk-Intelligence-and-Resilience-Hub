@@ -349,9 +349,15 @@ def _compute_agent_context() -> dict:
     ctx = {}
 
     # F-01: FX P&L + explicit Revenue vs Cost pair breakdown (EM-05 fix)
+    # CRITICAL FIX (2026-06-09): unrealised_pnl_usd_m for F-01 must be FX-ONLY (Revenue+Cost
+    # exposure types). Previously summed ALL rows including commodity (DRAM/NAND) = -47.0M,
+    # causing double-counting bug: financial_agent read -47.0M as "FX" then added -20.4M
+    # commodity again → false total -67.4M. Correct FX-only = -26.6M.
     try:
         tr = read_csv_latest("treasury_positions.csv")
-        pnl = round(sum(float(r.get("unrealised_pnl_usd_m", 0)) for r in tr), 1)
+        _fx_exposure_types = ("Revenue", "Cost")
+        _fx_rows_ctx = [r for r in tr if r.get("exposure_type", "") in _fx_exposure_types]
+        pnl = round(sum(float(r.get("unrealised_pnl_usd_m", 0)) for r in _fx_rows_ctx), 1)  # FX-only
         total_unhedged = round(sum(
             float(r.get("gross_exposure_usd_m", 0)) - float(r.get("hedged_amount_usd_m", 0))
             for r in tr

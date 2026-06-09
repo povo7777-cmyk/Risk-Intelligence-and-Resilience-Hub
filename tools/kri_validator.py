@@ -386,10 +386,14 @@ def _validate_agent_context(store: dict) -> list[dict]:
         results.append({"risk_id": "S-01", "kri": "ctx:high_severity_signal_count",
                         "ok": False, "note": str(e)})
 
-    # F-01: unrealised FX P&L
+    # F-01: unrealised FX P&L — FX-ONLY (Revenue+Cost exposure types; excludes commodity rows)
+    # CRITICAL FIX (2026-06-09): must match kri_data_layer.py which stores FX-only = -26.6M.
+    # Summing all rows (including DRAM/NAND commodity) gives -47.0M which is a different figure.
     try:
         tr  = read_csv_latest("treasury_positions.csv")
-        pnl = round(sum(float(r.get("unrealised_pnl_usd_m", 0)) for r in tr), 1)
+        _fx_val_types = ("Revenue", "Cost")
+        _fx_val_rows  = [r for r in tr if r.get("exposure_type", "") in _fx_val_types]
+        pnl = round(sum(float(r.get("unrealised_pnl_usd_m", 0)) for r in _fx_val_rows), 1)
         _check_ctx(results, "F-01", "unrealised_pnl_usd_m", pnl,
                    _stored_ctx(store, "F-01", "unrealised_pnl_usd_m"))
     except Exception as e:
