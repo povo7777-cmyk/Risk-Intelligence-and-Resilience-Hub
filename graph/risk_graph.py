@@ -417,7 +417,9 @@ def chief_risk_synthesis_node(state: RiskIntelligenceState) -> RiskIntelligenceS
     # Input: KRI values only — no narratives, no context to embellish.
     print(f"  [EXEC RECS] Drafting management actions from KRI values...")
     exec_recs, committee_actions = _draft_exec_recs(
-        client, sf, of, ff, cf, compound_scenarios, cost, audit
+        client, sf, of, ff, cf, compound_scenarios, cost, audit,
+        qoq_deltas=state.get("qoq_deltas"),
+        model_params=state.get("model_params"),
     )
     state["exec_rec_drafts"] = exec_recs
 
@@ -1567,14 +1569,15 @@ def _build_findings_summary(state: RiskIntelligenceState) -> str:
 
 
 def _draft_exec_recs(client, sf, of, ff, cf, compound_scenarios,
-                     cost, audit) -> tuple[dict, list]:
+                     cost, audit, qoq_deltas=None, model_params=None) -> tuple[dict, list]:
     """
     Step 2 — Draft executive recommendations and committee actions.
     Input: KRI values only (no narratives). Returns (exec_recs dict, actions list).
     """
     prompt_path = Path(__file__).parent.parent / "prompts" / "chief_risk_v1.txt"
     system_prompt = prompt_path.read_text()
-    kri_input = _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios)
+    kri_input = _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios,
+                                          qoq_deltas=qoq_deltas, model_params=model_params)
 
     try:
         response = client.messages.create(
@@ -2121,7 +2124,8 @@ def _assemble_board_summary(sf, of, ff, cf, rf, ef,
     return "\n\n".join(lines)
 
 
-def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios) -> str:
+def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios,
+                              qoq_deltas=None, model_params=None) -> str:
     """
     Build a structured input for the CRA LLM call.
 
@@ -2130,7 +2134,10 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios) -> str:
     read back directly from risk_store.json — the pipeline strips these fields
     at kri_data_layer and agent levels, so we re-inject them here to ensure
     the LLM sees all information the panel requires.
-    Model context: key benchmarks and scope disclosures from model_benchmarks.json.
+    QoQ: prior-period values from qoq_deltas prevent the LLM from fabricating
+    prior figures for quarter-on-quarter comparisons.
+    Model context: key benchmarks and scope disclosures from model_params
+    (calibrator output) — authoritative figures for p_covenant_breach and VaR.
 
     The chief_risk_v1.txt prompt permits citing any fact explicitly in this input.
     This function is the sole information boundary — add fields here, not in prompts.
@@ -2167,6 +2174,21 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios) -> str:
     except Exception:
         pass  # Non-fatal — base KRI data still used
 
+    # ── Build QoQ prior-value lookup ──────────────────────────────────────────
+    # Prevents the CRA LLM from inventing prior-period values.
+    # Keys: kri_name → {prior_value, period_prior, trend}
+    qoq_lookup: dict = {}
+    if qoq_deltas and qoq_deltas.get("available"):
+        period_prior_label = qoq_deltas.get("period_prior", "prior period")
+        for m in qoq_deltas.get("movements", []):
+            kn = m.get("kri_name", "")
+            if kn:
+                qoq_lookup[kn] = {
+                    "prior_value": m.get("prior_value"),
+                    "period":      period_prior_label,
+                    "trend":       m.get("trend", ""),
+                }
+
     # ── Build breach / amber KRI entries ──────────────────────────────────────
     breach_kris = []
     amber_kris  = []
@@ -2202,6 +2224,14 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios) -> str:
                     annotations.append(f"owner={meta['owner']}")
                 if meta.get("model_notes"):
                     annotations.append(f"note={meta['model_notes']}")
+                # QoQ prior-value annotation — prevents LLM from fabricating prior values
+                qoq_info = qoq_lookup.get(k.get("name", ""), {})
+                if qoq_info.get("prior_value") is not None:
+                    trend_tag = f" ({qoq_info['trend']})" if qoq_info.get("trend") else ""
+                    annotations.append(
+                        f"prior_value={qoq_info['prior_value']} "
+                        f"({qoq_info.get('period','prior period')}){trend_tag}"
+                    )
                 if annotations:
                     entry += " | " + " | ".join(annotations)
 
@@ -2228,46 +2258,43 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios) -> str:
         parts.append("COMPOUND SCENARIOS IDENTIFIED BY DOMAIN AGENTS:\n" +
                      "\n".join(f"  • {s}" for s in compound_scenarios))
 
-    # ── Model context from model_benchmarks.json ──────────────────────────────
-    # Provides model-level facts (effective headroom, VaR scope, provisional flags)
-    # that are not KRIs but are required by the panel in exec rec outputs.
+    # ── Model context from calibrator outputs (model_params) ──────────────────
+    # Authoritative calibrator-tier facts: p_covenant_breach, VaR decomposition.
+    # model_params comes directly from model_calibrator.calibrate_all() so these
+    # figures are grounded in the calibrator agent tier and pass validation.
     try:
-        bm_path = Path(__file__).parent.parent / "data" / "model_benchmarks.json"
-        bm = json.loads(bm_path.read_text())
         ctx_lines = ["MODEL CONTEXT (cite as provided — do not modify these figures):"]
+        ep = (model_params or {}).get("ebitda", {})
+        hp = (model_params or {}).get("hedge",  {})
 
-        ebitda = bm.get("ebitda", {})
-        eff    = ebitda.get("effective_covenant_headroom_post_cov006_usd_m")
-        gross  = ebitda.get("covenant_headroom_usd_m")
-        floor_ = ebitda.get("cov006_deterministic_floor_usd_m")
-        if eff and gross and floor_:
+        # MO-01: effective headroom and p_covenant_breach from calibrator
+        p_breach = ep.get("p_covenant_breach_pct")
+        eff_hd   = ep.get("ebitda_headroom_post_cure_usd_m")
+        gross_hd = ep.get("ebitda_headroom_usd_m")
+        cov006_w = ep.get("cov006_full_writeoff_usd_m")
+        if p_breach is not None and eff_hd is not None:
+            threshold_word = "more likely than not" if p_breach >= 50 else "materially elevated"
             ctx_lines.append(
-                f"  EBITDA effective covenant headroom post-COV006 cure = "
-                f"USD {eff}M (gross USD {gross}M less COV006 cure USD {floor_}M). "
-                f"Reference USD {eff}M as the available headroom in board materials, "
-                f"not the gross USD {gross}M figure."
-            )
-        if ebitda.get("monte_carlo_rerun_required"):
-            rerun = ebitda.get("monte_carlo_rerun_deadline", "")
-            ctx_lines.append(
-                f"  p_covenant_breach_pct 49.7% is PROVISIONAL and understated: "
-                f"calculated against gross headroom USD {gross}M, not effective "
-                f"USD {eff}M. Rerun due {rerun}. "
-                f"Annotate as PROVISIONAL in all exec rec and board material citations."
+                f"  EBITDA: p_covenant_breach = {p_breach}% ({threshold_word} at current trajectory). "
+                f"Effective headroom post-COV006 = USD {eff_hd}M "
+                f"(gross USD {gross_hd}M less COV006 provision USD {cov006_w}M). "
+                f"Use effective headroom USD {eff_hd}M in board materials, not gross USD {gross_hd}M. "
+                f"Annotate {p_breach}% as PROVISIONAL pending Monte Carlo rerun on effective headroom by 2026-06-20."
             )
 
-        fx  = bm.get("fx_hedge", {})
-        com = fx.get("commodity_unhedged_exposure_usd_m")
-        vr  = fx.get("combined_fx_commodity_var_range_usd_m", {})
-        if com:
-            lo = vr.get("uncorrelated_lower", "")
-            hi = vr.get("correlated_upper", "")
+        # MO-02: analytical VaR decomposition — FX-only, commodity, combined
+        fx_var  = hp.get("var_95_fx_analytical_usd_m")
+        com_var = hp.get("var_95_commodity_analytical_usd_m")
+        comb_lo = hp.get("var_95_combined_lower_usd_m")
+        comb_hi = hp.get("var_95_combined_upper_usd_m")
+        com_unh = round(hp.get("commodity_gross_usd_m", 0) - hp.get("commodity_hedged_usd_m", 0)) if hp else None
+        if fx_var and com_var and comb_lo:
             ctx_lines.append(
-                f"  Hedge Analyser VaR USD 811M = FX positions only (FX001–FX004). "
-                f"Commodity unhedged exposure USD {com}M breaches F-01 amber threshold "
-                f"USD 700M and is EXCLUDED from this VaR figure. "
-                f"Combined FX + commodity VaR = USD {lo}M–{hi}M. "
-                f"Cite the combined figure alongside the FX-only figure in the FX recommendation."
+                f"  HEDGE VaR decomposition (analytical, 95% confidence): "
+                f"FX-only = USD {fx_var}M (FX001–FX004 unhedged USD {hp.get('unhedged_usd_m',4080)}M × {hp.get('fx_vol_pct',9.0)}% vol); "
+                f"Commodity-only = USD {com_var}M (COM001+COM002 unhedged USD {com_unh}M × {hp.get('commodity_vol_pct',32.0)}% vol); "
+                f"Combined = USD {comb_lo}M–{comb_hi}M (zero-corr lower / perfect-corr upper). "
+                f"Board materials must cite combined range alongside FX-only figure."
             )
 
         if len(ctx_lines) > 1:

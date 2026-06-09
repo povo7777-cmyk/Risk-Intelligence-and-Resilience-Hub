@@ -170,6 +170,18 @@ def calibrate_ebitda(raw: dict) -> dict:
     # Binding = lower (more conservative) headroom
     ebitda_headroom_m = round(min(headroom_cov5_m, headroom_cov1_m), 0)
 
+    # ── COV006 provision drag — MO-01 fix ───────────────────────────────────
+    # COV006 bad_debt_provision_pct is in CONFIRMED BREACH at t=0 (1.44% > 0.80%).
+    # The full provision balance (USD 94.3M) is a deterministic EBITDA charge that
+    # must be applied in EVERY Monte Carlo path before testing covenant compliance.
+    # Gross headroom USD 152M → effective headroom USD 57.7M after this adjustment.
+    # Compute from AR aging data (same source as the later COV006 block).
+    _ar_for_mc = _latest_rows(raw.get("ar_aging", []))
+    _bad_debt_mc = sum(float(r.get("bad_debt_provision_usd_m", 0)) for r in _ar_for_mc)
+    _cov6_for_mc = next((r for r in cov_rows if r.get("covenant_id") == "COV006"), None)
+    _cov006_active = bool(_cov6_for_mc and float(_cov6_for_mc.get("headroom", 0)) < 0)
+    _cov006_drag_b = (_bad_debt_mc / 1000) if _cov006_active else 0.0  # USD B
+
     # ── Monte Carlo ─────────────────────────────────────────────────────────
     random.seed(SEED)
     base_price = 100
@@ -210,22 +222,23 @@ def calibrate_ebitda(raw: dict) -> dict:
         ebitda = rev * (1 - cr + margin_noise) - fx_cost_shock
         ebitda_sims.append(ebitda)
 
-        # Breach checks
-        breaches_cov5 = ebitda < cov_floor_b
-        nd_ebitda = net_debt_b / ebitda if ebitda > 0 else 99
+        # Breach checks — apply COV006 drag to effective EBITDA (MO-01)
+        ebitda_eff = ebitda - _cov006_drag_b
+        breaches_cov5 = ebitda_eff < cov_floor_b
+        nd_ebitda = net_debt_b / ebitda_eff if ebitda_eff > 0 else 99
         breaches_cov1 = nd_ebitda > net_debt_ebitda_ceil
         cov5_breach.append(int(breaches_cov5))
         cov1_breach.append(int(breaches_cov5 or breaches_cov1))
 
         # +1pp cost sensitivity (same margin noise draw for comparability)
-        ebitda_c1 = rev * (1 - (cr + 0.01) + margin_noise) - fx_cost_shock
-        cost_up1pp_breach.append(int(ebitda_c1 < cov_floor_b or
-                                     (net_debt_b / ebitda_c1 if ebitda_c1 > 0 else 99) > net_debt_ebitda_ceil))
+        ebitda_c1_eff = rev * (1 - (cr + 0.01) + margin_noise) - fx_cost_shock - _cov006_drag_b
+        cost_up1pp_breach.append(int(ebitda_c1_eff < cov_floor_b or
+                                     (net_debt_b / ebitda_c1_eff if ebitda_c1_eff > 0 else 99) > net_debt_ebitda_ceil))
 
         # Top customer loss — revenue loss fraction sourced from model_benchmarks.json::simulation_parameters.ebitda.top_customer_revenue_loss_pct
-        ebitda_cl = (rev * (1 - _TOP_CUST_LOSS_PCT / 100)) * (1 - cr + margin_noise) - fx_cost_shock
-        top_cust_loss_breach.append(int(ebitda_cl < cov_floor_b or
-                                        (net_debt_b / ebitda_cl if ebitda_cl > 0 else 99) > net_debt_ebitda_ceil))
+        ebitda_cl_eff = (rev * (1 - _TOP_CUST_LOSS_PCT / 100)) * (1 - cr + margin_noise) - fx_cost_shock - _cov006_drag_b
+        top_cust_loss_breach.append(int(ebitda_cl_eff < cov_floor_b or
+                                        (net_debt_b / ebitda_cl_eff if ebitda_cl_eff > 0 else 99) > net_debt_ebitda_ceil))
 
     p_breach         = round(sum(cov1_breach) / N_SIMS * 100, 1)
     p_cost_up1pp     = round(sum(cost_up1pp_breach) / N_SIMS * 100, 1)
@@ -458,9 +471,11 @@ def calibrate_hedge(raw: dict) -> dict:
     hc = hedge_cost_m
 
     uh_sims, hd_sims = [], []
+    fx_only_uh_sims   = []   # MO-02: FX-only track for explicit VaR decomposition
     for _ in range(N_SIMS):
         sim_uh = 0.0
         sim_hd = 0.0
+        sim_fx_only_uh = 0.0   # MO-02: FX-only unhedged exposure for this path
 
         # FX positions
         if fx_gross_m > 0:
@@ -472,12 +487,14 @@ def calibrate_hedge(raw: dict) -> dict:
                 p = p * math.exp(-0.5 * fx_vl * fx_vl + fx_vl * _randn())
                 av = fx_g * (p / 100) * (1 + 0.12 * _randn())
                 sim_uh += av * 1000
+                sim_fx_only_uh += av * 1000   # MO-02: track FX contribution separately
                 # Hedged fraction locked at forward rate; unhedged fraction floats with spot.
                 # av = fx_g * (p/100) * demand_factor, so hedging replaces (p/100) with (fp/100)
                 # for the hedged share: av_hd = av * (fx_h*(fp/p) + (1-fx_h))
                 p_safe = max(p, 1.0)
                 sim_hd += av * (fx_h * (fp / p_safe) + (1.0 - fx_h)) * 1000
             sim_uh /= 3
+            sim_fx_only_uh /= 3            # MO-02: normalise FX-only track
             sim_hd = sim_hd / 3 - hc
 
         # Commodity positions — higher volatility, no forward rate reference
@@ -496,11 +513,12 @@ def calibrate_hedge(raw: dict) -> dict:
                 # Same decomposition as FX: replace (p_com/100) with 1.0 for hedged share.
                 p_com_safe = max(p_com, 1.0)
                 com_hd += av * (com_h * (100.0 / p_com_safe) + (1.0 - com_h)) * 1000
-            sim_uh += com_uh / 3
+            sim_uh += com_uh / 3   # combined FX + commodity
             sim_hd += com_hd / 3
 
         uh_sims.append(sim_uh)
         hd_sims.append(sim_hd)
+        fx_only_uh_sims.append(sim_fx_only_uh)   # MO-02: store FX-only path
 
     # 80% revenue base threshold for P(revenue < 80% base)
     base_80 = gross_b * 0.80 * 1000
@@ -513,11 +531,26 @@ def calibrate_hedge(raw: dict) -> dict:
     mean_hd = sum(hd_sims) / N_SIMS
     p5_uh   = _percentile(uh_sims, 5)
     p5_hd   = _percentile(hd_sims, 5)
-    var_uh   = round(mean_uh - p5_uh)   # loss from mean at P5 — positive = risk
+    var_uh   = round(mean_uh - p5_uh)   # combined FX+commodity loss from mean at P5
     var_hd   = round(mean_hd - p5_hd)   # loss from mean at P5 — positive = risk
     p_uh_80  = round(sum(1 for v in uh_sims if v < base_80) / N_SIMS * 100, 1)
     p_hd_80  = round(sum(1 for v in hd_sims if v < base_80) / N_SIMS * 100, 1)
     var_impr = round(var_uh - var_hd)   # positive = hedge reduces VaR loss
+
+    # MO-02: Analytical VaR decomposition — explicit FX-only and commodity-only figures.
+    # Simulation-based var_uh (combined) uses different price-path scaling for FX vs commodity,
+    # so we supplement with the standard analytical formula: unhedged_exposure × vol × z_95.
+    # z_95 = 1.645 (one-tailed 95th percentile of N(0,1)).
+    _Z95 = 1.645
+    com_unhedged_m = round(com_gross_m - com_hedged_m, 0)
+    var_fx_analytical  = round(fx_unhedged_primary * (fx_vol_pct / 100) * _Z95)     # FX-only, analytical
+    var_com_analytical = round(com_unhedged_m      * (commodity_vol_pct / 100) * _Z95)  # commodity-only
+    var_combined_lower = round(math.sqrt(var_fx_analytical**2 + var_com_analytical**2))  # zero-corr
+    var_combined_upper = var_fx_analytical + var_com_analytical  # perfect-corr upper bound
+    # FX-only simulation (for completeness — note: sim uses avg_spot price scaling, see var_fx_analytical for recommended figure)
+    mean_fx_uh = sum(fx_only_uh_sims) / N_SIMS if fx_only_uh_sims else 0.0
+    p5_fx_uh   = _percentile(fx_only_uh_sims, 5) if fx_only_uh_sims else 0.0
+    var_fx_sim_only = round(mean_fx_uh - p5_fx_uh)
 
     return {
         # Slider parameters
@@ -549,7 +582,15 @@ def calibrate_hedge(raw: dict) -> dict:
         "commodity_gross_usd_m":  round(com_gross_m, 0),
         "commodity_hedged_usd_m": round(com_hedged_m, 0),
         # Simulation outputs
-        "var_95_unhedged_usd_m":  var_uh,
+        "var_95_unhedged_usd_m":  var_uh,         # simulation-based combined FX + commodity
+        # MO-02: Analytical VaR decomposition — grounded in calibrator tier
+        # Formula: unhedged_exposure × vol × z_95 (1.645). See panel finding MO-02 2026-06-09.
+        # These are the authoritative figures for board disclosure (simulation var_uh uses
+        # price-path scaling that makes FX and commodity contributions non-comparable).
+        "var_95_fx_analytical_usd_m":       var_fx_analytical,   # FX-only: 4,080M × 9% × 1.645
+        "var_95_commodity_analytical_usd_m": var_com_analytical,  # Commodity: 860M × 32% × 1.645
+        "var_95_combined_lower_usd_m":      var_combined_lower,   # sqrt(FX²+Comm²) zero-correlation
+        "var_95_combined_upper_usd_m":      var_combined_upper,   # FX+Comm perfect-correlation upper
         "var_95_hedged_usd_m":    var_hd,
         "p_rev_below_80_unhedged":  p_uh_80,
         "p_rev_below_80_hedged":    p_hd_80,

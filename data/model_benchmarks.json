@@ -49,7 +49,7 @@
     "revenue_at_risk_usd_b": 9.1
   },
   "ebitda": {
-    "covenant_breach_probability_pct": 49.7,
+    "covenant_breach_probability_pct": null,
     "cogs_1pp_breach_increase_pp": 7.1,
     "top_customer_loss_breach_increase_pp": 1.2,
     "covenant_headroom_usd_m": 152,
@@ -79,7 +79,8 @@
     "covenant_breach_probability_base_pct": 50.1,
     "covenant_breach_recomputed": "2026-06-07T14:25:13.289179+00:00",
     "covenant_breach_computation_note": "RECOMPUTED 2026-06-07: 44.2% (interim) \u2192 69.4% incorporating MO-01 (COV006 -365M EBITDA) and MO-06 (rev FX variance). Method 1 sensitivity estimate; range 64.5%-76.9%. Full Monte Carlo rerun to follow per CFO/Quant deadline 2026-06-20.",
-    "covenant_breach_recomputed_2026_06_08": "CORRECTED AND PROVISIONAL 2026-06-08: 69.4% (wrong, used 365M provision impact) \u2192 49.7% (correct, uses 94.3M provision impact). Calculation: base 44.2% + COV006 correction +5.0pp (94.3M \u00d7 0.053pp/M) + MO-06 FX variance +0.5pp = 49.7%. This is borderline breach/amber (threshold 50%). PROVISIONAL \u2014 full Monte Carlo rerun required by 2026-06-20 for definitive figure. Maintain BREACH status conservatively. CONDITIONAL: 49.7% is P(additional COV001 breach) conditional on COV006 remaining in active breach."
+    "covenant_breach_recomputed_2026_06_08": "CORRECTED AND PROVISIONAL 2026-06-08: 69.4% (wrong, used 365M provision impact) \u2192 49.7% (correct, uses 94.3M provision impact). Calculation: base 44.2% + COV006 correction +5.0pp (94.3M \u00d7 0.053pp/M) + MO-06 FX variance +0.5pp = 49.7%. This is borderline breach/amber (threshold 50%). PROVISIONAL \u2014 full Monte Carlo rerun required by 2026-06-20 for definitive figure. Maintain BREACH status conservatively. CONDITIONAL: 49.7% is P(additional COV001 breach) conditional on COV006 remaining in active breach.",
+    "covenant_breach_probability_pct_note": "REMOVED override (was 49.7%) \u2014 MC now runs with effective headroom USD 57.7M (post-COV006 drag); MC result is authoritative. MO-01 fix 2026-06-09."
   },
   "unified_fx_model": {
     "_description": "MO-06/MO-03 2026-06-07: Unified FX exposure model design. Both Hedge Analyser and EBITDA Stress model must derive all FX inputs from treasury_positions.csv as single source of truth. Eliminates structural divergence discovered by panel (MO-03, MO-06).",
@@ -120,7 +121,7 @@
     "fx_unhedged_exposure_usd_m": 4080,
     "commodity_unhedged_exposure_usd_m": 860,
     "commodity_var_95_estimate_usd_m": 171,
-    "commodity_var_derivation": "Estimated: 860M unhedged × (811M FX VaR / 4,080M FX unhedged) = 860 × 19.9% ≈ 171M. Group Treasurer to produce authoritative commodity VaR by 2026-06-14. MO-02 panel finding 2026-06-09.",
+    "commodity_var_derivation": "Estimated: 860M unhedged \u00d7 (811M FX VaR / 4,080M FX unhedged) = 860 \u00d7 19.9% \u2248 171M. Group Treasurer to produce authoritative commodity VaR by 2026-06-14. MO-02 panel finding 2026-06-09.",
     "combined_fx_commodity_var_range_usd_m": {
       "uncorrelated_lower": 829,
       "correlated_upper": 983,
