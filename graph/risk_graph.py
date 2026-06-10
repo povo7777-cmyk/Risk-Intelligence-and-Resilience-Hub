@@ -78,6 +78,8 @@ class RiskIntelligenceState(TypedDict):
     panel_remediation: dict           # Auto-fix results: {auto_fixed, calibration_findings, blocked}
     board_summary_corrections: dict   # {applied, flags, reason} — Loop 1 feedback
     panel_action_items: list          # calibration findings user elected to add to board actions — Loop 2
+    panel_correction_proposals: list  # validated proposals from panel_correction_agent
+    panel_correction_decisions: dict  # HITL decisions {finding_id: "approved"|"rejected"|...}
     data_validation_results: dict     # Item 1: source CSV schema + freshness check
     narrative_scan_results: dict      # Item 7: agent narrative vs KRI ground truth mismatch check
     completeness_gaps: list           # Layer 1/2 completeness gate findings (pre-panel)
@@ -124,6 +126,8 @@ def dispatch_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
     state["data_validation_results"] = {}
     state["narrative_scan_results"] = {}
     state["completeness_gaps"] = []
+    state["panel_correction_proposals"] = []
+    state["panel_correction_decisions"] = {}
     state["errors"] = []
     state["warnings"] = []
     return state
@@ -772,20 +776,17 @@ def panel_remediation_node(state: RiskIntelligenceState) -> RiskIntelligenceStat
             remediation["calibration_findings"].append(f)
         # structural findings get processed below — no need to store separately
 
-    # Item 6: Panel verdict hard gate — INADEQUATE blocks push immediately.
-    # fitness_for_board=False means the panel found the pack unfit for distribution.
+    # NOTE (2026-06-10): Panel verdict is now INFORMATIONAL — findings feed the
+    # panel_correction → hitl_correction_gate workflow instead of blocking the push.
+    # fitness_for_board is logged but does NOT block.
     if not panel_verdict.get("fitness_for_board", True):
-        remediation["blocked"] = True
-        remediation["block_reasons"].append(
-            f"PANEL VERDICT: {panel_verdict.get('overall_rating', 'INADEQUATE')} — "
-            "board pack not fit for distribution. Resolve all CRITICAL and HIGH panel "
-            "findings before re-running. GitHub push is blocked."
-        )
+        rating = panel_verdict.get("overall_rating", "?")
+        n_crit = len(panel_verdict.get("critical_findings", []))
+        n_high = len(panel_verdict.get("high_findings", []))
         print(
-            f"\n  ⛔ [PANEL HARD GATE] fitness_for_board=False — "
-            f"push BLOCKED. Rating: {panel_verdict.get('overall_rating', '?')} | "
-            f"Critical: {len(panel_verdict.get('critical_findings', []))} | "
-            f"High: {len(panel_verdict.get('high_findings', []))}"
+            f"\n  ⚠  [PANEL] fitness_for_board=False (rating: {rating}, "
+            f"{n_crit} critical, {n_high} high) — "
+            f"findings will be validated and corrected via HITL correction gate."
         )
 
     calibration_count = len(remediation["calibration_findings"])
@@ -858,6 +859,159 @@ def panel_remediation_node(state: RiskIntelligenceState) -> RiskIntelligenceStat
               f"surfaced to HITL gate for human review →")
 
     state["panel_remediation"] = remediation
+    return state
+
+
+# ── NEW: Panel correction workflow ────────────────────────────────────────────
+
+def panel_correction_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
+    """
+    Validate every panel finding against source data and generate a specific
+    correction proposal (current text → proposed text) for HITL review.
+
+    This replaces the old suppress-and-retry approach: instead of telling the
+    panel LLM to ignore issues, we validate and fix the actual board text.
+    """
+    panel_val = state.get("panel_validation", {})
+
+    # Collect ALL findings (all severities per user request)
+    elena   = panel_val.get("elena_marchetti", {}).get("findings", [])
+    marcus  = panel_val.get("marcus_okonkwo",  {}).get("findings", [])
+    # Fallback: panel_verdict flat lists
+    if not elena and not marcus:
+        pv = panel_val.get("panel_verdict", {})
+        elena  = pv.get("critical_findings", []) + pv.get("high_findings", [])
+
+    # Tag panelist
+    for f in elena:
+        f.setdefault("panelist", "Elena Marchetti")
+    for f in marcus:
+        f.setdefault("panelist", "Marcus Okonkwo")
+
+    all_findings = elena + marcus
+    if not all_findings:
+        print("  [Panel Correction] No findings to validate.")
+        state["panel_correction_proposals"] = []
+        return state
+
+    # Count by severity
+    by_sev: dict[str, int] = {}
+    for f in all_findings:
+        s = f.get("severity", "?").upper()
+        by_sev[s] = by_sev.get(s, 0) + 1
+    sev_str = "  ".join(f"{v} {k}" for k, v in sorted(by_sev.items()))
+    print(f"\n[PANEL CORRECTION] {len(all_findings)} findings to validate: {sev_str}")
+
+    # Get board summary text + source data
+    from pathlib import Path as _Path
+    import json as _json
+
+    api_dir  = _Path(__file__).parent.parent / "api"
+    data_dir = _Path(__file__).parent.parent / "data"
+
+    board_summary = state.get("board_summary", "")
+    if not board_summary:
+        try:
+            store = _json.loads((api_dir / "risk_store.json").read_text())
+            board_summary = store.get("board_summary", "")
+        except Exception:
+            board_summary = ""
+
+    # Build raw CSV digests
+    raw_csvs: dict = {}
+    csv_files = {
+        "kri_thresholds": "kri_thresholds.csv",
+        "treasury":       "treasury_positions.csv",
+        "supply_chain":   "erp_supply_chain.csv",
+        "covenant":       "covenant_tracker.csv",
+        "financial":      "financial_summary.csv",
+    }
+    for key, fname in csv_files.items():
+        p = data_dir / fname
+        if p.exists():
+            raw_csvs[key] = p.read_text()[:3000]
+
+    model_params = state.get("model_params", {})
+
+    # Run correction agent
+    from agents.panel_correction_agent import run as _run_corrections
+    proposals = _run_corrections(
+        findings=all_findings,
+        board_summary=board_summary,
+        raw_csvs=raw_csvs,
+        model_params=model_params,
+        exec_recs=state.get("exec_rec_approved") or state.get("exec_rec_drafts"),
+    )
+
+    state["panel_correction_proposals"] = proposals
+    return state
+
+
+def hitl_correction_gate_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
+    """
+    Present each correction proposal to the human as a CLI diff.
+    Apply approved corrections to the board summary.
+
+    In CI mode: CONFIRMED findings auto-approved, FALSE_POSITIVES auto-rejected.
+    """
+    proposals = state.get("panel_correction_proposals", [])
+    ci_mode   = state.get("ci_mode", False)
+
+    if not proposals:
+        print("  [HITL Correction Gate] No proposals to review.")
+        return state
+
+    from tools.hitl_correction_gate import run as _hitl_run
+    from tools.correction_applier   import run as _apply_run
+    from pathlib import Path as _Path
+
+    api_dir = _Path(__file__).parent.parent / "api"
+
+    # ── Show diff and collect decisions ──────────────────────────────────────
+    result = _hitl_run(proposals=proposals, ci_mode=ci_mode)
+    state["panel_correction_decisions"] = result["decisions"]
+
+    # ── Apply approved + edited corrections ──────────────────────────────────
+    to_apply = result["approved"] + result["edited"]
+    if to_apply:
+        apply_result = _apply_run(
+            approved_proposals=to_apply,
+            store_path=api_dir / "risk_store.json",
+        )
+        # Reload board_summary into state
+        import json as _json
+        try:
+            store = _json.loads((api_dir / "risk_store.json").read_text())
+            state["board_summary"] = store.get("board_summary", state.get("board_summary", ""))
+        except Exception:
+            pass
+
+        applied  = apply_result.get("applied", [])
+        skipped  = apply_result.get("skipped", [])
+        cfg_chg  = apply_result.get("config_changes", [])
+        if cfg_chg:
+            print(f"  ⚠ Config changes noted (require manual action): {len(cfg_chg)}")
+            for c in cfg_chg:
+                print(f"    • {c}")
+
+        state.setdefault("warnings", [])
+        if skipped:
+            state["warnings"].append(
+                f"Panel corrections: {len(skipped)} approved finding(s) "
+                f"could not be applied (text anchor not found): {skipped}"
+            )
+    else:
+        print("  [HITL Correction Gate] No corrections to apply.")
+
+    # ── Log summary ──────────────────────────────────────────────────────────
+    decisions = result["decisions"]
+    n_app  = len(result["approved"])
+    n_rej  = len(result["rejected"])
+    n_edit = len(result["edited"])
+    n_skip = len(result["skipped"])
+    print(f"\n  Panel correction summary: "
+          f"{n_app} approved · {n_rej} rejected · {n_edit} edited · {n_skip} skipped")
+
     return state
 
 
@@ -1448,16 +1602,23 @@ def github_push_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
         return state
 
     # Item 6: Enforce panel hard gate — blocked flag prevents push regardless of approvals
+    # NOTE (2026-06-10): panel_remediation.blocked no longer gates the push.
+    # Panel findings are handled via the hitl_correction_gate workflow.
+    # Only the consistency_checker (structural HTML/threshold drift) can now block.
     if state.get("panel_remediation", {}).get("blocked"):
         reasons = state.get("panel_remediation", {}).get("block_reasons", [])
-        print("\n[GITHUB] ⛔ Push BLOCKED by validation gate:")
-        for r in reasons:
-            print(f"  • {r}")
-        state["errors"].append(
-            "GitHub push blocked: panel_remediation.blocked=True. "
-            f"Reasons: {'; '.join(reasons)}"
-        )
-        return state
+        # Only block for consistency checker issues, not panel fitness_for_board
+        non_panel_reasons = [r for r in reasons
+                             if "PANEL VERDICT" not in r and "fitness_for_board" not in r]
+        if non_panel_reasons:
+            print("\n[GITHUB] ⛔ Push BLOCKED by consistency checker:")
+            for r in non_panel_reasons:
+                print(f"  • {r}")
+            state["errors"].append(
+                "GitHub push blocked by consistency checker. "
+                f"Reasons: {'; '.join(non_panel_reasons)}"
+            )
+            return state
 
     dashboard_path = Path(__file__).parent.parent / "dashboard" / "index.html"
     if not dashboard_path.exists():
@@ -2484,31 +2645,32 @@ def build_graph():
     """Assemble and compile the LangGraph state graph."""
     graph = StateGraph(RiskIntelligenceState)
 
-    graph.add_node("dispatch",                  dispatch_node)
-    graph.add_node("data_validation",          data_validation_node)   # Item 1
-    graph.add_node("kri_data_layer",            kri_data_layer_node)
-    graph.add_node("model_calibration",         model_calibration_node)
-    graph.add_node("run_agents",                run_domain_agents_node)
-    graph.add_node("synthesis",                 chief_risk_synthesis_node)
-    graph.add_node("write_approved",            write_approved_node)
-    graph.add_node("kri_validation",            kri_validation_node)
-    graph.add_node("content_validation",        content_validation_node)
-    graph.add_node("completeness_gate",         completeness_gate_node)
-    graph.add_node("risk_panel",                risk_panel_node)
-    graph.add_node("panel_remediation",         panel_remediation_node)
-    graph.add_node("board_summary_correction_v1", board_summary_correction_node)  # Loop 1: pre-panel (fixes validation flags before panel sees board summary)
-    graph.add_node("board_summary_correction",  board_summary_correction_node)  # Loop 2: post-panel (fixes panel content-accuracy flags)
-    graph.add_node("hitl_gate",                 hitl_gate_node)
-    graph.add_node("update_exec_recs",          update_exec_recs_node)
-    graph.add_node("github_push",               github_push_node)
-    graph.add_node("finalise",                  finalise_node)
+    graph.add_node("dispatch",                    dispatch_node)
+    graph.add_node("data_validation",             data_validation_node)   # Item 1
+    graph.add_node("kri_data_layer",              kri_data_layer_node)
+    graph.add_node("model_calibration",           model_calibration_node)
+    graph.add_node("run_agents",                  run_domain_agents_node)
+    graph.add_node("synthesis",                   chief_risk_synthesis_node)
+    graph.add_node("write_approved",              write_approved_node)
+    graph.add_node("kri_validation",              kri_validation_node)
+    graph.add_node("content_validation",          content_validation_node)
+    graph.add_node("completeness_gate",           completeness_gate_node)
+    graph.add_node("board_summary_correction_v1", board_summary_correction_node)  # Loop 1: pre-panel
+    graph.add_node("risk_panel",                  risk_panel_node)
+    graph.add_node("panel_remediation",           panel_remediation_node)          # threshold sync + consistency check
+    graph.add_node("panel_correction",            panel_correction_node)            # NEW: validate + propose
+    graph.add_node("hitl_correction_gate",        hitl_correction_gate_node)        # NEW: CLI diff + apply
+    graph.add_node("hitl_gate",                   hitl_gate_node)
+    graph.add_node("update_exec_recs",            update_exec_recs_node)
+    graph.add_node("github_push",                 github_push_node)
+    graph.add_node("finalise",                    finalise_node)
 
     graph.set_entry_point("dispatch")
-    graph.add_edge("dispatch",                 "data_validation")
-    graph.add_edge("data_validation",          "kri_data_layer")
-    graph.add_edge("kri_data_layer",           "model_calibration")
-    graph.add_edge("model_calibration",        "run_agents")
-    graph.add_edge("run_agents",               "synthesis")
+    graph.add_edge("dispatch",                    "data_validation")
+    graph.add_edge("data_validation",             "kri_data_layer")
+    graph.add_edge("kri_data_layer",              "model_calibration")
+    graph.add_edge("model_calibration",           "run_agents")
+    graph.add_edge("run_agents",                  "synthesis")
     graph.add_conditional_edges(
         "synthesis",
         permission_router,
@@ -2517,18 +2679,19 @@ def build_graph():
             "hitl_gate":      "content_validation",
         }
     )
-    graph.add_edge("write_approved",           "kri_validation")
-    graph.add_edge("kri_validation",           "content_validation")
-    graph.add_edge("content_validation",       "completeness_gate")
-    graph.add_edge("completeness_gate",          "board_summary_correction_v1")  # P1 2026-06-09: Loop 1 correction before panel so panel sees pre-corrected summary
+    graph.add_edge("write_approved",              "kri_validation")
+    graph.add_edge("kri_validation",              "content_validation")
+    graph.add_edge("content_validation",          "completeness_gate")
+    graph.add_edge("completeness_gate",           "board_summary_correction_v1")   # Loop 1: pre-panel correction
     graph.add_edge("board_summary_correction_v1", "risk_panel")
-    graph.add_edge("risk_panel",               "panel_remediation")
-    graph.add_edge("panel_remediation",        "board_summary_correction")  # ← Loop 1+2
-    graph.add_edge("board_summary_correction", "hitl_gate")
-    graph.add_edge("hitl_gate",                "update_exec_recs")
-    graph.add_edge("update_exec_recs",         "github_push")
-    graph.add_edge("github_push",              "finalise")
-    graph.add_edge("finalise",                 END)
+    graph.add_edge("risk_panel",                  "panel_remediation")              # threshold sync (kept)
+    graph.add_edge("panel_remediation",           "panel_correction")               # NEW: validate findings
+    graph.add_edge("panel_correction",            "hitl_correction_gate")           # NEW: HITL diff + apply
+    graph.add_edge("hitl_correction_gate",        "hitl_gate")                      # then existing exec rec review
+    graph.add_edge("hitl_gate",                   "update_exec_recs")
+    graph.add_edge("update_exec_recs",            "github_push")
+    graph.add_edge("github_push",                 "finalise")
+    graph.add_edge("finalise",                    END)
 
     checkpointer = MemorySaver()
     return graph.compile(checkpointer=checkpointer)
