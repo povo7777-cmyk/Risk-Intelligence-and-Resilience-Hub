@@ -1065,12 +1065,13 @@ def update_html_models(dashboard_path: Path, params: dict) -> tuple[bool, list[s
         save_both  = sp.get("saving_both_usd_m",        1199)
         roi_both   = sp.get("roi_both_x",                48)
 
-        dual_cost   = sp.get("urgent_dual_cost_usd_m",  15)
+        # MO-08 fix: use full_dual_cost (consistent with ROI denominator, not urgent-only cost)
+        dual_cost   = sp.get("full_dual_cost_usd_m",    15)   # full programme cost ≈ same scope as saving_dual
         inv_cost    = sp.get("inv_buffer_cost_usd_m",    8)
         new_banner = (
             f'<strong style="color:#22c55e">Validated benchmarks (Python simulation, N={N_SIMS:,}):'
             f'</strong> Baseline VaR 95%: <strong>USD {var_base:,}M</strong>. '
-            f'Dual-source programme (USD {dual_cost:.1f}M/yr incremental cost): '
+            f'Dual-source programme (USD {dual_cost:.1f}M/yr full programme cost): '
             f'saves <strong>USD {save_dual:,}M</strong> VaR. '
             f'Inventory buffer (USD {inv_cost:.1f}M/yr carrying cost): '
             f'saves <strong>USD {save_inv:,}M</strong>. '
@@ -1095,7 +1096,7 @@ def update_html_models(dashboard_path: Path, params: dict) -> tuple[bool, list[s
         var_base  = sp.get("var_95_baseline_usd_m",  2509)
         save_dual = sp.get("saving_dual_src_usd_m",   663)
         roi_dual  = sp.get("roi_dual_src_x",           48)
-        dual_cost = sp.get("urgent_dual_cost_usd_m",   15)
+        dual_cost = sp.get("full_dual_cost_usd_m",     15)  # MO-08 fix: full cost matches ROI scope
 
         # Exec action 01: "dual-source saves USD NNNm VaR 95% — a XX× return"
         exec_pattern = re.compile(
@@ -1153,7 +1154,7 @@ def update_html_models(dashboard_path: Path, params: dict) -> tuple[bool, list[s
         save_both = sp.get("saving_both_usd_m",      1199)
         roi_dual  = sp.get("roi_dual_src_x",           48)
         roi_inv   = sp.get("roi_inv_buff_x",           48)
-        dual_cost = sp.get("urgent_dual_cost_usd_m",   15)
+        dual_cost = sp.get("full_dual_cost_usd_m",     15)  # MO-08 fix: full cost matches ROI scope
         inv_cost  = sp.get("inv_buffer_cost_usd_m",     8)
 
         new_comment = (
@@ -1180,7 +1181,7 @@ def update_html_models(dashboard_path: Path, params: dict) -> tuple[bool, list[s
         save_inv  = sp.get("saving_inv_buff_usd_m",   584)
         save_both = sp.get("saving_both_usd_m",      1199)
         roi_dual  = sp.get("roi_dual_src_x",           48)
-        dual_cost = sp.get("urgent_dual_cost_usd_m",   15)
+        dual_cost = sp.get("full_dual_cost_usd_m",     15)  # MO-08 fix: full cost matches ROI scope
         inv_cost  = sp.get("inv_buffer_cost_usd_m",     8)
 
         new_prompt_bench = (
