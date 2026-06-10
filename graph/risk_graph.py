@@ -1003,6 +1003,29 @@ def hitl_correction_gate_node(state: RiskIntelligenceState) -> RiskIntelligenceS
     else:
         print("  [HITL Correction Gate] No corrections to apply.")
 
+    # ── Propagate corrected board_summary to dashboard HTML ──────────────────
+    # Corrections were applied to risk_store.json; re-write the dashboard
+    # so the GitHub push picks up the updated board text.
+    if to_apply:
+        corrected_summary = state.get("board_summary", "")
+        if corrected_summary:
+            dashboard_path = _Path(__file__).parent.parent / "dashboard" / "index.html"
+            if dashboard_path.exists():
+                try:
+                    from tools.dashboard_updater import update_board_summary
+                    import json as _json
+                    store = _json.loads((api_dir / "risk_store.json").read_text())
+                    updated = update_board_summary(dashboard_path.read_text(), corrected_summary)
+                    if updated and updated != dashboard_path.read_text():
+                        dashboard_path.write_text(updated)
+                        state["dashboard_updated"] = True
+                        print("  [HITL Correction Gate] Dashboard HTML updated with corrected board summary ✓")
+                    else:
+                        print("  [HITL Correction Gate] Dashboard HTML already up to date.")
+                except Exception as e:
+                    state.setdefault("warnings", []).append(f"Dashboard board summary update failed: {e}")
+                    print(f"  ⚠ Could not update dashboard HTML: {e}")
+
     # ── Log summary ──────────────────────────────────────────────────────────
     decisions = result["decisions"]
     n_app  = len(result["approved"])
