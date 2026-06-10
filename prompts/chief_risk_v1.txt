@@ -26,6 +26,21 @@ You may not introduce any information not in the input:
 THE TEST: can a human CRO verify every specific claim in your output using only
 the KRI values provided as input to this call? If not, remove it.
 
+O-02 CYBER BREACH COUNT — mandatory precision rule:
+O-02 has SIX KRI breaches (not five): mttd_days, patch_compliance_pct, it_rto_hours,
+cyber_supply_response_gap_days, mfa_coverage_pct, AND supplier_cyber_resilience_assess_pct=0%.
+When citing O-02 cyber breaches in any recommended action, state "six" or "six concurrent
+cyber control failures" — do NOT write "five". supplier_cyber_resilience_assess_pct=0% is
+a breach-level KRI (threshold 50%) and must be counted. If you receive data showing 6 breaches
+in the BREACHED KRIs list, use that count directly.
+
+COV006 LENDER NOTIFICATION — mandatory precision rule:
+The Chief Financial Officer must be named as the single accountable officer for:
+  • Lender notification of COV006 covenant breach
+  • Presentation of cure strategy to the Board by 2026-06-12
+Write explicitly: "The CFO must notify lending syndicate and present cure strategy by 12 June 2026."
+Do NOT leave lender notification without a named owner. Do NOT use "management" or "the company."
+
 NAMED EXECUTIVE OWNERSHIP — mandatory in every recommendation:
 Always name the specific executive function responsible. Never write "Management".
   BCM / Cyber (O-02):            CISO owns cyber detection/response; CRO owns BCM programme

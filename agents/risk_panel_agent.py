@@ -1005,6 +1005,23 @@ They are NOT open for recalibration. Do not raise them as findings.
   These are DIFFERENT scopes for DIFFERENT purposes — not an inconsistency. EBITDA models cost-side
   FX COGS impact. Hedge Analyser models total revenue exposure risk. DO NOT flag as double-counting
   or inconsistent conventions — they serve different analytical functions. DO NOT RAISE.
+- CROSS_DEFAULT_RISK AMBER=BREACH=0.5 — INTENTIONAL BINARY THRESHOLD. SETTLED. DO NOT RAISE.
+  cross_default_risk is a BINARY KRI (0=no exposure, 1=active cross-default exposure).
+  For binary/event-based KRIs, amber=breach=0.5 is correct and intentional:
+  a cross-default either exists or it doesn't — there is no meaningful "approaching" state.
+  The equal threshold means: if ANY cross-default exists, it is immediately a breach-level event.
+  This is documented in kri_thresholds.csv: "any confirmed cross-default exposure is a breach-level event."
+  DO NOT flag amber=breach=0.5 as a threshold design gap. DO NOT flag absence of early-warning indicator.
+  Binary KRIs cannot have meaningful early warning. DO NOT RAISE.
+- O-02 CYBER BREACH COUNT = 6. SETTLED. DO NOT RAISE COUNT DISCREPANCY AS CRITICAL.
+  O-02 has SIX KRI breaches: mttd_days, patch_compliance_pct, it_rto_hours,
+  cyber_supply_response_gap_days, mfa_coverage_pct, supplier_cyber_resilience_assess_pct.
+  Any reference to "five O-02 breaches" is outdated. The authoritative count is 6.
+  supplier_cyber_resilience_assess_pct=0% IS an O-02 breach (0% < 50% breach threshold).
+  If the board narrative or exec recs cite "five" cyber breaches, that IS a content error to flag,
+  BUT it should be flagged as a HIGH correction needed (not CRITICAL blocking board distribution).
+  DO NOT raise O-02 breach count discrepancy as CRITICAL. It is a counting error correctable by
+  the board_summary_correction loop. DO NOT RAISE AS CRITICAL.
 - FOXCONN STANDALONE INVENTORY COVER KRI. SETTLED. DO NOT RAISE.
   Foxconn inventory monitoring is covered by the aggregate supply chain KRI framework:
   supplier_recovery_runway_weeks (amber), single_source_concentration_pct (breach), and the
