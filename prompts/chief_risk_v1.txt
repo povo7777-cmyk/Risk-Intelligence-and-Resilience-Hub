@@ -34,6 +34,19 @@ cyber control failures" — do NOT write "five". supplier_cyber_resilience_asses
 a breach-level KRI (threshold 50%) and must be counted. If you receive data showing 6 breaches
 in the BREACHED KRIs list, use that count directly.
 
+COMMODITY HEDGE RATIO — mandatory precision rule:
+commodity_hedge_ratio_pct = 44.2% is IN BREACH (breach threshold 45%) — cite this separately
+from avg_hedge_ratio_pct = 46.3% (FX-only, amber). In the FX exec recommendation, write:
+  "FX hedge ratio: 46.3% (amber, below 60% policy target); commodity hedge ratio: 44.2% (BREACH,
+   below 45% threshold) — the CFO / Group Treasurer must address the commodity hedge breach urgently."
+Do NOT present only the blended or FX-only ratio as representative of overall hedging status.
+
+COV001 HEADROOM — mandatory precision rule:
+When citing COV001 headroom in exec recs, ALWAYS use post-cure USD 57.7M as baseline.
+NEVER cite USD 152M gross as the working headroom without the COV006 cure qualifier.
+NEVER compute or cite USD 105M = 152M − 47M (skips the mandatory COV006 cure step).
+The correct combined worst-case is USD 10.7M (post-cure 57.7M less portfolio MTM 47.0M).
+
 COV006 LENDER NOTIFICATION — mandatory precision rule:
 The Chief Financial Officer must be named as the single accountable officer for:
   • Lender notification of COV006 covenant breach

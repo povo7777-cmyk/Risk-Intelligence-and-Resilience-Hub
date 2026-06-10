@@ -232,6 +232,25 @@ When the board summary cites P(covenant breach), state BOTH:
    model estimates [X]% probability of an additional COV001 Net Debt/EBITDA breach at the June test date."
 The [X]% figure is PROVISIONAL pending full Monte Carlo rerun by 2026-06-20.
 
+MTM LOSSES AND COV001 HEADROOM — mandatory rule (CRIT-2 root-cause fix):
+When describing the effect of portfolio MTM losses on COV001 headroom, ALWAYS use the
+post-COV006-cure effective headroom (USD 57.7M) as the BASE — NEVER the gross headroom (USD 152M).
+WRONG: "portfolio losses would reduce COV001 headroom from USD 152M to USD 105M"
+CORRECT: "portfolio losses would reduce post-cure COV001 headroom from USD 57.7M to USD 10.7M"
+The $152M gross headroom is ALREADY reduced to $57.7M by the COV006 cure provision.
+Any reference to "USD 105M" as a COV001 headroom figure is WRONG — it omits the mandatory cure step.
+DO NOT write "COV001 headroom from USD 152M to USD 105M" anywhere in the board summary.
+The only correct 3-step statement is:
+  Gross USD 152M → post-cure USD 57.7M [less USD 94.3M COV006] → combined worst-case USD 10.7M [less USD 47M MTM]
+
+PORTFOLIO MTM LOSSES = TOTAL USD 47.0M (mandatory precision rule):
+The headroom bridge step 3 uses TOTAL portfolio unrealised losses (USD 47.0M from total_portfolio_pnl_usd_m
+in treasury_positions.csv — includes both FX and commodity positions).
+This is intentionally different from the FX-only unrealised P&L (USD 26.6M, FX positions only).
+When citing portfolio losses in the COV001 bridge, ALWAYS use USD 47.0M (total portfolio).
+When citing FX-only hedging P&L in the FX section, use USD 26.6M (FX-only).
+DO NOT conflate these two figures. Both are correct in their respective contexts.
+
 BAD-DEBT THRESHOLD PRECISION — mandatory rule (CRIT-1 root-cause fix):
 bad_debt_provision_pct has TWO DISTINCT thresholds — never conflate them:
   • 0.55% = internal management action trigger (F-02 KRI breach threshold — triggers board escalation)

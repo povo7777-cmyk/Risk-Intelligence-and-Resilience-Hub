@@ -1013,6 +1013,29 @@ They are NOT open for recalibration. Do not raise them as findings.
   This is documented in kri_thresholds.csv: "any confirmed cross-default exposure is a breach-level event."
   DO NOT flag amber=breach=0.5 as a threshold design gap. DO NOT flag absence of early-warning indicator.
   Binary KRIs cannot have meaningful early warning. DO NOT RAISE.
+- USD 105M COV001 HEADROOM — WRONG FIGURE, MUST NOT APPEAR IN BOARD SUMMARY. DO NOT FLAG AS CRITICAL.
+  USD 105M = 152M gross − 47M MTM (skipping COV006 cure). This is the WRONG calculation.
+  If USD 105M appears anywhere in the board summary, it IS an error — but it is a board-text error
+  correctable by the board_summary_correction loop (HIGH, not CRITICAL blocking distribution).
+  The correct combined worst-case is USD 10.7M (gross 152M → post-cure 57.7M → combined 10.7M).
+  DO NOT raise "USD 105M in board summary" as CRITICAL. Flag it as HIGH so the correction loop fixes it.
+  Note: the cra_synthesis prompt now explicitly prohibits "152M to 105M" language.
+- TOTAL PORTFOLIO MTM USD 47.0M vs FX-ONLY USD 26.6M — NO CONFLICT. SETTLED. DO NOT RAISE.
+  The headroom bridge step 3 uses TOTAL portfolio losses = USD 47.0M (FX+commodity, from
+  total_portfolio_pnl_usd_m in treasury_positions.csv). This is distinct from FX-only P&L = USD 26.6M
+  (unrealised_pnl_usd_m, FX positions only). BOTH figures exist in the data for different purposes:
+    • USD 26.6M: FX-only P&L used in F-01 hedge section (FX hedging performance)
+    • USD 47.0M: Total portfolio (FX+commodity) used in COV001 worst-case bridge step 3
+  Using USD 47.0M in the bridge is MORE CONSERVATIVE and correct for a worst-case scenario.
+  This is NOT an inconsistency or "unreconciled P&L figure." DO NOT raise as CRITICAL.
+- COMMODITY HEDGE RATIO AMBER vs BREACH — NO MASKING. SETTLED. DO NOT RAISE AS CRITICAL.
+  The board narrative citing avg_hedge_ratio_pct=46.3% (FX-only, amber) is NOT masking anything.
+  commodity_hedge_ratio_pct=44.2% IS separately disclosed:
+    • It appears as a distinct KRI with status=breach in the pipeline breach count
+    • The cra_synthesis prompt mandates separate disclosure of FX (46.3% amber) and commodity (44.2% breach)
+  If the board narrative only mentions 46.3% without the commodity breach, flag this as HIGH for the
+  correction loop to fix — NOT as CRITICAL blocking board distribution. The breach is in the data.
+  DO NOT RAISE AS CRITICAL.
 - O-02 CYBER BREACH COUNT = 6. SETTLED. DO NOT RAISE COUNT DISCREPANCY AS CRITICAL.
   O-02 has SIX KRI breaches: mttd_days, patch_compliance_pct, it_rto_hours,
   cyber_supply_response_gap_days, mfa_coverage_pct, supplier_cyber_resilience_assess_pct.
