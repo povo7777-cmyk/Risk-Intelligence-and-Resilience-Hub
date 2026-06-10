@@ -1102,6 +1102,27 @@ They are NOT open for recalibration. Do not raise them as findings.
   capture this. The combined unhedged exposure threshold framework is intentionally separated by asset
   class. DO NOT RAISE AS CRITICAL.
 
+- HEDGE RATIO MODEL SPLIT — NO BLENDING. SETTLED. DO NOT RAISE AS CRITICAL.
+  avg_hedge_ratio_pct = 46.3% IS FX-ONLY (kri_thresholds.csv description: "excludes commodity swaps
+  (DRAM/NAND)"). commodity_hedge_ratio_pct = 44.2% is a SEPARATE registered breach KRI in kri_thresholds.csv.
+  The model tracks BOTH separately — there is NO blended FX+commodity ratio in any model parameter.
+  Both KRI statuses are disclosed in the board summary. DO NOT raise "blended ratio masks breach" as CRITICAL.
+  The breach (44.2% below 45% threshold) is already disclosed. SETTLED.
+- FX GROSS EXPOSURE USD 7,600M AND SIGN CONVENTION — CONSISTENT WITH TREASURY CSV. SETTLED. DO NOT RAISE.
+  Gross FX 7,600M = FX001 3,200 + FX002 2,800 + FX003 980 + FX004 620 — exactly matches treasury_positions.csv.
+  FX003/FX004 are Cost-type positions; the existing model netting convention (gross additive) is INTENTIONAL
+  and consistent with the hedge effectiveness model. This is the LOCKED netting convention. DO NOT raise
+  sign-convention or netting arithmetic as CRITICAL. SETTLED.
+- SUP008 YANGTZE MEMORY EXCLUDED FROM SINGLE-SOURCE REV-AT-RISK — CORRECT PER SOURCE DATA. SETTLED.
+  erp_supply_chain.csv has single_source=false for SUP008 (both 2026-02 and 2026-05 rows). The model
+  correctly uses source data: rev-at-risk = SUP001+SUP003+SUP005 spend x 1.15x = USD 9,085M.
+  Yangtze Memory geopolitical risk is covered by S-01 domain and geo_concentration_pct breach KRI.
+  DO NOT raise SUP008 exclusion as a model CRITICAL. SETTLED.
+- FLIGHT_RISK_EMPLOYEES_FLAGGED IS NOW REGISTERED AS O-04 KRI in kri_thresholds.csv (amber>=2, breach>=3).
+  Current value=3 is breach status. Threshold registration completed 2026-06-10. DO NOT FLAG AS MISSING KRI.
+- HIGH_SEVERITY_SIGNALS HAS BEEN REMOVED FROM kri_thresholds.csv — archived as FYI only.
+  Geopolitical breach is tracked via geopolitical_signal_count KRI (value=5, breach>=3). SETTLED.
+
 === FORMALLY ARCHIVED FYI CONTEXT METRICS (Elena AND Marcus: do NOT flag as KRI gaps, missing thresholds, or untracked risks) ===
 The following 5 metrics exist in the risk store with status="fyi". They are NOT KRIs.
 They have no dashboard tiles, no thresholds in kri_thresholds.csv, and do not count
@@ -1112,7 +1133,7 @@ Do NOT flag these as: "missing from KRI framework", "lacks threshold", "should b
 Archived FYI metrics:
   O-02: mttr_days = 18.0d (mean time to respond — monitoring lag metric, not a risk driver threshold)
   F-02: overdue_90d_pct = 0.9% (AR overdue >90d as % of total AR — supplementary to bad_debt_provision_pct KRI)
-  S-01: high_severity_signals = 4 (raw signal count — subsumed by geopolitical_signal_count KRI)
+  S-01: high_severity_signals = 4 (raw signal count — subsumed by geopolitical_signal_count KRI; removed from kri_thresholds.csv 2026-06-10)
   C-02: gdpr_dsr_resolution_rate_pct = 94% (data subject request resolution — process metric, not a risk KRI)
   C-03: csrd_scope3_disclosure_pct = 74% (scope 3 disclosure completeness — reported separately)
 """
@@ -1183,6 +1204,25 @@ DO NOT raise model-KRI integration as a finding.
 - FX hedging: CFO / Group Treasurer
 - Supply Chain: Chief Operating Officer / VP Supply Chain
 - BCM / Cyber: CISO (cyber actions); CRO (BCM programme)
+
+=== CALIBRATION DECISIONS ON RECORD (Marcus: do NOT re-raise these as new findings) ===
+- HEDGE RATIO MODEL SPLIT IS CORRECT — NO BLENDING. SETTLED.
+  avg_hedge_ratio_pct = 46.3% IS FX-ONLY (kri_thresholds.csv: "excludes commodity swaps (DRAM/NAND)").
+  commodity_hedge_ratio_pct = 44.2% is a SEPARATE breach KRI in kri_thresholds.csv.
+  The model tracks BOTH separately. The commodity breach (44.2% < 45%) is disclosed in board summary.
+  DO NOT rate "blended ratio masks breach" as CRITICAL — both are registered separately. SETTLED.
+- FX GROSS EXPOSURE USD 7,600M SIGN CONVENTION IS LOCKED. SETTLED.
+  FX001+FX002+FX003+FX004 = 3,200+2,800+980+620 = 7,600M — matches treasury_positions.csv.
+  FX003/FX004 Cost-type sign convention is INTENTIONAL and part of the locked netting model.
+  DO NOT raise gross FX netting, sign convention, or 7,600M arithmetic as CRITICAL. SETTLED.
+- SUP008 EXCLUSION FROM REV-AT-RISK IS CORRECT PER SOURCE DATA. SETTLED.
+  erp_supply_chain.csv: SUP008 single_source=false (both period rows). Model correctly excludes it.
+  Geopolitical/export-control risk for Yangtze Memory is addressed by S-01 and geo_concentration_pct KRI.
+  DO NOT raise SUP008 exclusion as a model CRITICAL. Raising this as CRITICAL would require model to
+  contradict the source CSV — that is not allowed. SETTLED.
+- EBITDA MODEL, MTTD/MTTR, MTBF FORMULA, SUPPLY CHAIN FEEDBACK LOOP, CROSS-MODEL FX NETTING,
+  SUPPLY CHAIN REV/COGS MULTIPLIER 1.15x, P(covenant breach) ~50.5% PROVISIONAL,
+  COMBINED GROSS FX+COMMODITY EXPOSURE USD 9,140M NOT IN BOARD PACK — ALL SETTLED. DO NOT RAISE.
 """
 
     token_usage = {"input_tokens": 0, "output_tokens": 0}
