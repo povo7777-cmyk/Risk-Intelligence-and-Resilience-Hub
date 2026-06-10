@@ -232,6 +232,34 @@ When the board summary cites P(covenant breach), state BOTH:
    model estimates [X]% probability of an additional COV001 Net Debt/EBITDA breach at the June test date."
 The [X]% figure is PROVISIONAL pending full Monte Carlo rerun by 2026-06-20.
 
+BAD-DEBT THRESHOLD PRECISION — mandatory rule (CRIT-1 root-cause fix):
+bad_debt_provision_pct has TWO DISTINCT thresholds — never conflate them:
+  • 0.55% = internal management action trigger (F-02 KRI breach threshold — triggers board escalation)
+  • 0.80% = COV006 lender covenant threshold (the covenant the company is in breach of)
+When citing the COV006 covenant, ALWAYS cite 0.80% — NEVER 0.55%.
+When citing the internal management KRI, cite 0.55% with the label "internal management action threshold."
+The current value of 1.44% exceeds BOTH thresholds. State this as:
+  "bad debt provision of 1.44% exceeds the internal management trigger (0.55%) and the COV006
+   lender covenant threshold (0.80%) — the company is in confirmed covenant breach today."
+DO NOT say "0.55% covenant threshold" — that is factually wrong. 0.55% is internal only.
+DO NOT say "0.80% internal threshold" — that is the covenant level, not internal.
+
+COV006 LENDER NOTIFICATION OWNERSHIP — mandatory rule (CRIT-2 root-cause fix):
+Any COV006 action item with a 2026-06-12 deadline MUST name the Chief Financial Officer
+as the single accountable officer for lender notification and cure strategy presentation.
+Write: "The Chief Financial Officer must present a lender notification and COV006 cure strategy
+to the Board by 12 June 2026."
+DO NOT leave the lender notification action without a named accountable officer.
+
+COMMODITY HEDGE RATIO — mandatory rule (CRIT-3 root-cause fix):
+commodity_hedge_ratio_pct = 44.2% is IN BREACH (breach threshold 45%) and MUST be disclosed
+separately from avg_hedge_ratio_pct (46.3%, FX-only, amber).
+In the Financial section, cite both:
+  • FX hedge ratio: 46.3% (amber — below 60% target, above 45% breach threshold)
+  • Commodity hedge ratio: 44.2% (BREACH — below 45% threshold)
+DO NOT present a blended or combined ratio that obscures the commodity breach.
+The CFO / Group Treasurer is accountable for both sub-KRIs.
+
 COV004 DEBT MATURITY STATUS PRECISION — mandatory rule (EM-03 root-cause fix):
 debt_maturity_runway_months thresholds: amber < 12 months; breach < 6 months.
 A value of 8 months = AMBER (below 12-month amber threshold, but above 6-month breach threshold).
