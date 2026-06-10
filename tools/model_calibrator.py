@@ -317,7 +317,13 @@ def calibrate_ebitda(raw: dict) -> dict:
         f"COV005 non-binding: EBITDA floor {cov_floor_b}B → headroom {round(headroom_cov5_m, 0)}M "
         f"(higher than COV001, not the binding constraint). "
         f"Post-COV006-cure effective: USD {ebitda_headroom_m}M - {cov006_full_writeoff_usd_m}M = "
-        f"USD {ebitda_headroom_post_cure_m}M."
+        f"USD {ebitda_headroom_post_cure_m}M. "
+        f"[MO-04 DISCLOSURE: a combined worst-case of USD {ebitda_headroom_post_cure_m}M "
+        f"minus portfolio MTM hedge losses is computed separately in "
+        f"ebitda_headroom_combined_worst_case_usd_m. That deduction is valid ONLY under "
+        f"fair-value hedge accounting; if hedges are cash-flow designated (IFRS 9 / ASC 815), "
+        f"MTM losses route through OCI and do NOT impair EBITDA. Finance must confirm "
+        f"hedge accounting classification before citing combined worst-case to lenders.]"
     )
 
     return {
@@ -444,6 +450,26 @@ def calibrate_hedge(raw: dict) -> dict:
     fin_vol_row = fin_for_vol[-1] if fin_for_vol else {}
     fx_vol_pct       = float(fin_vol_row.get("fx_volatility_realised_pct",        9.0))
     commodity_vol_pct = float(fin_vol_row.get("commodity_volatility_realised_pct", 32.0))
+
+    # ── MO-01 fix: staleness detection for fx_volatility_realised_pct ──────────
+    # This parameter must be refreshed each quarter from the FX desk (3-month
+    # realised vol across revenue/cost currency pairs). If all periods in
+    # financial_summary.csv carry the same value, the parameter is stale.
+    _all_fin_rows = raw.get("financial_summary", [])
+    _fx_vols = [
+        float(r["fx_volatility_realised_pct"])
+        for r in _all_fin_rows
+        if r.get("fx_volatility_realised_pct") not in (None, "")
+    ]
+    _fx_vol_stale = len(set(_fx_vols)) == 1 and len(_fx_vols) > 1
+    _fx_vol_staleness_warning: str | None = (
+        f"WARNING (MO-01): fx_volatility_realised_pct = {fx_vol_pct}% is IDENTICAL across "
+        f"all {len(_fx_vols)} periods in financial_summary.csv — parameter has not been "
+        f"updated since initial data load. Refresh with current 3-month realised FX vol "
+        f"from FX desk and update financial_summary.csv before next board run."
+    ) if _fx_vol_stale else None
+    if _fx_vol_staleness_warning:
+        print(f"  [HEDGE] ⚠  {_fx_vol_staleness_warning}")
 
     # Separate gross/unhedged amounts by asset class for transparency
     fx_rows   = [r for r in treasury if r.get("exposure_type", "") in ("Revenue", "Cost")]
@@ -646,6 +672,8 @@ def calibrate_hedge(raw: dict) -> dict:
         "p_rev_below_80_hedged":    p_hd_80,
         "var_improvement_usd_m":  var_impr,
         "n_sims": N_SIMS,
+        # MO-01 staleness flag — None if vol is being updated; non-None = panel warning
+        "fx_vol_staleness_warning": _fx_vol_staleness_warning,
     }
 
 
@@ -839,14 +867,17 @@ def calibrate_supply_chain(raw: dict) -> dict:
     if inv_cost_m == 0:
         inv_cost_m = _INV_COST_FALLBACK   # fallback from model_benchmarks.json if target_inventory_weeks not set in CSV
 
-    # Use urgent (cheapest, most actionable) programme for primary ROI calc
-    dual_cost_m = urgent_dual_cost_m
-
+    # ── MO-08 fix: ROI numerator and denominator must cover the same programme scope ──
+    # saving_dual comes from a simulation where ALL single-source suppliers are dual-sourced.
+    # Using urgent_dual_cost_m (cheapest ONE supplier, ~$14.4M) as the denominator gave 27x —
+    # a factor-7 overstatement because the numerator covers the full programme.
+    # Fix: denominator = full_dual_cost_m (all single-source suppliers) → consistent ROI ~3.7x.
+    # urgent_dual_cost_usd_m is still returned in the dict for programme prioritisation.
     # Return on investment = VaR saving / annual programme cost
-    roi_dual = round(saving_dual / dual_cost_m) if dual_cost_m and saving_dual > 0 else 0
-    roi_inv  = round(saving_inv  / inv_cost_m)  if inv_cost_m  and saving_inv  > 0 else 0
-    roi_both = round(saving_both / (dual_cost_m + inv_cost_m)) \
-               if (dual_cost_m + inv_cost_m) and saving_both > 0 else 0
+    roi_dual = round(saving_dual / full_dual_cost_m) if full_dual_cost_m and saving_dual > 0 else 0
+    roi_inv  = round(saving_inv  / inv_cost_m)        if inv_cost_m       and saving_inv  > 0 else 0
+    roi_both = round(saving_both / (full_dual_cost_m + inv_cost_m)) \
+               if (full_dual_cost_m + inv_cost_m) and saving_both > 0 else 0
 
     return {
         # Slider parameters
@@ -1254,6 +1285,10 @@ def run_calibration(dashboard_path: Path | None = None) -> dict:
     # COV006 cure). The correct 3-step bridge is:
     #   (1) Gross = 152M  (2) Post-cure = 57.7M  (3) Combined worst-case = 10.7M
     # All three steps are now locked deterministic fields — no LLM arithmetic needed.
+    # MO-04 FIX: step (3) is a CONDITIONAL downside scenario, not a base figure.
+    # The MTM deduction is valid only under fair-value hedge accounting. Under IFRS 9
+    # cash-flow designation, MTM losses go through OCI and step (3) = step (2) = 57.7M.
+    # Finance must confirm hedge accounting treatment before step (3) is cited to lenders.
     _eff_hd   = ebitda_params.get("ebitda_headroom_usd_m", 57.7)      # post-COV006-cure
     _pnl_loss = abs(hedge_params.get("total_portfolio_pnl_usd_m", 0)) # portfolio MTM loss (positive)
     _combined_wc = round(_eff_hd - _pnl_loss, 1)                      # = 57.7 - 47.0 = 10.7M
@@ -1265,9 +1300,14 @@ def run_calibration(dashboard_path: Path | None = None) -> dict:
         f"{ebitda_params.get('cov001_nd_ebitda_ceiling', 3.0)}x]. "
         f"(2) Post-COV006-cure effective = {_eff_hd}M "
         f"[less COV006 full provision {ebitda_params.get('cov006_full_writeoff_usd_m', 94.3)}M]. "
-        f"(3) Combined worst-case = {_combined_wc}M "
+        f"(3) Combined worst-case (FAIR-VALUE HEDGE SCENARIO ONLY) = {_combined_wc}M "
         f"[less portfolio MTM losses {round(_pnl_loss, 1)}M from treasury_positions.csv]. "
-        f"Board must cite {_combined_wc}M as combined worst-case — never 152-47=105 (omits COV006 cure)."
+        f"ACCOUNTING CAVEAT (MO-04): step (3) assumes MTM losses crystallise through EBITDA "
+        f"(fair-value hedge treatment). If hedges carry IFRS 9 / ASC 815 cash-flow designation, "
+        f"MTM routes through OCI — step (3) would equal step (2) = {_eff_hd}M. "
+        f"Board must cite {_combined_wc}M as combined worst-case under fair-value scenario "
+        f"ONLY — never 152-47=105 (omits COV006 cure). "
+        f"Confirm hedge accounting classification with Finance before presenting to lenders."
     )
     print(f"    EBITDA  → combined worst-case headroom LOCKED = USD {_combined_wc}M "
           f"(eff {_eff_hd}M − MTM {round(_pnl_loss,1)}M)")
