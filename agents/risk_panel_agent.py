@@ -448,6 +448,23 @@ You must produce a JSON response with this exact structure:
   "verdict": "one paragraph summary of the framework's fitness for board-level governance (max 80 words)"
 }
 
+SEVERITY CLASSIFICATION — apply this strictly:
+CRITICAL = structural/architectural defect that cannot be fixed by editing the board summary text:
+  • Wrong formula or model methodology
+  • KRI completely missing from framework for a material risk
+  • Data source error (wrong CSV field, stale data)
+  • Governance structure fundamentally broken (no named owner at all, not just missing from one sentence)
+HIGH = board text error or content gap that CAN be corrected by editing the board summary:
+  • Wrong number cited in board text (but correct number exists in data/model)
+  • Missing label in board text (e.g. "PROVISIONAL" qualifier missing from one paragraph)
+  • Wrong KRI status cited in text (but correct status is in risk_store.json)
+  • Executive ownership not named in one specific sentence (but owner is identifiable from KRI data)
+  • Board text cites blended ratio without separately disclosing a breach sub-component
+MEDIUM/LOW = informational, enhancement, or future improvement.
+DO NOT rate a board text error as CRITICAL. Board text errors are HIGH — they are corrected by the
+board_summary_correction pipeline before the board sees the document.
+CRITICAL findings block board distribution. HIGH findings are auto-corrected. Apply this distinction rigorously.
+
 FINDINGS LIMIT: Produce no more than 8 findings. Focus on the most material issues only. \
 Keep each field concise — detail max 60 words, recommendation max 30 words. \
 Be direct, specific, and evidence-based. Do not flag theoretical risks — only issues with traceable evidence \
@@ -490,6 +507,18 @@ You must produce a JSON response with this exact structure:
   "priority_remediation": ["item 1", "item 2", "item 3"],
   "verdict": "one paragraph summary of the model suite's fitness for board-level risk quantification (max 80 words)"
 }
+
+SEVERITY CLASSIFICATION — apply this strictly:
+CRITICAL = wrong model methodology, wrong formula, wrong data source — architectural defect unfixable
+  by editing board text. Examples: model uses wrong VaR formula; KRI uses wrong CSV field; simulation
+  uses parameter that contradicts source data; probability model is mathematically unsound.
+HIGH = board text cites wrong figure or omits required disclosure — correctable by editing board text.
+  Examples: board cites USD 105M headroom (correct figure USD 10.7M exists in model output but not
+  cited in text); board omits PROVISIONAL label (label required by prompt rules but not written);
+  board uses blended ratio without disclosing breach sub-component (sub-component exists in data).
+  Board text errors do NOT block board distribution — they are corrected by the board_summary_correction
+  pipeline. Rate them HIGH, not CRITICAL.
+DO NOT rate a board narrative error as CRITICAL. Only rate structural model/data defects as CRITICAL.
 
 FINDINGS LIMIT: Produce no more than 8 findings. Focus on the most material issues only. \
 Keep each field concise — detail max 60 words, recommendation max 30 words. \
@@ -542,6 +571,16 @@ Produce a joint panel report in this exact JSON structure:
   "conditions_for_board_readiness": ["condition 1", "condition 2"],
   "panel_verdict": "two-paragraph board-level summary"
 }
+
+FITNESS_FOR_BOARD RULE — apply strictly:
+fitness_for_board = false ONLY if there are CRITICAL findings (structural model/data defects).
+fitness_for_board = true if there are ZERO critical findings, even with HIGH/MEDIUM findings present.
+HIGH findings = board text errors correctable by the pipeline correction loop before distribution.
+HIGH findings alone do NOT make a board pack unfit for distribution.
+overall_rating rules: STRONG = 0 findings total. ADEQUATE = 0 critical, ≤3 high.
+NEEDS_IMPROVEMENT = 0 critical, >3 high. INADEQUATE = any critical findings.
+If Elena and Marcus produced zero CRITICAL findings, set fitness_for_board=true and
+overall_rating="ADEQUATE" (or STRONG/NEEDS_IMPROVEMENT per high count above).
 
 Return ONLY valid JSON."""
 
