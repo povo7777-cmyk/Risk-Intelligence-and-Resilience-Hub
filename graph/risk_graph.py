@@ -83,6 +83,7 @@ class RiskIntelligenceState(TypedDict):
     data_validation_results: dict     # Item 1: source CSV schema + freshness check
     narrative_scan_results: dict      # Item 7: agent narrative vs KRI ground truth mismatch check
     completeness_gaps: list           # Layer 1/2 completeness gate findings (pre-panel)
+    html_qa_results: dict             # 4-dimension HTML QA: consistency/accuracy/completeness/source
 
     # Infrastructure
     errors: list
@@ -128,6 +129,7 @@ def dispatch_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
     state["completeness_gaps"] = []
     state["panel_correction_proposals"] = []
     state["panel_correction_decisions"] = {}
+    state["html_qa_results"] = {}
     state["errors"] = []
     state["warnings"] = []
     return state
@@ -1616,6 +1618,68 @@ def update_exec_recs_node(state: RiskIntelligenceState) -> RiskIntelligenceState
 
 
 
+def html_qa_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
+    """
+    4-dimension HTML quality assurance gate.
+
+    Runs against root index.html AFTER all rendering is complete
+    (post hitl_correction_gate + update_exec_recs).
+
+    Checks:
+      D1  CONSISTENCY  — KRD card titles match body domain; no cross-section contradictions
+      D2  ACCURACY     — KRI tile values + status badges match risk_store.json
+      D3  COMPLETENESS — all required board-pack sections present in HTML
+      D4  SOURCE MATCH — KRI thresholds match kri_thresholds.csv;
+                         model figures match model_benchmarks.json
+
+    ERRORs are escalated to state["errors"] and will block the GitHub push.
+    WARNINGs are escalated to state["warnings"] — logged but non-blocking.
+    """
+    from pathlib import Path as _Path
+    from tools.html_qa_validator import run as qa_run, print_report as qa_print
+
+    print(f"\n{'='*60}")
+    print("[HTML QA] Running 4-dimension dashboard validation...")
+    print(f"{'='*60}")
+
+    html_path = _Path(__file__).parent.parent / "index.html"  # root — GitHub Pages
+
+    try:
+        result = qa_run(html_path)
+        qa_print(result)
+        state["html_qa_results"] = result
+
+        # Escalate ERRORs into pipeline errors (will block push in github_push_node)
+        for issue in result.get("issues", []):
+            if issue["severity"] == "ERROR":
+                state["errors"].append(
+                    f"[HTML-QA/{issue.get('dimension','?').upper()}/"
+                    f"{issue.get('code','?')}] {issue['message']}"
+                )
+            elif issue["severity"] == "WARNING":
+                state["warnings"].append(
+                    f"[HTML-QA/{issue.get('dimension','?').upper()}] {issue['message']}"
+                )
+
+        status = result.get("status", "?")
+        if status == "pass":
+            print(f"\n  ✓ HTML QA: all checks passed")
+        elif status == "warn":
+            wc = result.get("warning_count", 0)
+            print(f"\n  ⚠ HTML QA: {wc} warning(s) — push will proceed")
+        else:
+            ec = result.get("error_count", 0)
+            print(f"\n  ⛔ HTML QA: {ec} error(s) — GitHub push will be BLOCKED")
+
+    except Exception as e:
+        msg = f"HTML QA node failed unexpectedly: {e}"
+        state["warnings"].append(msg)
+        print(f"  ⚠ {msg}")
+        state["html_qa_results"] = {"status": "error", "error": str(e)}
+
+    return state
+
+
 def github_push_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
     """Push updated dashboard to GitHub Pages."""
     audit = _audit  # may be None if dispatch_node not called
@@ -1624,13 +1688,26 @@ def github_push_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
         print("\n[GITHUB] No dashboard changes to push")
         return state
 
-    # Item 6: Enforce panel hard gate — blocked flag prevents push regardless of approvals
-    # NOTE (2026-06-10): panel_remediation.blocked no longer gates the push.
-    # Panel findings are handled via the hitl_correction_gate workflow.
-    # Only the consistency_checker (structural HTML/threshold drift) can now block.
+    # ── Gate 1: HTML QA errors block the push ────────────────────────────────
+    html_qa = state.get("html_qa_results", {})
+    if html_qa.get("status") == "error":
+        ec = html_qa.get("error_count", "?")
+        print(f"\n[GITHUB] ⛔ Push BLOCKED by HTML QA ({ec} error(s)):")
+        for issue in html_qa.get("issues", []):
+            if issue.get("severity") == "ERROR":
+                dim = issue.get("dimension", "?").upper()
+                print(f"  • [{dim}] {issue.get('message', '')}")
+        state["errors"].append(
+            f"GitHub push blocked by HTML QA: {ec} error(s). "
+            "Fix the issues reported above and re-run."
+        )
+        return state
+
+    # ── Gate 2: Legacy consistency-checker block (threshold/benchmark drift) ──
+    # NOTE (2026-06-10): panel fitness_for_board no longer blocks push;
+    # panel findings are handled via the hitl_correction_gate workflow.
     if state.get("panel_remediation", {}).get("blocked"):
         reasons = state.get("panel_remediation", {}).get("block_reasons", [])
-        # Only block for consistency checker issues, not panel fitness_for_board
         non_panel_reasons = [r for r in reasons
                              if "PANEL VERDICT" not in r and "fitness_for_board" not in r]
         if non_panel_reasons:
@@ -2685,6 +2762,7 @@ def build_graph():
     graph.add_node("hitl_correction_gate",        hitl_correction_gate_node)        # NEW: CLI diff + apply
     graph.add_node("hitl_gate",                   hitl_gate_node)
     graph.add_node("update_exec_recs",            update_exec_recs_node)
+    graph.add_node("html_qa",                     html_qa_node)                         # 4-dim HTML QA gate
     graph.add_node("github_push",                 github_push_node)
     graph.add_node("finalise",                    finalise_node)
 
@@ -2712,7 +2790,8 @@ def build_graph():
     graph.add_edge("panel_correction",            "hitl_correction_gate")           # NEW: HITL diff + apply
     graph.add_edge("hitl_correction_gate",        "hitl_gate")                      # then existing exec rec review
     graph.add_edge("hitl_gate",                   "update_exec_recs")
-    graph.add_edge("update_exec_recs",            "github_push")
+    graph.add_edge("update_exec_recs",            "html_qa")                            # validate final HTML
+    graph.add_edge("html_qa",                     "github_push")                        # block push on ERROR
     graph.add_edge("github_push",                 "finalise")
     graph.add_edge("finalise",                    END)
 
