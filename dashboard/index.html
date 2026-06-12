@@ -2103,7 +2103,7 @@ function saveQ3Data(){
   var amb = Object.values(KRI_DATA).filter(function(d){return d.ts==='am';}).length;
   var heroRed = document.querySelector('.hsc-val.hv-red');
   if(heroRed) heroRed.textContent = red;
-  document.getElementById('q3-status').textContent = '✓ Q3 data saved. ' + red + ' red breaches, ' + amb + ' amber warnings. Run AI Agents to regenerate recommendations.';
+  document.getElementById('q3-status').textContent = '✓ Q3 data saved. ' + red + ' red breaches, ' + amb + ' amber warnings. Run analysis to regenerate recommendations.';
   setTimeout(function(){document.getElementById('q3-status').textContent='';}, 5000);
 }
 
@@ -2176,7 +2176,7 @@ async function runAgent(name){
 
   btn.disabled = true;
   out.className = 'agent-output loading';
-  out.innerHTML = '&#9679; Agent running... reading current KRI values and model outputs...';
+  out.innerHTML = '&#9679; Analysis running... reading current KRI values and model outputs...';
   meta.textContent = 'Running...';
 
   var prompt = AGENT_PROMPTS[name]();
@@ -2261,7 +2261,7 @@ async function runAllAgents(){
   var masterStatus = document.getElementById('master-status');
   var runAllBtn = document.getElementById('run-all-btn');
   if(masterPulse) masterPulse.className = 'pulse-dot running';
-  if(masterStatus) masterStatus.textContent = 'Running domain agents...';
+  if(masterStatus) masterStatus.textContent = 'Running risk analysis...';
   if(runAllBtn) runAllBtn.disabled = true;
 
   // Navigate to agents panel if not there
@@ -2273,21 +2273,21 @@ async function runAllAgents(){
 
   // Run domain agents sequentially
   for(var ag of ['strategic','operational','financial','compliance']){
-    if(masterStatus) masterStatus.textContent = 'Running '+ag+' agent...';
+    if(masterStatus) masterStatus.textContent = 'Running '+ag+' analysis...';
     await runAgent(ag);
   }
 
   // Then run regulatory in parallel-ish
-  if(masterStatus) masterStatus.textContent = 'Running regulatory signals agent...';
+  if(masterStatus) masterStatus.textContent = 'Running regulatory signals analysis...';
   await runAgent('regulatory');
 
   // Then CRA
-  if(masterStatus) masterStatus.textContent = 'Running Chief Risk Agent synthesis...';
+  if(masterStatus) masterStatus.textContent = 'Running risk synthesis...';
   await runAgent('cra');
 
   if(masterPulse) masterPulse.className = 'pulse-dot';
   masterPulse.style.background = '#22c55e';
-  if(masterStatus) masterStatus.textContent = 'All agents complete · '+new Date().toLocaleTimeString();
+  if(masterStatus) masterStatus.textContent = 'Analysis complete · '+new Date().toLocaleTimeString();
   if(runAllBtn) runAllBtn.disabled = false;
 }
 
