@@ -229,6 +229,12 @@ def main():
     from graph.risk_graph import build_graph
 
     run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
+    # Auto-enable CI mode when stdin is not a real TTY (e.g. Claude Code bash,
+    # cron job, subprocess pipe). Interactive --ci flag still works explicitly.
+    import sys as _sys
+    if not args.ci and not _sys.stdin.isatty():
+        args.ci = True
+        print("⚙  Non-interactive stdin detected — CI mode auto-enabled\n")
     if args.ci:
         print("⚙  CI mode enabled — validator-clean items will be auto-approved\n")
     initial_state = {
