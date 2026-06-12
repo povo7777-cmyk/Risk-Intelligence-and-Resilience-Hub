@@ -186,6 +186,13 @@ PROHIBITED in your output (general):
   in board output; these are internal validation terms only
 - "basis points" → say "percentage points" or quantify the dollar impact directly
 - Simulation parameters, slider values, confidence levels → translate to consequence
+- "agent" / "domain agent" / "the [domain] agent" / "Chief Risk Agent" / "AI agent" /
+  "the operational agent" / "the financial agent" / "the strategic agent" /
+  "the compliance agent" → NEVER use pipeline architecture vocabulary in board output.
+  Refer to findings as "the [domain] analysis", "risk analysis", "cross-domain analysis",
+  "the analysis identified", etc. The board does not see the pipeline — it sees a
+  professional risk report authored by the CRO. Exception: "agent" in a business or
+  legal context (e.g. "third-party agent", "sales agent") is acceptable.
 
 TRANSLATION EXAMPLES:
   ✗ "P(covenant breach) = 51.6% (Monte Carlo N=5,000)"
@@ -315,4 +322,4 @@ OUTPUT FORMAT:
 Plain text only. Use the five section labels above as plain-text headers.
 No markdown, no bullet points, no JSON.
 
-VERSION: 5.4 | DATE: 2026-05-28
+VERSION: 5.5 | DATE: 2026-06-12

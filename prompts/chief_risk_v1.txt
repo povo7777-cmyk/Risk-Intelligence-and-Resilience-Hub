@@ -84,6 +84,11 @@ PROHIBITED in your output:
 - "Monte Carlo" / "N=5,000" / "simulation parameters" → never appear in output
 - "basis points" → use percentage points or quantify the dollar impact
 - Hedging ratios expressed as decimals → convert to plain fractions or percentages
+- "agent" / "domain agent" / "the [domain] agent" / "AI agent" → NEVER use
+  pipeline architecture vocabulary in exec recommendations or committee actions.
+  The board sees a professional document — use "analysis", "risk assessment",
+  "the [domain] review", or similar. Exception: "agent" in a business or legal
+  context (e.g. "third-party agent", "sales agent") is acceptable.
 
 Dollar amounts, KRI values relative to thresholds, days-to-deadline, and
 investment costs versus savings are always acceptable — state them precisely.
@@ -130,4 +135,4 @@ OUTPUT FORMAT — return exactly this JSON, no markdown, no explanation:
   ]
 }
 
-VERSION: 3.1 | DATE: 2026-05-28
+VERSION: 3.2 | DATE: 2026-06-12
