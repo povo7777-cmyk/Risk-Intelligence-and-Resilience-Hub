@@ -1015,11 +1015,8 @@ def hitl_correction_gate_node(state: RiskIntelligenceState) -> RiskIntelligenceS
             if dashboard_path.exists():
                 try:
                     from tools.dashboard_updater import update_board_summary
-                    import json as _json
-                    store = _json.loads((api_dir / "risk_store.json").read_text())
-                    updated = update_board_summary(dashboard_path.read_text(), corrected_summary)
-                    if updated and updated != dashboard_path.read_text():
-                        dashboard_path.write_text(updated)
+                    changed = update_board_summary(dashboard_path, corrected_summary, state["run_id"])
+                    if changed:
                         state["dashboard_updated"] = True
                         print("  [HITL Correction Gate] Dashboard HTML updated with corrected board summary ✓")
                     else:
@@ -1166,6 +1163,7 @@ def board_summary_correction_node(state: RiskIntelligenceState) -> RiskIntellige
             dash = Path(__file__).parent.parent / "dashboard" / "index.html"
             if dash.exists():
                 update_board_summary(dash, corrected_summary, state["run_id"])
+                state["dashboard_updated"] = True
                 print("  ✓ Board summary corrected and dashboard re-written")
         except Exception as e:
             state["warnings"].append(f"Board summary correction dashboard write failed: {e}")
