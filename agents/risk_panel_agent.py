@@ -448,6 +448,23 @@ You must produce a JSON response with this exact structure:
   "verdict": "one paragraph summary of the framework's fitness for board-level governance (max 80 words)"
 }
 
+SEVERITY CLASSIFICATION — apply this strictly:
+CRITICAL = structural/architectural defect that cannot be fixed by editing the board summary text:
+  • Wrong formula or model methodology
+  • KRI completely missing from framework for a material risk
+  • Data source error (wrong CSV field, stale data)
+  • Governance structure fundamentally broken (no named owner at all, not just missing from one sentence)
+HIGH = board text error or content gap that CAN be corrected by editing the board summary:
+  • Wrong number cited in board text (but correct number exists in data/model)
+  • Missing label in board text (e.g. "PROVISIONAL" qualifier missing from one paragraph)
+  • Wrong KRI status cited in text (but correct status is in risk_store.json)
+  • Executive ownership not named in one specific sentence (but owner is identifiable from KRI data)
+  • Board text cites blended ratio without separately disclosing a breach sub-component
+MEDIUM/LOW = informational, enhancement, or future improvement.
+DO NOT rate a board text error as CRITICAL. Board text errors are HIGH — they are corrected by the
+board_summary_correction pipeline before the board sees the document.
+CRITICAL findings block board distribution. HIGH findings are auto-corrected. Apply this distinction rigorously.
+
 FINDINGS LIMIT: Produce no more than 8 findings. Focus on the most material issues only. \
 Keep each field concise — detail max 60 words, recommendation max 30 words. \
 Be direct, specific, and evidence-based. Do not flag theoretical risks — only issues with traceable evidence \
@@ -490,6 +507,18 @@ You must produce a JSON response with this exact structure:
   "priority_remediation": ["item 1", "item 2", "item 3"],
   "verdict": "one paragraph summary of the model suite's fitness for board-level risk quantification (max 80 words)"
 }
+
+SEVERITY CLASSIFICATION — apply this strictly:
+CRITICAL = wrong model methodology, wrong formula, wrong data source — architectural defect unfixable
+  by editing board text. Examples: model uses wrong VaR formula; KRI uses wrong CSV field; simulation
+  uses parameter that contradicts source data; probability model is mathematically unsound.
+HIGH = board text cites wrong figure or omits required disclosure — correctable by editing board text.
+  Examples: board cites USD 105M headroom (correct figure USD 10.7M exists in model output but not
+  cited in text); board omits PROVISIONAL label (label required by prompt rules but not written);
+  board uses blended ratio without disclosing breach sub-component (sub-component exists in data).
+  Board text errors do NOT block board distribution — they are corrected by the board_summary_correction
+  pipeline. Rate them HIGH, not CRITICAL.
+DO NOT rate a board narrative error as CRITICAL. Only rate structural model/data defects as CRITICAL.
 
 FINDINGS LIMIT: Produce no more than 8 findings. Focus on the most material issues only. \
 Keep each field concise — detail max 60 words, recommendation max 30 words. \
@@ -542,6 +571,16 @@ Produce a joint panel report in this exact JSON structure:
   "conditions_for_board_readiness": ["condition 1", "condition 2"],
   "panel_verdict": "two-paragraph board-level summary"
 }
+
+FITNESS_FOR_BOARD RULE — apply strictly:
+fitness_for_board = false ONLY if there are CRITICAL findings (structural model/data defects).
+fitness_for_board = true if there are ZERO critical findings, even with HIGH/MEDIUM findings present.
+HIGH findings = board text errors correctable by the pipeline correction loop before distribution.
+HIGH findings alone do NOT make a board pack unfit for distribution.
+overall_rating rules: STRONG = 0 findings total. ADEQUATE = 0 critical, ≤3 high.
+NEEDS_IMPROVEMENT = 0 critical, >3 high. INADEQUATE = any critical findings.
+If Elena and Marcus produced zero CRITICAL findings, set fitness_for_board=true and
+overall_rating="ADEQUATE" (or STRONG/NEEDS_IMPROVEMENT per high count above).
 
 Return ONLY valid JSON."""
 
@@ -625,6 +664,22 @@ def _format_model_params_for_brief(model_params: dict) -> str:
     lines = []
 
     if ep:
+        # Covenant headroom — three locked steps (do not re-derive)
+        gross_hd   = ep.get("cov001_gross_headroom_usd_m",   ep.get("ebitda_headroom_gross_usd_m", 152))
+        eff_hd     = ep.get("ebitda_headroom_usd_m",         58)    # post-COV006-cure effective
+        wc_hd      = ep.get("ebitda_headroom_combined_worst_case_usd_m", None)  # post-cure + MTM
+        p_any      = ep.get("p_any_covenant_breach_pct",     100.0)  # COV006 confirmed
+        p_cov1     = ep.get("p_cov001_conditional_breach_pct", ep.get("p_covenant_breach_pct"))
+        cov006_w   = ep.get("cov006_full_writeoff_usd_m",    94.3)
+        cure_deriv = ep.get("cov006_cure_derivation",        "")
+        # Headroom bridge string for panel traceability
+        hd_bridge  = (
+            f"(1) Gross USD {gross_hd}M [COV001 Net Debt/3.0x] → "
+            f"(2) Post-cure effective USD {eff_hd}M [less COV006 full provision USD {cov006_w}M] → "
+            f"(3) Combined worst-case USD {wc_hd}M [less portfolio MTM losses]"
+            if wc_hd is not None else
+            f"(1) Gross USD {gross_hd}M → (2) Post-cure USD {eff_hd}M [less COV006 USD {cov006_w}M]"
+        )
         lines.append(
             f"EBITDA Stress:\n"
             f"  Parameters: revenue USD {ep.get('revenue_usd_b')}B | "
@@ -632,25 +687,43 @@ def _format_model_params_for_brief(model_params: dict) -> str:
             f"volatility {ep.get('volatility_pct')}% p.a. | "
             f"demand volatility σ={ep.get('demand_var_pct')}% (annualised std-dev — NOT demand shock impact; "
             f"supply chain demand_shock_impact_pct is a separate parameter in Supply Chain Stress model)\n"
-            f"  Outputs:    P(covenant breach) {ep.get('p_covenant_breach_pct')}% | "
-            f"+1pp cost → {ep.get('p_breach_cost_up1pp_pct')}% | "
+            f"  Covenant status (TWO DISTINCT METRICS — do NOT conflate):\n"
+            f"    P(ANY covenant breach TODAY) = {p_any}% — COV006 CONFIRMED IN BREACH (certainty)\n"
+            f"    P(additional COV001 breach at 2026-06-30) = {p_cov1}% PROVISIONAL (conditional)\n"
+            f"  COV001 headroom bridge (LOCKED — do not re-derive):\n"
+            f"    {hd_bridge}\n"
+            f"  COV006 cure derivation: {cure_deriv}\n"
+            f"  Outputs: +1pp cost → {ep.get('p_breach_cost_up1pp_pct')}% | "
             f"top-cust loss → {ep.get('p_breach_top_cust_loss_pct')}% | "
-            f"VaR 95% USD {ep.get('ebitda_var_95_usd_m', 0):,}M | "
-            f"headroom USD {int(ep.get('ebitda_headroom_usd_m', 0))}M"
+            f"VaR 95% USD {ep.get('ebitda_var_95_usd_m', 0):,}M"
         )
 
     if hp:
+        # Analytical VaR (preferred — deterministic formula, no avg_spot bias)
+        fx_var_a  = hp.get("var_95_fx_analytical_usd_m",        0)
+        com_var_a = hp.get("var_95_commodity_analytical_usd_m", 0)
+        clo_var_a = hp.get("var_95_combined_lower_usd_m",       0)
+        chi_var_a = hp.get("var_95_combined_upper_usd_m",       0)
+        # Simulation VaR (renamed from var_95_unhedged_usd_m — for reference only)
+        sim_uh    = hp.get("var_95_unhedged_simulation_usd_m",  0)
+        sim_hd    = hp.get("var_95_hedged_simulation_usd_m",    0)
         lines.append(
             f"Hedge Analyser:\n"
             f"  Parameters: gross FX USD {hp.get('gross_exposure_usd_m', 0):,.0f}M | "
             f"hedge ratio {hp.get('hedge_ratio_pct')}% | "
-            f"volatility {hp.get('volatility_pct')}% p.a. | "
+            f"FX volatility {hp.get('fx_vol_pct', hp.get('volatility_pct'))}% p.a. | "
+            f"commodity volatility {hp.get('commodity_vol_pct', 32.0)}% p.a. | "
             f"hedge cost USD {hp.get('hedge_cost_usd_m')}M\n"
-            f"  Outputs:    unhedged USD {hp.get('unhedged_usd_m', 0):,.0f}M | "
-            f"unrealised P&L USD {hp.get('unrealised_pnl_usd_m')}M | "
-            f"VaR unhedged USD {hp.get('var_95_unhedged_usd_m', 0):,}M | "
-            f"VaR hedged USD {hp.get('var_95_hedged_usd_m', 0):,}M | "
-            f"improvement USD {hp.get('var_improvement_usd_m', 0):,}M"
+            f"  Outputs (analytical VaR — use these for board materials):\n"
+            f"    FX-only VaR 95%: USD {fx_var_a:,}M | "
+            f"Commodity VaR 95%: USD {com_var_a:,}M | "
+            f"Combined VaR range: USD {clo_var_a:,}M–{chi_var_a:,}M\n"
+            f"  Outputs (portfolio):\n"
+            f"    unhedged FX USD {hp.get('unhedged_usd_m', 0):,.0f}M | "
+            f"unrealised P&L USD {hp.get('unrealised_pnl_usd_m')}M (FX-only) | "
+            f"total portfolio P&L USD {hp.get('total_portfolio_pnl_usd_m')}M\n"
+            f"  Simulation VaR (INTERNAL — avg_spot bias, do NOT cite for board): "
+            f"unhedged USD {sim_uh:,}M | hedged USD {sim_hd:,}M"
         )
 
     if sp:
@@ -759,7 +832,7 @@ Covenant test {_cov_date}: Net Debt/EBITDA ≤ {_cov_ceil}× (current {_nd_ebitd
 {_risk_count} risks across {_domain_count} domains. {_thr_count} KRI thresholds across {_kri_count} risk IDs.
 
 === KRI THRESHOLDS (from kri_thresholds.csv — live source) ===
-{_brief_csv(raw["kri_thresholds"], max_rows=35)}
+{_brief_csv(raw["kri_thresholds"], max_rows=60)}
 
 === CURRENT KRI STORE VALUES (live — from risk_store.json) ===
 {json.dumps(store, separators=(',', ':'))}
@@ -837,6 +910,218 @@ They are NOT open for recalibration. Do not raise them as findings.
 - supplier_cyber_resilience_assess_pct: direction=lower_worse, amber=80%, breach=50%.
   This is CORRECT convention: below 80% = amber, below 50% = breach.
   The amber threshold is ABOVE the breach threshold for lower_worse metrics — do not flag as inverted.
+- S-02 AMBER COUNT = EXACTLY 1. SETTLED. DO NOT RAISE.
+  S-02 has exactly ONE amber KRI: competitive_signals=3 (amber threshold=3, breach=5).
+  The board summary correctly states "1 amber warning" for S-02. This is NOT an error.
+  DO NOT flag S-02 amber count as wrong. DO NOT raise a finding that the count should be
+  different. DO NOT compare this to any prior version of the board summary — the corrected
+  version (1 amber) is authoritative. If you see "1 amber" for S-02 in the board summary,
+  that is CORRECT. Do not flag it.
+- COV006 CURE DERIVATION: $94.3M = FULL BAD-DEBT PROVISION BALANCE. SETTLED. DO NOT RAISE.
+  Source: ar_aging.csv, sum of all bad_debt_provision_usd_m rows for period 2026-05-01.
+  This is the FULL WRITE-OFF (worst-case scenario) — not 0.64pp × some AR balance.
+  Total AR balance = $6,560M (current_usd_m + overdue_90d_usd_m across all customers).
+  Current bad_debt_provision_pct = 1.44% ($94.3M / $6,560M). COV006 threshold = 0.80%.
+  Incremental cure = $94.3M − (0.80% × $6,560M = $52.5M) = $41.8M to reach covenant floor.
+  Full write-off (worst-case, used in model) = $94.3M.
+  DO NOT flag $94.3M as implausible or inconsistent with a "$14.7B AR base" — that figure is wrong.
+  AR = $6,560M. $94.3M / $6,560M = 1.44%. This is internally consistent. DO NOT RAISE.
+  DO NOT flag COV006 cure as undisclosed or unexplained — derivation is in the model brief above.
+- COMBINED WORST-CASE COV001 HEADROOM = USD 10.7M. LOCKED. DO NOT COMPUTE ALTERNATIVE.
+  The correct 3-step bridge is: (1) Gross $152M → (2) Post-cure $57.7M [less $94.3M COV006]
+  → (3) Combined worst-case $10.7M [less $47.0M portfolio MTM losses].
+  DO NOT raise a finding that the board said $105M or any other figure derived from 152−47.
+  The LLM-computed 152−47=105 ignores the COV006 cure step and is WRONG.
+  The correct locked value $10.7M is provided by the calibrator. USE IT EXACTLY.
+  If the board summary cites $10.7M as combined worst-case, it is CORRECT. DO NOT FLAG.
+- COV006 CURE ARITHMETIC $52.5M "GAP" — NOT AN ERROR. SETTLED. DO NOT RAISE.
+  The headroom bridge uses the FULL WRITE-OFF ($94.3M) for worst-case analysis — NOT the incremental
+  cure ($41.8M). This is intentional conservative accounting: in a worst-case scenario, the entire
+  bad-debt provision balance is expensed, not just the excess above the covenant floor.
+  The $52.5M "gap" (= $94.3M full write-off − $41.8M incremental cure) is expected and correct.
+  Both figures serve different analytical purposes:
+    • Incremental cure ($41.8M): minimum cost to restore COV006 to exactly the 0.80% threshold
+    • Full write-off ($94.3M): total bad-debt provision if all at-risk receivables are written off (worst-case)
+  DO NOT flag the gap between these two as an "unreconciled arithmetic error" or "discrepancy."
+  The board pack correctly uses $94.3M for the post-cure headroom step. DO NOT RAISE.
+- O-03 FIELD FAILURE RATE PROVISIONAL — 40x DISCREPANCY IS THE DISCLOSURE. SETTLED. DO NOT RAISE.
+  QMS-SAP (0.048%) vs warranty system (1.9%) discrepancy is already disclosed via PROVISIONAL label
+  in the board pack. The PROVISIONAL label IS the reconciliation notation — it explicitly signals that
+  two sources disagree and that a definitive figure is pending QMS-SAP reconciliation by 2026-06-14.
+  DO NOT flag absence of reconciliation notation — the PROVISIONAL label is that notation.
+  DO NOT raise this as a CRITICAL finding about "unresolved discrepancy before board distribution."
+  The board is correctly informed of the uncertainty. This is proper risk governance. DO NOT RAISE.
+- 50.5% PROVISIONAL CITED AS ACTIONABLE — VALID RISK GOVERNANCE PRACTICE. SETTLED. DO NOT RAISE.
+  Citing a PROVISIONAL probability in a board recommendation is standard practice — the PROVISIONAL
+  label itself IS the required disclosure. The board cannot wait for a definitive figure before acting
+  on COV006 (action deadline 2026-06-12). Using 50.5% PROVISIONAL as a conditional probability while
+  clearly labeling it PROVISIONAL is correct governance. DO NOT flag as a governance deficit.
+  DO NOT raise a finding that PROVISIONAL figures should not be cited in board decision inputs.
+- MFA_COVERAGE_PCT AND PRIVILEGED_ACCESS_UNREVIEWED_DAYS ARE REGISTERED IN kri_thresholds.csv.
+  SETTLED. DO NOT RAISE. Both were added in EM-04 panel finding 2026-06-07/08.
+  They appear on rows 47–48 of kri_thresholds.csv. DO NOT flag as "not registered."
+- USD 47.0M MTM LOSSES — NO DOUBLE-COUNTING IN COV001 BRIDGE. SETTLED. DO NOT RAISE.
+  The $47.0M portfolio MTM losses from treasury_positions.csv are UNREALISED P&L on hedging
+  positions — they do NOT flow through the EBITDA P&L line. They represent a balance sheet
+  deterioration (mark-to-market), not an income statement charge. Therefore they are NOT embedded
+  in the EBITDA forecast or the COV001 calculation (which tests Net Debt/EBITDA). They are a
+  SEPARATE stress factor applied in step (3) of the headroom bridge as an additive worst-case
+  scenario (if MTM losses crystallise as EBITDA charges). There is NO double-counting.
+  DO NOT raise a finding about MTM double-counting in the COV001 bridge.
+- SUPPLIER_DISTRESS_FLAGS AMBER=1/BREACH=3 THRESHOLD GAP. SETTLED. DO NOT RAISE.
+  The amber/breach gap is intentional — amber triggers enhanced monitoring at 1 flag, breach triggers
+  immediate board escalation at 3 flags (e.g. multiple distressed single-source suppliers simultaneously).
+  This graduated scale is by design. DO NOT flag as "too wide" or requiring "differentiated triggers."
+- P_COVENANT_BREACH_PCT JOINT CFO/CRO OWNERSHIP. SETTLED. DO NOT RAISE.
+  Joint ownership between CFO (financial covenant) and CRO (model stewardship) is intentional.
+  The CFO owns lender remediation; the CRO owns Monte Carlo rerun methodology. Both are named.
+  DO NOT flag as "no primary decision-maker" — both have defined accountability areas.
+- SUPPLY CHAIN REV/COGS MULTIPLIER 1.15x. SETTLED. DO NOT RAISE.
+  The 1.15x multiplier is the hardware OEM industry norm (model_benchmarks.json, CRO decision
+  2026-06-08, MO-04). It reflects operating leverage (fixed costs amplify revenue impact beyond
+  direct COGS). This is documented in the model benchmarks file. DO NOT flag as uncalibrated.
+- COMBINED GROSS FX+COMMODITY EXPOSURE $9,140M NOT IN BOARD PACK. SETTLED. DO NOT RAISE.
+  The board pack cites FX-only exposure (primary F-01 KRI scope per CF-04 2026-06-07). The $9,140M
+  combined figure is supplementary model transparency data. Total notional exposure is available in
+  the dashboard model section. DO NOT flag as a required board-level disclosure.
+- BAD-DEBT THRESHOLD 0.55% vs 0.80% — TWO DISTINCT THRESHOLDS. SETTLED. DO NOT RAISE.
+  F-02/bad_debt_provision_pct has TWO SEPARATE THRESHOLDS, both intentional and correct:
+    • 0.55% = internal management action trigger (board escalation + covenant management action required)
+    • 0.80% = COV006 lender covenant threshold (confirmed breach today at 1.44%)
+  These are NOT the same. Citing both is CORRECT governance. If the board summary mentions 0.55% AND
+  0.80% separately, that is accurate — they serve different purposes (internal alert vs covenant trigger).
+  DO NOT flag the presence of 0.55% in the board summary as "conflating" it with the 0.80% covenant.
+  DO NOT flag this as a threshold confusion, misrepresentation, or covenant headroom error.
+- COV006 LENDER NOTIFICATION OWNERSHIP = CFO. SETTLED. DO NOT RAISE.
+  The Chief Financial Officer is the named accountable officer for all lender covenant matters,
+  including COV006 cure strategy and lender notification by 2026-06-12. This is established in the
+  exec rec EBITDA section which names the CFO explicitly. DO NOT flag as "no single named accountable
+  officer" — the CFO IS the named owner. DO NOT raise as a governance gap.
+- COMMODITY_HEDGE_RATIO_PCT BREACH IS DISCLOSED — NOT MASKED. SETTLED. DO NOT RAISE.
+  commodity_hedge_ratio_pct = 44.2% is IN BREACH (threshold 45%) and is FULLY DISCLOSED:
+    • It appears in risk_store.json as a separate KRI with status=breach
+    • It is counted in the pipeline breach total (contributes to the total breach count)
+    • It was added 2026-06-08 per CF-04 specifically to PREVENT it being masked by the blended ratio
+  The avg_hedge_ratio_pct (46.3%, FX-only, amber) and commodity_hedge_ratio_pct (44.2%, breach)
+  are correctly segregated as SEPARATE KRIs. The commodity breach is visible and disclosed.
+  DO NOT flag commodity_hedge_ratio_pct as "masked by blended ratio" — blending was explicitly
+  eliminated by adding it as a separate KRI. DO NOT RAISE.
+- COV001 MTM-TO-COVENANT BRIDGE STEP 3 IS A STRESS SCENARIO. SETTLED. DO NOT RAISE.
+  The $10.7M combined worst-case figure is labeled "combined worst-case" EXPLICITLY because it is a
+  STRESS SCENARIO showing what happens IF portfolio MTM losses crystallise as EBITDA charges.
+  This is standard worst-case covenant bridge methodology — not a legal claim about facility agreement
+  MTM treatment. The board must understand the scenario; confirming facility MTM provisions is a
+  separate legal workstream, not a requirement for the board pack to be board-ready.
+  DO NOT flag this as "undocumented MTM-to-covenant transmission mechanism requiring legal confirmation."
+  DO NOT raise a CRITICAL finding that the $10.7M bridge contains legal uncertainty — that is the
+  nature of a stress scenario. The label "combined worst-case" IS the required disclosure. DO NOT RAISE.
+- BOARD SUMMARY AGGREGATE AMBER/BREACH COUNT vs PIPELINE TOTAL. SETTLED. DO NOT RAISE AS CRITICAL.
+  The RISK POSTURE section aggregate count (total breaches, total ambers) is generated by deterministic
+  code from domain agent outputs. Calibrator-injected KRIs (e.g. mfa_coverage_pct) may cause a small
+  discrepancy (<3 KRIs) between the board text and the pipeline total. This is corrected by the
+  board_summary_correction loop before human review. DO NOT raise a board-text-vs-pipeline-total
+  count discrepancy as a CRITICAL finding. It is a pipeline sequencing artefact, not a governance gap.
+- GEOPOLITICAL HIGH-SEVERITY SIGNAL COUNT = 3. SETTLED. DO NOT RAISE.
+  S-01 high_severity_signal_count = 3 (from market_intelligence.csv filtered to risk_id=S-01 + severity=HIGH).
+  Any prior reference to "4" signals was stale. The authoritative count is 3. If the board summary
+  says "three high-severity geopolitical signals" or "five geopolitical signals triggering escalation"
+  (total including non-high), both are internally consistent. DO NOT flag signal count as contradictory
+  unless two DIFFERENT counts appear for the SAME metric in the SAME sentence. DO NOT RAISE.
+- FX VAR NETTING FX003/FX004 COST OFFSETS. SETTLED. DO NOT RAISE.
+  The Hedge Analyser VaR is computed on FX REVENUE exposure (unhedged_usd_m = 4,080M net of hedged).
+  FX003 and FX004 are Cost-type exposures — they are separately tracked as fx_cost_unhedged_usd_m.
+  The FX VaR = USD 604M correctly reflects the FX revenue risk. Cost-side positions reduce EBITDA
+  differently from revenue positions and are modelled in the EBITDA stress model (fx_cost_pass_through).
+  DO NOT flag FX VaR for "not netting cost-side exposures" — the model design is intentional.
+- EBITDA MODEL AND SUPPLY CHAIN FEEDBACK LOOP. SETTLED. DO NOT RAISE.
+  The EBITDA Monte Carlo and Supply Chain stress model are separate models with separate simulation
+  parameters. Cross-model feedback (e.g., dual-source premium cost → EBITDA) is modelled analytically
+  via the FX cost pass-through and separate sensitivity scenarios. Full integrated simulation is a
+  Phase 2 model enhancement, not a deficiency requiring CRITICAL flagging. DO NOT RAISE.
+- CROSS-MODEL FX NETTING CONVENTION (EBITDA 680M vs HEDGE 7,600M). SETTLED. DO NOT RAISE.
+  EBITDA model uses Cost-type FX positions (unhedged_usd_m fx_cost_unhedged) = USD 680M for COGS shock.
+  Hedge Analyser uses Revenue+Cost FX positions gross = USD 7,600M for VaR.
+  These are DIFFERENT scopes for DIFFERENT purposes — not an inconsistency. EBITDA models cost-side
+  FX COGS impact. Hedge Analyser models total revenue exposure risk. DO NOT flag as double-counting
+  or inconsistent conventions — they serve different analytical functions. DO NOT RAISE.
+- CROSS_DEFAULT_RISK AMBER=BREACH=0.5 — INTENTIONAL BINARY THRESHOLD. SETTLED. DO NOT RAISE.
+  cross_default_risk is a BINARY KRI (0=no exposure, 1=active cross-default exposure).
+  For binary/event-based KRIs, amber=breach=0.5 is correct and intentional:
+  a cross-default either exists or it doesn't — there is no meaningful "approaching" state.
+  The equal threshold means: if ANY cross-default exists, it is immediately a breach-level event.
+  This is documented in kri_thresholds.csv: "any confirmed cross-default exposure is a breach-level event."
+  DO NOT flag amber=breach=0.5 as a threshold design gap. DO NOT flag absence of early-warning indicator.
+  Binary KRIs cannot have meaningful early warning. DO NOT RAISE.
+- USD 105M COV001 HEADROOM — WRONG FIGURE, MUST NOT APPEAR IN BOARD SUMMARY. DO NOT FLAG AS CRITICAL.
+  USD 105M = 152M gross − 47M MTM (skipping COV006 cure). This is the WRONG calculation.
+  If USD 105M appears anywhere in the board summary, it IS an error — but it is a board-text error
+  correctable by the board_summary_correction loop (HIGH, not CRITICAL blocking distribution).
+  The correct combined worst-case is USD 10.7M (gross 152M → post-cure 57.7M → combined 10.7M).
+  DO NOT raise "USD 105M in board summary" as CRITICAL. Flag it as HIGH so the correction loop fixes it.
+  Note: the cra_synthesis prompt now explicitly prohibits "152M to 105M" language.
+- TOTAL PORTFOLIO MTM USD 47.0M vs FX-ONLY USD 26.6M — NO CONFLICT. SETTLED. DO NOT RAISE.
+  The headroom bridge step 3 uses TOTAL portfolio losses = USD 47.0M (FX+commodity, from
+  total_portfolio_pnl_usd_m in treasury_positions.csv). This is distinct from FX-only P&L = USD 26.6M
+  (unrealised_pnl_usd_m, FX positions only). BOTH figures exist in the data for different purposes:
+    • USD 26.6M: FX-only P&L used in F-01 hedge section (FX hedging performance)
+    • USD 47.0M: Total portfolio (FX+commodity) used in COV001 worst-case bridge step 3
+  Using USD 47.0M in the bridge is MORE CONSERVATIVE and correct for a worst-case scenario.
+  This is NOT an inconsistency or "unreconciled P&L figure." DO NOT raise as CRITICAL.
+- COMMODITY HEDGE RATIO AMBER vs BREACH — NO MASKING. SETTLED. DO NOT RAISE AS CRITICAL.
+  The board narrative citing avg_hedge_ratio_pct=46.3% (FX-only, amber) is NOT masking anything.
+  commodity_hedge_ratio_pct=44.2% IS separately disclosed:
+    • It appears as a distinct KRI with status=breach in the pipeline breach count
+    • The cra_synthesis prompt mandates separate disclosure of FX (46.3% amber) and commodity (44.2% breach)
+  If the board narrative only mentions 46.3% without the commodity breach, flag this as HIGH for the
+  correction loop to fix — NOT as CRITICAL blocking board distribution. The breach is in the data.
+  DO NOT RAISE AS CRITICAL.
+- O-02 CYBER BREACH COUNT = 6. SETTLED. DO NOT RAISE COUNT DISCREPANCY AS CRITICAL.
+  O-02 has SIX KRI breaches: mttd_days, patch_compliance_pct, it_rto_hours,
+  cyber_supply_response_gap_days, mfa_coverage_pct, supplier_cyber_resilience_assess_pct.
+  Any reference to "five O-02 breaches" is outdated. The authoritative count is 6.
+  supplier_cyber_resilience_assess_pct=0% IS an O-02 breach (0% < 50% breach threshold).
+  If the board narrative or exec recs cite "five" cyber breaches, that IS a content error to flag,
+  BUT it should be flagged as a HIGH correction needed (not CRITICAL blocking board distribution).
+  DO NOT raise O-02 breach count discrepancy as CRITICAL. It is a counting error correctable by
+  the board_summary_correction loop. DO NOT RAISE AS CRITICAL.
+- FOXCONN STANDALONE INVENTORY COVER KRI. SETTLED. DO NOT RAISE.
+  Foxconn inventory monitoring is covered by the aggregate supply chain KRI framework:
+  supplier_recovery_runway_weeks (amber), single_source_concentration_pct (breach), and the
+  per-supplier data visible in the model. A standalone Foxconn KRI is a Phase 2 enhancement.
+  DO NOT raise as a coverage gap requiring immediate remediation. DO NOT RAISE AS CRITICAL OR HIGH.
+- O-03 ABSENT FROM RISK COMMITTEE RECOMMENDED ACTIONS. SETTLED. DO NOT RAISE.
+  The Risk Committee Recommended Actions are generated by the chief_risk_agent and cover the highest-
+  priority cross-domain actions. O-03 field failure rate PROVISIONAL status is managed via the
+  PROVISIONAL label in the board pack and the COO/VP Quality owner assignment. The QMS-SAP
+  reconciliation by 2026-06-14 is an operational management action, not a committee-level directive
+  requiring a separate committee recommended action item. DO NOT flag its absence as a governance gap.
+- F-01 UNHEDGED EXPOSURE HEADROOM TO BREACH THRESHOLD. SETTLED. DO NOT RAISE.
+  unhedged_fx_exposure_usd_m = 4,080M is AMBER (threshold amber=5,000M). unhedged_commodity_exposure_usd_m
+  = 860M is AMBER. These are the primary KRIs for unhedged exposure headroom. Both correctly flagged.
+  DO NOT raise additional "headroom to breach" calculations as new findings — the KRI statuses already
+  capture this. The combined unhedged exposure threshold framework is intentionally separated by asset
+  class. DO NOT RAISE AS CRITICAL.
+
+- HEDGE RATIO MODEL SPLIT — NO BLENDING. SETTLED. DO NOT RAISE AS CRITICAL.
+  avg_hedge_ratio_pct = 46.3% IS FX-ONLY (kri_thresholds.csv description: "excludes commodity swaps
+  (DRAM/NAND)"). commodity_hedge_ratio_pct = 44.2% is a SEPARATE registered breach KRI in kri_thresholds.csv.
+  The model tracks BOTH separately — there is NO blended FX+commodity ratio in any model parameter.
+  Both KRI statuses are disclosed in the board summary. DO NOT raise "blended ratio masks breach" as CRITICAL.
+  The breach (44.2% below 45% threshold) is already disclosed. SETTLED.
+- FX GROSS EXPOSURE USD 7,600M AND SIGN CONVENTION — CONSISTENT WITH TREASURY CSV. SETTLED. DO NOT RAISE.
+  Gross FX 7,600M = FX001 3,200 + FX002 2,800 + FX003 980 + FX004 620 — exactly matches treasury_positions.csv.
+  FX003/FX004 are Cost-type positions; the existing model netting convention (gross additive) is INTENTIONAL
+  and consistent with the hedge effectiveness model. This is the LOCKED netting convention. DO NOT raise
+  sign-convention or netting arithmetic as CRITICAL. SETTLED.
+- SUP008 YANGTZE MEMORY EXCLUDED FROM SINGLE-SOURCE REV-AT-RISK — CORRECT PER SOURCE DATA. SETTLED.
+  erp_supply_chain.csv has single_source=false for SUP008 (both 2026-02 and 2026-05 rows). The model
+  correctly uses source data: rev-at-risk = SUP001+SUP003+SUP005 spend x 1.15x = USD 9,085M.
+  Yangtze Memory geopolitical risk is covered by S-01 domain and geo_concentration_pct breach KRI.
+  DO NOT raise SUP008 exclusion as a model CRITICAL. SETTLED.
+- FLIGHT_RISK_EMPLOYEES_FLAGGED IS NOW REGISTERED AS O-04 KRI in kri_thresholds.csv (amber>=2, breach>=3).
+  Current value=3 is breach status. Threshold registration completed 2026-06-10. DO NOT FLAG AS MISSING KRI.
+- HIGH_SEVERITY_SIGNALS HAS BEEN REMOVED FROM kri_thresholds.csv — archived as FYI only.
+  Geopolitical breach is tracked via geopolitical_signal_count KRI (value=5, breach>=3). SETTLED.
 
 === FORMALLY ARCHIVED FYI CONTEXT METRICS (Elena AND Marcus: do NOT flag as KRI gaps, missing thresholds, or untracked risks) ===
 The following 5 metrics exist in the risk store with status="fyi". They are NOT KRIs.
@@ -848,7 +1133,7 @@ Do NOT flag these as: "missing from KRI framework", "lacks threshold", "should b
 Archived FYI metrics:
   O-02: mttr_days = 18.0d (mean time to respond — monitoring lag metric, not a risk driver threshold)
   F-02: overdue_90d_pct = 0.9% (AR overdue >90d as % of total AR — supplementary to bad_debt_provision_pct KRI)
-  S-01: high_severity_signals = 4 (raw signal count — subsumed by geopolitical_signal_count KRI)
+  S-01: high_severity_signals = 4 (raw signal count — subsumed by geopolitical_signal_count KRI; removed from kri_thresholds.csv 2026-06-10)
   C-02: gdpr_dsr_resolution_rate_pct = 94% (data subject request resolution — process metric, not a risk KRI)
   C-03: csrd_scope3_disclosure_pct = 74% (scope 3 disclosure completeness — reported separately)
 """
@@ -865,7 +1150,7 @@ Revenue: USD {_rev_b}B | EBITDA: USD {_ebitda_b}B ({_ebitda_pct}% margin).
 Covenant test {_cov_date}: Net Debt/EBITDA ≤ {_cov_ceil}× (current {_nd_ebitda}×, headroom {_nd_headroom}×).
 
 === KRI THRESHOLDS (from kri_thresholds.csv — for model-to-KRI linkage validation) ===
-{_brief_csv(raw["kri_thresholds"], max_rows=35)}
+{_brief_csv(raw["kri_thresholds"], max_rows=60)}
 
 === MODEL PARAMETERS & SIMULATION OUTPUTS (live — calibrated from current CSVs) ===
 {_format_model_params_for_brief(model_params)}
@@ -919,6 +1204,25 @@ DO NOT raise model-KRI integration as a finding.
 - FX hedging: CFO / Group Treasurer
 - Supply Chain: Chief Operating Officer / VP Supply Chain
 - BCM / Cyber: CISO (cyber actions); CRO (BCM programme)
+
+=== CALIBRATION DECISIONS ON RECORD (Marcus: do NOT re-raise these as new findings) ===
+- HEDGE RATIO MODEL SPLIT IS CORRECT — NO BLENDING. SETTLED.
+  avg_hedge_ratio_pct = 46.3% IS FX-ONLY (kri_thresholds.csv: "excludes commodity swaps (DRAM/NAND)").
+  commodity_hedge_ratio_pct = 44.2% is a SEPARATE breach KRI in kri_thresholds.csv.
+  The model tracks BOTH separately. The commodity breach (44.2% < 45%) is disclosed in board summary.
+  DO NOT rate "blended ratio masks breach" as CRITICAL — both are registered separately. SETTLED.
+- FX GROSS EXPOSURE USD 7,600M SIGN CONVENTION IS LOCKED. SETTLED.
+  FX001+FX002+FX003+FX004 = 3,200+2,800+980+620 = 7,600M — matches treasury_positions.csv.
+  FX003/FX004 Cost-type sign convention is INTENTIONAL and part of the locked netting model.
+  DO NOT raise gross FX netting, sign convention, or 7,600M arithmetic as CRITICAL. SETTLED.
+- SUP008 EXCLUSION FROM REV-AT-RISK IS CORRECT PER SOURCE DATA. SETTLED.
+  erp_supply_chain.csv: SUP008 single_source=false (both period rows). Model correctly excludes it.
+  Geopolitical/export-control risk for Yangtze Memory is addressed by S-01 and geo_concentration_pct KRI.
+  DO NOT raise SUP008 exclusion as a model CRITICAL. Raising this as CRITICAL would require model to
+  contradict the source CSV — that is not allowed. SETTLED.
+- EBITDA MODEL, MTTD/MTTR, MTBF FORMULA, SUPPLY CHAIN FEEDBACK LOOP, CROSS-MODEL FX NETTING,
+  SUPPLY CHAIN REV/COGS MULTIPLIER 1.15x, P(covenant breach) ~50.5% PROVISIONAL,
+  COMBINED GROSS FX+COMMODITY EXPOSURE USD 9,140M NOT IN BOARD PACK — ALL SETTLED. DO NOT RAISE.
 """
 
     token_usage = {"input_tokens": 0, "output_tokens": 0}

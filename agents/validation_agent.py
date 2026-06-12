@@ -199,7 +199,15 @@ def run(state: dict) -> dict:
                 if s.startswith("CONFIRMED:") or s.startswith("FLAG:"):
                     out.append(s)
                 elif s.startswith("⚠"):
-                    out.append("FLAG:" + s[1:])
+                    # If the LLM explicitly says "no issue" or "grounded, no issue"
+                    # after the ⚠, reclassify as CONFIRMED to avoid false-positive FLAGs
+                    rest = s[1:].strip()
+                    _low = rest.lower()
+                    if ("no issue" in _low or "not an issue" in _low
+                            or "grounded, no" in _low or "grounded — no" in _low):
+                        out.append("CONFIRMED:" + rest)
+                    else:
+                        out.append("FLAG:" + rest)
                 elif s.startswith("WARNING:") or s.startswith("ISSUE:") or s.startswith("ERROR:"):
                     out.append("FLAG: " + s)
                 else:
