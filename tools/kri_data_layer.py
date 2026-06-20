@@ -349,9 +349,15 @@ def _compute_agent_context() -> dict:
     ctx = {}
 
     # F-01: FX P&L + explicit Revenue vs Cost pair breakdown (EM-05 fix)
+    # CRITICAL FIX (2026-06-09): unrealised_pnl_usd_m for F-01 must be FX-ONLY (Revenue+Cost
+    # exposure types). Previously summed ALL rows including commodity (DRAM/NAND) = -47.0M,
+    # causing double-counting bug: financial_agent read -47.0M as "FX" then added -20.4M
+    # commodity again → false total -67.4M. Correct FX-only = -26.6M.
     try:
         tr = read_csv_latest("treasury_positions.csv")
-        pnl = round(sum(float(r.get("unrealised_pnl_usd_m", 0)) for r in tr), 1)
+        _fx_exposure_types = ("Revenue", "Cost")
+        _fx_rows_ctx = [r for r in tr if r.get("exposure_type", "") in _fx_exposure_types]
+        pnl = round(sum(float(r.get("unrealised_pnl_usd_m", 0)) for r in _fx_rows_ctx), 1)  # FX-only
         total_unhedged = round(sum(
             float(r.get("gross_exposure_usd_m", 0)) - float(r.get("hedged_amount_usd_m", 0))
             for r in tr
@@ -752,14 +758,30 @@ def _recompute_ratings(store: dict) -> None:
             print(f"    ↳ {c}")
 
 
-def _write_to_store(dashboard_kris: dict, agent_ctx: dict = None):
+def _write_to_store(dashboard_kris: dict, agent_ctx: dict = None,
+                    qoq_deltas: dict = None):
     """
     Write dashboard KRI values and agent context to risk_store.json.
     Agent context is persisted so kri_validator can independently recompute
     and diff it — keeping agent context inside the same validation loop as KRIs.
+    qoq_deltas: if provided, prior_value fields are written alongside current values,
+    making them available as Tier 1 KRI data for the validation agent.
     Uses file locking to avoid corruption.
     """
     import fcntl
+
+    # Build a lookup of prior values from qoq_deltas for fast access
+    prior_lookup: dict = {}
+    if qoq_deltas and qoq_deltas.get("available"):
+        for m in qoq_deltas.get("movements", []):
+            kn = m.get("kri_name", "")
+            if kn and m.get("prior_value") is not None:
+                prior_lookup[kn] = {
+                    "prior_value":  m["prior_value"],
+                    "prior_period": qoq_deltas.get("period_prior", "FY26Q1 (2026-02-01)"),
+                    "trend":        m.get("trend", ""),
+                }
+
     with open(STORE_PATH, "r+") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         try:
@@ -774,10 +796,24 @@ def _write_to_store(dashboard_kris: dict, agent_ctx: dict = None):
                     if risk_id not in store[bucket]:
                         store[bucket][risk_id] = {"kris": {}}
                     for kri in kri_list:
-                        store[bucket][risk_id]["kris"][kri["name"]] = {
+                        kri_entry: dict = {
                             "value":  kri["value"],
                             "status": kri["status"],
                         }
+                        # Write prior_value if available from qoq_deltas
+                        # This makes prior-period comparisons verifiable as Tier 1 data
+                        pq = prior_lookup.get(kri["name"])
+                        if pq:
+                            kri_entry["prior_value"]  = pq["prior_value"]
+                            kri_entry["prior_period"] = pq["prior_period"]
+                            kri_entry["qoq_trend"]    = pq["trend"]
+                        # Preserve any existing fields that are NOT value/status/prior
+                        # (e.g., description, model_notes, f01_var_analytics written by calibrator)
+                        existing = store[bucket][risk_id]["kris"].get(kri["name"], {})
+                        for ek, ev in existing.items():
+                            if ek not in kri_entry:
+                                kri_entry[ek] = ev
+                        store[bucket][risk_id]["kris"][kri["name"]] = kri_entry
 
             if agent_ctx:
                 store["agent_context"] = agent_ctx
@@ -857,8 +893,8 @@ def run() -> dict:
         "compliance_risks":  com_kris,
     }
 
-    # Write dashboard KRIs and agent context to store
-    _write_to_store(dashboard_kris, agent_ctx)
+    # Write dashboard KRIs and agent context to store (include qoq_deltas for prior_value writes)
+    _write_to_store(dashboard_kris, agent_ctx, qoq_deltas=qoq_deltas)
 
     # Build summary
     all_kris = [k for domain in dashboard_kris.values()

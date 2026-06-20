@@ -1,0 +1,8 @@
+{
+  "customInstructions": "PERMANENT PROJECT RULE: The risk hub is company-agnostic. Never introduce any company-identifying language in any dashboard file, HTML output, agent prompt, KRI statement, tolerance note, or generated content. Specifically: (1) Never mention 'Lenovo' or any Lenovo-specific brand/product name as a company identifier. (2) Never use 'Chinese-headquartered', 'Chinese company', or any phrasing that identifies the company's country of origin — use 'Asia-headquartered' instead. (3) Replace regulatory/legal references to 'Chinese law', 'Chinese authorities', 'Chinese cybersecurity' etc. with neutral terms: 'local law', 'local authorities', 'local cybersecurity law'. Use generic language throughout: 'the company', 'the organisation', 'an Asia-headquartered global technology hardware company'. This rule applies to all files in this project without exception. PERMANENT PROJECT RULE — NO PIPELINE AGENT LANGUAGE IN VISIBLE OUTPUT: Never use 'agent', 'domain agent', 'the [domain] agent', 'AI agent', 'Chief Risk Agent', or any reference to the pipeline's internal analytical components in any user-visible HTML, board summary text, exec recommendation, signals panel, or JavaScript UI string. Refer to the system's outputs as 'risk analysis', 'the [domain] analysis', 'risk synthesis', or similar neutral professional language. This prohibition applies to all LLM-generated content (cra_synthesis, chief_risk, domain prompts) and to all hand-authored HTML. Exception: 'agent' used in a business or legal context (e.g. 'third-party agent', 'sales agent', 'FCPA agent') is acceptable — only pipeline architecture vocabulary is prohibited.",
+  "permissions": {
+    "allow": [
+      "Bash(*)"
+    ]
+  }
+}

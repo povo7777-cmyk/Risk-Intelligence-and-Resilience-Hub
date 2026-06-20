@@ -1006,9 +1006,15 @@ _KRD_TITLE_RULES = [
                                                                     'Covenant & Lender Risk'),
     (r'hedge.*ratio|FX.*unrealised|unrealised.*FX|portfolio.*loss|commodity.*deriv',
                                                                     'Portfolio Loss Exposure'),
-    (r'bad.debt|debt.*provision|receivable|overdue|credit.quality', 'Receivables Deterioration'),
-    (r'cyber|MTTD|mean.time.to.detect|detection.gap|SIEM|patch.compliance',
-                                                                    'Cyber Detection Gap'),
+    # Combined cyber+supply chain cascade — must appear before standalone cyber or supply chain
+    (r'cyber.*supply.chain|supply.chain.*cyber|supplier.*cyber|cyber.*supplier.*disrupt',
+                                                                    'Cyber-Supply Chain Cascade'),
+    # Cyber controls — "overdue" here means access reviews, NOT receivables
+    (r'MTTD|mean.time.to.detect|patch.compliance|privileged.access|cyber.resilience.assess',
+                                                                    'Cyber Control Failures'),
+    (r'cyber|detection.gap|SIEM',                                   'Cyber Detection Gap'),
+    (r'bad.debt|debt.*provision|receivable|AR.*overdue|overdue.*invoice|credit.quality',
+                                                                    'Receivables Deterioration'),
     (r'supply.chain|single.source|Quanta|TSMC|Foxconn|inventory.cover|supplier.distress',
                                                                     'Supply Chain Concentration'),
     (r'talent|attrition|flight.risk|succession|open.roles|R&D.departure',

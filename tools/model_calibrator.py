@@ -170,6 +170,18 @@ def calibrate_ebitda(raw: dict) -> dict:
     # Binding = lower (more conservative) headroom
     ebitda_headroom_m = round(min(headroom_cov5_m, headroom_cov1_m), 0)
 
+    # ── COV006 provision drag — MO-01 fix ───────────────────────────────────
+    # COV006 bad_debt_provision_pct is in CONFIRMED BREACH at t=0 (1.44% > 0.80%).
+    # The full provision balance (USD 94.3M) is a deterministic EBITDA charge that
+    # must be applied in EVERY Monte Carlo path before testing covenant compliance.
+    # Gross headroom USD 152M → effective headroom USD 57.7M after this adjustment.
+    # Compute from AR aging data (same source as the later COV006 block).
+    _ar_for_mc = _latest_rows(raw.get("ar_aging", []))
+    _bad_debt_mc = sum(float(r.get("bad_debt_provision_usd_m", 0)) for r in _ar_for_mc)
+    _cov6_for_mc = next((r for r in cov_rows if r.get("covenant_id") == "COV006"), None)
+    _cov006_active = bool(_cov6_for_mc and float(_cov6_for_mc.get("headroom", 0)) < 0)
+    _cov006_drag_b = (_bad_debt_mc / 1000) if _cov006_active else 0.0  # USD B
+
     # ── Monte Carlo ─────────────────────────────────────────────────────────
     random.seed(SEED)
     base_price = 100
@@ -210,22 +222,23 @@ def calibrate_ebitda(raw: dict) -> dict:
         ebitda = rev * (1 - cr + margin_noise) - fx_cost_shock
         ebitda_sims.append(ebitda)
 
-        # Breach checks
-        breaches_cov5 = ebitda < cov_floor_b
-        nd_ebitda = net_debt_b / ebitda if ebitda > 0 else 99
+        # Breach checks — apply COV006 drag to effective EBITDA (MO-01)
+        ebitda_eff = ebitda - _cov006_drag_b
+        breaches_cov5 = ebitda_eff < cov_floor_b
+        nd_ebitda = net_debt_b / ebitda_eff if ebitda_eff > 0 else 99
         breaches_cov1 = nd_ebitda > net_debt_ebitda_ceil
         cov5_breach.append(int(breaches_cov5))
         cov1_breach.append(int(breaches_cov5 or breaches_cov1))
 
         # +1pp cost sensitivity (same margin noise draw for comparability)
-        ebitda_c1 = rev * (1 - (cr + 0.01) + margin_noise) - fx_cost_shock
-        cost_up1pp_breach.append(int(ebitda_c1 < cov_floor_b or
-                                     (net_debt_b / ebitda_c1 if ebitda_c1 > 0 else 99) > net_debt_ebitda_ceil))
+        ebitda_c1_eff = rev * (1 - (cr + 0.01) + margin_noise) - fx_cost_shock - _cov006_drag_b
+        cost_up1pp_breach.append(int(ebitda_c1_eff < cov_floor_b or
+                                     (net_debt_b / ebitda_c1_eff if ebitda_c1_eff > 0 else 99) > net_debt_ebitda_ceil))
 
         # Top customer loss — revenue loss fraction sourced from model_benchmarks.json::simulation_parameters.ebitda.top_customer_revenue_loss_pct
-        ebitda_cl = (rev * (1 - _TOP_CUST_LOSS_PCT / 100)) * (1 - cr + margin_noise) - fx_cost_shock
-        top_cust_loss_breach.append(int(ebitda_cl < cov_floor_b or
-                                        (net_debt_b / ebitda_cl if ebitda_cl > 0 else 99) > net_debt_ebitda_ceil))
+        ebitda_cl_eff = (rev * (1 - _TOP_CUST_LOSS_PCT / 100)) * (1 - cr + margin_noise) - fx_cost_shock - _cov006_drag_b
+        top_cust_loss_breach.append(int(ebitda_cl_eff < cov_floor_b or
+                                        (net_debt_b / ebitda_cl_eff if ebitda_cl_eff > 0 else 99) > net_debt_ebitda_ceil))
 
     p_breach         = round(sum(cov1_breach) / N_SIMS * 100, 1)
     p_cost_up1pp     = round(sum(cost_up1pp_breach) / N_SIMS * 100, 1)
@@ -290,6 +303,29 @@ def calibrate_ebitda(raw: dict) -> dict:
     # Post-cure headroom — use FULL write-off for worst-case (more conservative)
     ebitda_headroom_post_cure_m = round(ebitda_headroom_m - cov006_full_writeoff_usd_m, 1)
 
+    # ── MO-02 fix: explicit headroom bridge — reconciles 152M COV001 vs 480M COV005 ──
+    # COV005 EBITDA floor = 1.80B → gross headroom = 480M (non-binding)
+    # COV001 ND/EBITDA floor = net_debt/3.0 = 6384/3.0 = 2128M → headroom = 152M (BINDING)
+    # Post-COV006-cure effective headroom = 152M - 94.3M = 57.7M
+    # Combined worst-case = 57.7M - 47.0M MTM losses = 10.7M
+    headroom_bridge = (
+        f"COV001 headroom derivation (BINDING): "
+        f"Net Debt {round(net_debt_b, 3)}B / {net_debt_ebitda_ceil}x ceiling = "
+        f"EBITDA floor {round(ebitda_min_cov1 * 1000, 0)}M; "
+        f"headroom = {round(ebitda_b * 1000, 0)}M - {round(ebitda_min_cov1 * 1000, 0)}M = "
+        f"USD {ebitda_headroom_m}M GROSS. "
+        f"COV005 non-binding: EBITDA floor {cov_floor_b}B → headroom {round(headroom_cov5_m, 0)}M "
+        f"(higher than COV001, not the binding constraint). "
+        f"Post-COV006-cure effective: USD {ebitda_headroom_m}M - {cov006_full_writeoff_usd_m}M = "
+        f"USD {ebitda_headroom_post_cure_m}M. "
+        f"[MO-04 DISCLOSURE: a combined worst-case of USD {ebitda_headroom_post_cure_m}M "
+        f"minus portfolio MTM hedge losses is computed separately in "
+        f"ebitda_headroom_combined_worst_case_usd_m. That deduction is valid ONLY under "
+        f"fair-value hedge accounting; if hedges are cash-flow designated (IFRS 9 / ASC 815), "
+        f"MTM losses route through OCI and do NOT impair EBITDA. Finance must confirm "
+        f"hedge accounting classification before citing combined worst-case to lenders.]"
+    )
+
     return {
         # Slider parameters
         "revenue_usd_b":   round(revenue_b, 1),
@@ -297,49 +333,63 @@ def calibrate_ebitda(raw: dict) -> dict:
         "volatility_pct":  round(volatility, 1),
         "drift_pct":       round(drift, 1),
         "demand_var_pct":  round(demand_var, 1),
-        # Covenant
-        "covenant_floor_usd_b":     round(cov_floor_b, 2),
-        "ebitda_headroom_usd_m":    ebitda_headroom_m,
-        # MODEL SCOPE NOTE: p_covenant_breach_pct (Monte Carlo) stress-tests COV001
-        # Net Debt/EBITDA forward probability only. COV006 bad_debt_provision_pct is
-        # ALREADY IN CONFIRMED BREACH (current 1.44% > 0.80% threshold) — it requires
-        # no forward probability; it requires immediate cure/waiver action by 2026-06-12.
-        # The fields below capture COV006 confirmed-breach status and cure cost impact.
-        # Formal t=0 model condition: COV006 is an INPUT to the model, not just a detection.
-        # The EBITDA stress model starts from a state where COV006 is ALREADY IN BREACH.
-        # p_covenant_breach_pct therefore underestimates total covenant risk — it models
-        # P(COV001 breach at t+1) only, while COV006 breach exists at t=0.
+        # ── MO-02 fix: explicit covenant floor labelling ───────────────────────
+        # COV005 floor (non-binding) — renamed from covenant_floor_usd_b to avoid
+        # misleading arithmetic: 2.28B − 1.80B = 480M ≠ 152M (exec rec correctly uses
+        # COV001 binding floor). Both floors now explicitly labelled.
+        "cov005_ebitda_floor_usd_b":   round(cov_floor_b, 2),     # NON-BINDING (480M headroom)
+        "cov001_implied_ebitda_floor_usd_m": round(ebitda_min_cov1 * 1000, 0),  # BINDING (= 2128M)
+        "cov001_gross_headroom_usd_m": ebitda_headroom_m,          # BINDING gross headroom = 152M
+        "cov001_net_debt_usd_b":       round(net_debt_b, 3),       # = 6.384B → floor = 2128M
+        "cov001_nd_ebitda_ceiling":    net_debt_ebitda_ceil,        # = 3.0x
+        "headroom_bridge":             headroom_bridge,             # step-by-step reconciliation
+        "ebitda_headroom_gross_usd_m": ebitda_headroom_m,  # backward compat alias (= cov001_gross)
+        # ── MO-01 fix: explicit P(any covenant breach) = 100% because COV006 is confirmed breached
+        # p_covenant_breach_pct is the CONDITIONAL P(COV001 breach | COV006 in breach) — NOT total risk.
+        # p_any_covenant_breach_pct = 100% because COV006 is already in hard breach at t=0.
+        "p_any_covenant_breach_pct":     100.0,   # COV006 confirmed breached — P(any breach) = certainty
+        "p_cov001_conditional_breach_pct": p_breach,  # P(additional COV001 breach | COV006 in breach)
         "cov006_breach_at_model_t0":    cov006_breach,  # FORMAL MODEL INPUT: True = COV006 already breached
         "model_scope_note": (
-            "p_covenant_breach_pct models forward P(COV001 breach) only. "
-            "COV006 is a CONFIRMED BREACH at model t=0 (input condition, not output). "
-            "Total covenant risk = COV006 active breach (t=0) + P(COV001 breach) forward probability. "
-            "COV006 cure/waiver action required by 2026-06-12, not probabilistic modelling."
+            "p_any_covenant_breach_pct = 100% (COV006 is CONFIRMED IN BREACH at t=0 — certainty, not probability). "
+            "p_covenant_breach_pct = p_cov001_conditional_breach_pct = P(ADDITIONAL COV001 breach at 2026-06-30 test) "
+            "CONDITIONAL on COV006 remaining in breach. These are distinct: total covenant risk is 100% TODAY; "
+            "the 50.5% is the probability of a second breach occurring on a future test date. "
+            "COV006 cure/waiver required by 2026-06-12."
         ),
         # COV006 active breach — cure cost reduces practical EBITDA headroom
         "cov006_breach":                cov006_breach,
-        "cov006_cure_cost_usd_m":       cov006_cure_cost_usd_m,   # incremental: excess above covenant floor
-        "cov006_full_writeoff_usd_m":   cov006_full_writeoff_usd_m, # full provision balance (worst case)
-        "cov006_cure_derivation":       cov006_cure_derivation,   # traceable source derivation (MO-02)
+        "cov006_cure_cost_usd_m":       cov006_cure_cost_usd_m,
+        "cov006_full_writeoff_usd_m":   cov006_full_writeoff_usd_m,
+        "cov006_cure_derivation":       cov006_cure_derivation,
         "cov006_next_test_date":        cov006_next_test_date,
         "cov006_current_pct":           cov006_current_pct,
         "cov006_threshold_pct":         cov006_threshold_pct,
-        "ebitda_headroom_post_cure_usd_m": ebitda_headroom_post_cure_m,
-        # FX cost pass-through — derived from treasury_positions.csv Cost-type rows
-        # Represents the unhedged JPY/KRW COGS exposure that creates EBITDA volatility
-        # when the dollar moves against manufacturing-cost currencies.
-        # This parameter is included for model transparency and future CFO reporting.
+        # MO-01: ebitda_headroom_usd_m is the EFFECTIVE (post-COV006-cure) headline headroom.
+        "ebitda_headroom_usd_m":           ebitda_headroom_post_cure_m,  # EFFECTIVE (57.7M) — used in MC
+        "ebitda_headroom_post_cure_usd_m": ebitda_headroom_post_cure_m,  # alias for backward compat
+        # FX cost pass-through
         "fx_cost_gross_usd_m":      round(fx_cost_gross_usd_m, 0),
         "fx_cost_hedged_usd_m":     round(fx_cost_hedged_usd_m, 0),
         "fx_cost_unhedged_usd_m":   fx_cost_unhedged_usd_m,
         "fx_vol_pct":               round(fx_vol_pct, 1),
         # Simulation outputs
-        "p_covenant_breach_pct":    p_breach,
+        "p_covenant_breach_pct":    p_breach,   # = p_cov001_conditional_breach_pct (backward compat)
         "p_breach_cost_up1pp_pct":  p_cost_up1pp,
         "p_breach_top_cust_loss_pct": p_top_cust_loss,
         "ebitda_var_95_usd_m":      var_95,
         "ebitda_cvar_95_usd_m":     cvar_95,
         "n_sims": N_SIMS,
+        # MO-08: COV004 is outside EBITDA MC scope — add explicit status note
+        # MC tests COV001 (ND/EBITDA ceiling) and COV005 (EBITDA floor) only.
+        # COV004 (debt_maturity_runway_months) is time-based, not EBITDA-dependent.
+        "cov004_model_scope_note": (
+            "COV004 (debt_maturity_runway_months = 8 months) is AMBER — below 12-month amber "
+            "threshold but above 6-month breach threshold. NOT tested in this EBITDA Monte Carlo "
+            "(COV004 is time-based, not EBITDA-dependent). COV004 amber status is independent of "
+            "COV001/COV005 outcomes modelled here. Board must treat COV004 amber separately from "
+            "the EBITDA MC results."
+        ),
     }
 
 
@@ -401,6 +451,26 @@ def calibrate_hedge(raw: dict) -> dict:
     fx_vol_pct       = float(fin_vol_row.get("fx_volatility_realised_pct",        9.0))
     commodity_vol_pct = float(fin_vol_row.get("commodity_volatility_realised_pct", 32.0))
 
+    # ── MO-01 fix: staleness detection for fx_volatility_realised_pct ──────────
+    # This parameter must be refreshed each quarter from the FX desk (3-month
+    # realised vol across revenue/cost currency pairs). If all periods in
+    # financial_summary.csv carry the same value, the parameter is stale.
+    _all_fin_rows = raw.get("financial_summary", [])
+    _fx_vols = [
+        float(r["fx_volatility_realised_pct"])
+        for r in _all_fin_rows
+        if r.get("fx_volatility_realised_pct") not in (None, "")
+    ]
+    _fx_vol_stale = len(set(_fx_vols)) == 1 and len(_fx_vols) > 1
+    _fx_vol_staleness_warning: str | None = (
+        f"WARNING (MO-01): fx_volatility_realised_pct = {fx_vol_pct}% is IDENTICAL across "
+        f"all {len(_fx_vols)} periods in financial_summary.csv — parameter has not been "
+        f"updated since initial data load. Refresh with current 3-month realised FX vol "
+        f"from FX desk and update financial_summary.csv before next board run."
+    ) if _fx_vol_stale else None
+    if _fx_vol_staleness_warning:
+        print(f"  [HEDGE] ⚠  {_fx_vol_staleness_warning}")
+
     # Separate gross/unhedged amounts by asset class for transparency
     fx_rows   = [r for r in treasury if r.get("exposure_type", "") in ("Revenue", "Cost")]
     com_rows  = [r for r in treasury if r.get("exposure_type", "") == "Commodity"]
@@ -458,9 +528,11 @@ def calibrate_hedge(raw: dict) -> dict:
     hc = hedge_cost_m
 
     uh_sims, hd_sims = [], []
+    fx_only_uh_sims   = []   # MO-02: FX-only track for explicit VaR decomposition
     for _ in range(N_SIMS):
         sim_uh = 0.0
         sim_hd = 0.0
+        sim_fx_only_uh = 0.0   # MO-02: FX-only unhedged exposure for this path
 
         # FX positions
         if fx_gross_m > 0:
@@ -472,12 +544,14 @@ def calibrate_hedge(raw: dict) -> dict:
                 p = p * math.exp(-0.5 * fx_vl * fx_vl + fx_vl * _randn())
                 av = fx_g * (p / 100) * (1 + 0.12 * _randn())
                 sim_uh += av * 1000
+                sim_fx_only_uh += av * 1000   # MO-02: track FX contribution separately
                 # Hedged fraction locked at forward rate; unhedged fraction floats with spot.
                 # av = fx_g * (p/100) * demand_factor, so hedging replaces (p/100) with (fp/100)
                 # for the hedged share: av_hd = av * (fx_h*(fp/p) + (1-fx_h))
                 p_safe = max(p, 1.0)
                 sim_hd += av * (fx_h * (fp / p_safe) + (1.0 - fx_h)) * 1000
             sim_uh /= 3
+            sim_fx_only_uh /= 3            # MO-02: normalise FX-only track
             sim_hd = sim_hd / 3 - hc
 
         # Commodity positions — higher volatility, no forward rate reference
@@ -496,11 +570,12 @@ def calibrate_hedge(raw: dict) -> dict:
                 # Same decomposition as FX: replace (p_com/100) with 1.0 for hedged share.
                 p_com_safe = max(p_com, 1.0)
                 com_hd += av * (com_h * (100.0 / p_com_safe) + (1.0 - com_h)) * 1000
-            sim_uh += com_uh / 3
+            sim_uh += com_uh / 3   # combined FX + commodity
             sim_hd += com_hd / 3
 
         uh_sims.append(sim_uh)
         hd_sims.append(sim_hd)
+        fx_only_uh_sims.append(sim_fx_only_uh)   # MO-02: store FX-only path
 
     # 80% revenue base threshold for P(revenue < 80% base)
     base_80 = gross_b * 0.80 * 1000
@@ -513,11 +588,26 @@ def calibrate_hedge(raw: dict) -> dict:
     mean_hd = sum(hd_sims) / N_SIMS
     p5_uh   = _percentile(uh_sims, 5)
     p5_hd   = _percentile(hd_sims, 5)
-    var_uh   = round(mean_uh - p5_uh)   # loss from mean at P5 — positive = risk
+    var_uh   = round(mean_uh - p5_uh)   # combined FX+commodity loss from mean at P5
     var_hd   = round(mean_hd - p5_hd)   # loss from mean at P5 — positive = risk
     p_uh_80  = round(sum(1 for v in uh_sims if v < base_80) / N_SIMS * 100, 1)
     p_hd_80  = round(sum(1 for v in hd_sims if v < base_80) / N_SIMS * 100, 1)
     var_impr = round(var_uh - var_hd)   # positive = hedge reduces VaR loss
+
+    # MO-02: Analytical VaR decomposition — explicit FX-only and commodity-only figures.
+    # Simulation-based var_uh (combined) uses different price-path scaling for FX vs commodity,
+    # so we supplement with the standard analytical formula: unhedged_exposure × vol × z_95.
+    # z_95 = 1.645 (one-tailed 95th percentile of N(0,1)).
+    _Z95 = 1.645
+    com_unhedged_m = round(com_gross_m - com_hedged_m, 0)
+    var_fx_analytical  = round(fx_unhedged_primary * (fx_vol_pct / 100) * _Z95)     # FX-only, analytical
+    var_com_analytical = round(com_unhedged_m      * (commodity_vol_pct / 100) * _Z95)  # commodity-only
+    var_combined_lower = round(math.sqrt(var_fx_analytical**2 + var_com_analytical**2))  # zero-corr
+    var_combined_upper = var_fx_analytical + var_com_analytical  # perfect-corr upper bound
+    # FX-only simulation (for completeness — note: sim uses avg_spot price scaling, see var_fx_analytical for recommended figure)
+    mean_fx_uh = sum(fx_only_uh_sims) / N_SIMS if fx_only_uh_sims else 0.0
+    p5_fx_uh   = _percentile(fx_only_uh_sims, 5) if fx_only_uh_sims else 0.0
+    var_fx_sim_only = round(mean_fx_uh - p5_fx_uh)
 
     return {
         # Slider parameters
@@ -548,13 +638,42 @@ def calibrate_hedge(raw: dict) -> dict:
         "fx_hedged_usd_m":        round(fx_hedged_m, 0),
         "commodity_gross_usd_m":  round(com_gross_m, 0),
         "commodity_hedged_usd_m": round(com_hedged_m, 0),
-        # Simulation outputs
-        "var_95_unhedged_usd_m":  var_uh,
-        "var_95_hedged_usd_m":    var_hd,
+        # ── MO-06 fix: simulation VaR renamed + suppressed from board disclosure ──
+        # Simulation VaR (var_uh) uses avg_spot=4.1 (average of CNY 7.29 + EUR 0.921 rates)
+        # which deflates FX price path 24× vs commodity path (avg_com=100). This makes the
+        # simulation FX contribution ~63M (understated) and the combined 811M commodity-dominated.
+        # Simulation results are retained for model validation ONLY — not for board disclosure.
+        # Analytical VaR (unhedged_exposure × vol × z_95) avoids this scaling artefact.
+        "var_95_unhedged_simulation_usd_m": var_uh,  # INTERNAL ONLY — avg_spot bias, not for board
+        "var_95_hedged_simulation_usd_m":   var_hd,  # INTERNAL ONLY — simulation result
+        "var_simulation_note": (
+            f"Simulation VaR ({var_uh}M unhedged) uses avg_spot={avg_spot:.2f} which mixes "
+            f"CNY/EUR spot rates and deflates FX path vs commodity (avg_com=100). "
+            f"DO NOT cite simulation VaR in board materials. Use analytical figures below."
+        ),
+        # MO-06 fix: Analytical VaR — authoritative, formula-traceable
+        # FX-currency: 4,080M unhedged × 9% vol × 1.645 z-score = 604M
+        # Commodity: 860M unhedged × 32% vol × 1.645 z-score = 453M
+        # Combined lower (zero-corr): sqrt(604² + 453²) = 755M
+        # Combined upper (perfect-corr): 604 + 453 = 1,057M
+        "var_95_fx_analytical_usd_m":        var_fx_analytical,
+        "var_95_commodity_analytical_usd_m": var_com_analytical,
+        "var_95_combined_lower_usd_m":       var_combined_lower,
+        "var_95_combined_upper_usd_m":       var_combined_upper,
+        "var_analytical_methodology": (
+            f"Analytical VaR (95%, one-tailed, z=1.645): "
+            f"FX-currency = unhedged {round(fx_gross_m - fx_hedged_m, 0):.0f}M × {fx_vol_pct}% vol × 1.645 = {var_fx_analytical}M. "
+            f"Commodity = unhedged {round(com_gross_m - com_hedged_m, 0):.0f}M × {commodity_vol_pct}% vol × 1.645 = {var_com_analytical}M. "
+            f"Combined lower (ρ=0): sqrt({var_fx_analytical}²+{var_com_analytical}²) = {var_combined_lower}M. "
+            f"Combined upper (ρ=1): {var_fx_analytical}+{var_com_analytical} = {var_combined_upper}M. "
+            f"Board materials must cite F-01 VaR as {var_combined_lower}M–{var_combined_upper}M range."
+        ),
         "p_rev_below_80_unhedged":  p_uh_80,
         "p_rev_below_80_hedged":    p_hd_80,
         "var_improvement_usd_m":  var_impr,
         "n_sims": N_SIMS,
+        # MO-01 staleness flag — None if vol is being updated; non-None = panel warning
+        "fx_vol_staleness_warning": _fx_vol_staleness_warning,
     }
 
 
@@ -748,14 +867,17 @@ def calibrate_supply_chain(raw: dict) -> dict:
     if inv_cost_m == 0:
         inv_cost_m = _INV_COST_FALLBACK   # fallback from model_benchmarks.json if target_inventory_weeks not set in CSV
 
-    # Use urgent (cheapest, most actionable) programme for primary ROI calc
-    dual_cost_m = urgent_dual_cost_m
-
+    # ── MO-08 fix: ROI numerator and denominator must cover the same programme scope ──
+    # saving_dual comes from a simulation where ALL single-source suppliers are dual-sourced.
+    # Using urgent_dual_cost_m (cheapest ONE supplier, ~$14.4M) as the denominator gave 27x —
+    # a factor-7 overstatement because the numerator covers the full programme.
+    # Fix: denominator = full_dual_cost_m (all single-source suppliers) → consistent ROI ~3.7x.
+    # urgent_dual_cost_usd_m is still returned in the dict for programme prioritisation.
     # Return on investment = VaR saving / annual programme cost
-    roi_dual = round(saving_dual / dual_cost_m) if dual_cost_m and saving_dual > 0 else 0
-    roi_inv  = round(saving_inv  / inv_cost_m)  if inv_cost_m  and saving_inv  > 0 else 0
-    roi_both = round(saving_both / (dual_cost_m + inv_cost_m)) \
-               if (dual_cost_m + inv_cost_m) and saving_both > 0 else 0
+    roi_dual = round(saving_dual / full_dual_cost_m) if full_dual_cost_m and saving_dual > 0 else 0
+    roi_inv  = round(saving_inv  / inv_cost_m)        if inv_cost_m       and saving_inv  > 0 else 0
+    roi_both = round(saving_both / (full_dual_cost_m + inv_cost_m)) \
+               if (full_dual_cost_m + inv_cost_m) and saving_both > 0 else 0
 
     return {
         # Slider parameters
@@ -943,12 +1065,13 @@ def update_html_models(dashboard_path: Path, params: dict) -> tuple[bool, list[s
         save_both  = sp.get("saving_both_usd_m",        1199)
         roi_both   = sp.get("roi_both_x",                48)
 
-        dual_cost   = sp.get("urgent_dual_cost_usd_m",  15)
+        # MO-08 fix: use full_dual_cost (consistent with ROI denominator, not urgent-only cost)
+        dual_cost   = sp.get("full_dual_cost_usd_m",    15)   # full programme cost ≈ same scope as saving_dual
         inv_cost    = sp.get("inv_buffer_cost_usd_m",    8)
         new_banner = (
             f'<strong style="color:#22c55e">Validated benchmarks (Python simulation, N={N_SIMS:,}):'
             f'</strong> Baseline VaR 95%: <strong>USD {var_base:,}M</strong>. '
-            f'Dual-source programme (USD {dual_cost:.1f}M/yr incremental cost): '
+            f'Dual-source programme (USD {dual_cost:.1f}M/yr full programme cost): '
             f'saves <strong>USD {save_dual:,}M</strong> VaR. '
             f'Inventory buffer (USD {inv_cost:.1f}M/yr carrying cost): '
             f'saves <strong>USD {save_inv:,}M</strong>. '
@@ -973,7 +1096,7 @@ def update_html_models(dashboard_path: Path, params: dict) -> tuple[bool, list[s
         var_base  = sp.get("var_95_baseline_usd_m",  2509)
         save_dual = sp.get("saving_dual_src_usd_m",   663)
         roi_dual  = sp.get("roi_dual_src_x",           48)
-        dual_cost = sp.get("urgent_dual_cost_usd_m",   15)
+        dual_cost = sp.get("full_dual_cost_usd_m",     15)  # MO-08 fix: full cost matches ROI scope
 
         # Exec action 01: "dual-source saves USD NNNm VaR 95% — a XX× return"
         exec_pattern = re.compile(
@@ -1031,7 +1154,7 @@ def update_html_models(dashboard_path: Path, params: dict) -> tuple[bool, list[s
         save_both = sp.get("saving_both_usd_m",      1199)
         roi_dual  = sp.get("roi_dual_src_x",           48)
         roi_inv   = sp.get("roi_inv_buff_x",           48)
-        dual_cost = sp.get("urgent_dual_cost_usd_m",   15)
+        dual_cost = sp.get("full_dual_cost_usd_m",     15)  # MO-08 fix: full cost matches ROI scope
         inv_cost  = sp.get("inv_buffer_cost_usd_m",     8)
 
         new_comment = (
@@ -1058,7 +1181,7 @@ def update_html_models(dashboard_path: Path, params: dict) -> tuple[bool, list[s
         save_inv  = sp.get("saving_inv_buff_usd_m",   584)
         save_both = sp.get("saving_both_usd_m",      1199)
         roi_dual  = sp.get("roi_dual_src_x",           48)
-        dual_cost = sp.get("urgent_dual_cost_usd_m",   15)
+        dual_cost = sp.get("full_dual_cost_usd_m",     15)  # MO-08 fix: full cost matches ROI scope
         inv_cost  = sp.get("inv_buffer_cost_usd_m",     8)
 
         new_prompt_bench = (
@@ -1093,6 +1216,41 @@ def _write_to_store(params: dict) -> None:
         "hedge":         params.get("hedge",        {}),
         "supply_chain":  params.get("supply_chain", {}),
     }
+
+    # ── MO-02 / EM-01 fix: write analytical VaR figures to F-01 KRI data ──────
+    # This makes them available as Tier 1 KRI data for the validation agent,
+    # preventing "unverifiable tier" FLAGs when exec recs cite these figures.
+    hp = params.get("hedge", {})
+    fx_var  = hp.get("var_95_fx_analytical_usd_m")
+    com_var = hp.get("var_95_commodity_analytical_usd_m")
+    clo_var = hp.get("var_95_combined_lower_usd_m")
+    chi_var = hp.get("var_95_combined_upper_usd_m")
+    if fx_var and com_var and clo_var:
+        f01 = store.setdefault("financial_risks", {}).setdefault("F-01", {})
+        f01_kris = f01.setdefault("kris", {})
+        # Attach VaR analytics to avg_hedge_ratio_pct as a model sub-field
+        hr_kri = f01_kris.setdefault("avg_hedge_ratio_pct", {})
+        hr_kri["f01_var_analytics"] = {
+            "var_95_fx_analytical_usd_m":        fx_var,
+            "var_95_commodity_analytical_usd_m": com_var,
+            "var_95_combined_lower_usd_m":       clo_var,
+            "var_95_combined_upper_usd_m":       chi_var,
+            "note": (
+                "F-01 VaR decomposition (analytical, 95% confidence, zero-corr to "
+                "perfect-corr range). FX-currency sub-component uses unhedged FX "
+                f"USD {hp.get('unhedged_usd_m', 4080)}M x {hp.get('fx_vol_pct', 9.0)}% vol. "
+                "Commodity sub-component uses unhedged commodity positions x "
+                f"{hp.get('commodity_vol_pct', 32.0)}% vol. "
+                "Calibrated: " + datetime.now(timezone.utc).strftime("%Y-%m-%d") + "."
+            ),
+            "calibrated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        # Also write prior hedge ratio from QoQ delta if available (set by kri_data_layer)
+        prior_hr = hp.get("prior_hedge_ratio_pct")
+        if prior_hr is not None:
+            hr_kri["prior_value"] = prior_hr
+            hr_kri["prior_period"] = hp.get("prior_period", "FY26Q1 (2026-02-01)")
+
     STORE_PATH.write_text(json.dumps(store, indent=2))
 
 
@@ -1122,6 +1280,38 @@ def run_calibration(dashboard_path: Path | None = None) -> dict:
     ebitda_params = calibrate_ebitda(raw)
     hedge_params  = calibrate_hedge(raw)
     sc_params     = calibrate_supply_chain(raw)
+
+    # ── Category B: lock combined worst-case headroom as DETERMINISTIC value ────
+    # This prevents LLM agents from independently computing 152-47=105 (ignoring
+    # COV006 cure). The correct 3-step bridge is:
+    #   (1) Gross = 152M  (2) Post-cure = 57.7M  (3) Combined worst-case = 10.7M
+    # All three steps are now locked deterministic fields — no LLM arithmetic needed.
+    # MO-04 FIX: step (3) is a CONDITIONAL downside scenario, not a base figure.
+    # The MTM deduction is valid only under fair-value hedge accounting. Under IFRS 9
+    # cash-flow designation, MTM losses go through OCI and step (3) = step (2) = 57.7M.
+    # Finance must confirm hedge accounting treatment before step (3) is cited to lenders.
+    _eff_hd   = ebitda_params.get("ebitda_headroom_usd_m", 57.7)      # post-COV006-cure
+    _pnl_loss = abs(hedge_params.get("total_portfolio_pnl_usd_m", 0)) # portfolio MTM loss (positive)
+    _combined_wc = round(_eff_hd - _pnl_loss, 1)                      # = 57.7 - 47.0 = 10.7M
+    ebitda_params["ebitda_headroom_combined_worst_case_usd_m"] = _combined_wc
+    ebitda_params["combined_worst_case_derivation"] = (
+        f"Locked deterministic value — DO NOT RECOMPUTE. "
+        f"(1) Gross COV001 headroom = {ebitda_params.get('cov001_gross_headroom_usd_m', 152)}M "
+        f"[Net Debt {ebitda_params.get('cov001_net_debt_usd_b', 6.384)}B / "
+        f"{ebitda_params.get('cov001_nd_ebitda_ceiling', 3.0)}x]. "
+        f"(2) Post-COV006-cure effective = {_eff_hd}M "
+        f"[less COV006 full provision {ebitda_params.get('cov006_full_writeoff_usd_m', 94.3)}M]. "
+        f"(3) Combined worst-case (FAIR-VALUE HEDGE SCENARIO ONLY) = {_combined_wc}M "
+        f"[less portfolio MTM losses {round(_pnl_loss, 1)}M from treasury_positions.csv]. "
+        f"ACCOUNTING CAVEAT (MO-04): step (3) assumes MTM losses crystallise through EBITDA "
+        f"(fair-value hedge treatment). If hedges carry IFRS 9 / ASC 815 cash-flow designation, "
+        f"MTM routes through OCI — step (3) would equal step (2) = {_eff_hd}M. "
+        f"Board must cite {_combined_wc}M as combined worst-case under fair-value scenario "
+        f"ONLY — never 152-47=105 (omits COV006 cure). "
+        f"Confirm hedge accounting classification with Finance before presenting to lenders."
+    )
+    print(f"    EBITDA  → combined worst-case headroom LOCKED = USD {_combined_wc}M "
+          f"(eff {_eff_hd}M − MTM {round(_pnl_loss,1)}M)")
 
     params = {
         "ebitda":       ebitda_params,

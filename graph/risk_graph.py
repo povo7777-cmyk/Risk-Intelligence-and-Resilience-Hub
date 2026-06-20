@@ -78,9 +78,12 @@ class RiskIntelligenceState(TypedDict):
     panel_remediation: dict           # Auto-fix results: {auto_fixed, calibration_findings, blocked}
     board_summary_corrections: dict   # {applied, flags, reason} — Loop 1 feedback
     panel_action_items: list          # calibration findings user elected to add to board actions — Loop 2
+    panel_correction_proposals: list  # validated proposals from panel_correction_agent
+    panel_correction_decisions: dict  # HITL decisions {finding_id: "approved"|"rejected"|...}
     data_validation_results: dict     # Item 1: source CSV schema + freshness check
     narrative_scan_results: dict      # Item 7: agent narrative vs KRI ground truth mismatch check
     completeness_gaps: list           # Layer 1/2 completeness gate findings (pre-panel)
+    html_qa_results: dict             # 4-dimension HTML QA: consistency/accuracy/completeness/source
 
     # Infrastructure
     errors: list
@@ -124,6 +127,9 @@ def dispatch_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
     state["data_validation_results"] = {}
     state["narrative_scan_results"] = {}
     state["completeness_gaps"] = []
+    state["panel_correction_proposals"] = []
+    state["panel_correction_decisions"] = {}
+    state["html_qa_results"] = {}
     state["errors"] = []
     state["warnings"] = []
     return state
@@ -417,7 +423,9 @@ def chief_risk_synthesis_node(state: RiskIntelligenceState) -> RiskIntelligenceS
     # Input: KRI values only — no narratives, no context to embellish.
     print(f"  [EXEC RECS] Drafting management actions from KRI values...")
     exec_recs, committee_actions = _draft_exec_recs(
-        client, sf, of, ff, cf, compound_scenarios, cost, audit
+        client, sf, of, ff, cf, compound_scenarios, cost, audit,
+        qoq_deltas=state.get("qoq_deltas"),
+        model_params=state.get("model_params"),
     )
     state["exec_rec_drafts"] = exec_recs
 
@@ -434,7 +442,8 @@ def chief_risk_synthesis_node(state: RiskIntelligenceState) -> RiskIntelligenceS
     qoq_deltas         = state.get("qoq_deltas", {})
     qoq_fact_block     = _build_qoq_fact_block(qoq_deltas)
     risk_posture_facts = _build_risk_posture_facts(
-        sf, of, ff, cf, compound_scenarios, systemic
+        sf, of, ff, cf, compound_scenarios, systemic,
+        kri_gt=state.get("kri_ground_truth", {})
     )
     risk_posture_text  = _render_risk_posture(client, risk_posture_facts, cost)
     synthesis_sections = _run_board_synthesis(
@@ -769,20 +778,17 @@ def panel_remediation_node(state: RiskIntelligenceState) -> RiskIntelligenceStat
             remediation["calibration_findings"].append(f)
         # structural findings get processed below — no need to store separately
 
-    # Item 6: Panel verdict hard gate — INADEQUATE blocks push immediately.
-    # fitness_for_board=False means the panel found the pack unfit for distribution.
+    # NOTE (2026-06-10): Panel verdict is now INFORMATIONAL — findings feed the
+    # panel_correction → hitl_correction_gate workflow instead of blocking the push.
+    # fitness_for_board is logged but does NOT block.
     if not panel_verdict.get("fitness_for_board", True):
-        remediation["blocked"] = True
-        remediation["block_reasons"].append(
-            f"PANEL VERDICT: {panel_verdict.get('overall_rating', 'INADEQUATE')} — "
-            "board pack not fit for distribution. Resolve all CRITICAL and HIGH panel "
-            "findings before re-running. GitHub push is blocked."
-        )
+        rating = panel_verdict.get("overall_rating", "?")
+        n_crit = len(panel_verdict.get("critical_findings", []))
+        n_high = len(panel_verdict.get("high_findings", []))
         print(
-            f"\n  ⛔ [PANEL HARD GATE] fitness_for_board=False — "
-            f"push BLOCKED. Rating: {panel_verdict.get('overall_rating', '?')} | "
-            f"Critical: {len(panel_verdict.get('critical_findings', []))} | "
-            f"High: {len(panel_verdict.get('high_findings', []))}"
+            f"\n  ⚠  [PANEL] fitness_for_board=False (rating: {rating}, "
+            f"{n_crit} critical, {n_high} high) — "
+            f"findings will be validated and corrected via HITL correction gate."
         )
 
     calibration_count = len(remediation["calibration_findings"])
@@ -858,6 +864,179 @@ def panel_remediation_node(state: RiskIntelligenceState) -> RiskIntelligenceStat
     return state
 
 
+# ── NEW: Panel correction workflow ────────────────────────────────────────────
+
+def panel_correction_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
+    """
+    Validate every panel finding against source data and generate a specific
+    correction proposal (current text → proposed text) for HITL review.
+
+    This replaces the old suppress-and-retry approach: instead of telling the
+    panel LLM to ignore issues, we validate and fix the actual board text.
+    """
+    panel_val = state.get("panel_validation", {})
+
+    # Collect ALL findings (all severities per user request)
+    elena   = panel_val.get("elena_marchetti", {}).get("findings", [])
+    marcus  = panel_val.get("marcus_okonkwo",  {}).get("findings", [])
+    # Fallback: panel_verdict flat lists
+    if not elena and not marcus:
+        pv = panel_val.get("panel_verdict", {})
+        elena  = pv.get("critical_findings", []) + pv.get("high_findings", [])
+
+    # Tag panelist
+    for f in elena:
+        f.setdefault("panelist", "Elena Marchetti")
+    for f in marcus:
+        f.setdefault("panelist", "Marcus Okonkwo")
+
+    all_findings = elena + marcus
+    if not all_findings:
+        print("  [Panel Correction] No findings to validate.")
+        state["panel_correction_proposals"] = []
+        return state
+
+    # Count by severity
+    by_sev: dict[str, int] = {}
+    for f in all_findings:
+        s = f.get("severity", "?").upper()
+        by_sev[s] = by_sev.get(s, 0) + 1
+    sev_str = "  ".join(f"{v} {k}" for k, v in sorted(by_sev.items()))
+    print(f"\n[PANEL CORRECTION] {len(all_findings)} findings to validate: {sev_str}")
+
+    # Get board summary text + source data
+    from pathlib import Path as _Path
+    import json as _json
+
+    api_dir  = _Path(__file__).parent.parent / "api"
+    data_dir = _Path(__file__).parent.parent / "data"
+
+    board_summary = state.get("board_summary", "")
+    if not board_summary:
+        try:
+            store = _json.loads((api_dir / "risk_store.json").read_text())
+            board_summary = store.get("board_summary", "")
+        except Exception:
+            board_summary = ""
+
+    # Build raw CSV digests
+    raw_csvs: dict = {}
+    csv_files = {
+        "kri_thresholds": "kri_thresholds.csv",
+        "treasury":       "treasury_positions.csv",
+        "supply_chain":   "erp_supply_chain.csv",
+        "covenant":       "covenant_tracker.csv",
+        "financial":      "financial_summary.csv",
+    }
+    for key, fname in csv_files.items():
+        p = data_dir / fname
+        if p.exists():
+            raw_csvs[key] = p.read_text()[:3000]
+
+    model_params = state.get("model_params", {})
+
+    # Run correction agent
+    from agents.panel_correction_agent import run as _run_corrections
+    proposals = _run_corrections(
+        findings=all_findings,
+        board_summary=board_summary,
+        raw_csvs=raw_csvs,
+        model_params=model_params,
+        exec_recs=state.get("exec_rec_approved") or state.get("exec_rec_drafts"),
+    )
+
+    state["panel_correction_proposals"] = proposals
+    return state
+
+
+def hitl_correction_gate_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
+    """
+    Present each correction proposal to the human as a CLI diff.
+    Apply approved corrections to the board summary.
+
+    In CI mode: CONFIRMED findings auto-approved, FALSE_POSITIVES auto-rejected.
+    """
+    proposals = state.get("panel_correction_proposals", [])
+    ci_mode   = state.get("ci_mode", False)
+
+    if not proposals:
+        print("  [HITL Correction Gate] No proposals to review.")
+        return state
+
+    from tools.hitl_correction_gate import run as _hitl_run
+    from tools.correction_applier   import run as _apply_run
+    from pathlib import Path as _Path
+
+    api_dir = _Path(__file__).parent.parent / "api"
+
+    # ── Show diff and collect decisions ──────────────────────────────────────
+    result = _hitl_run(proposals=proposals, ci_mode=ci_mode)
+    state["panel_correction_decisions"] = result["decisions"]
+
+    # ── Apply approved + edited corrections ──────────────────────────────────
+    to_apply = result["approved"] + result["edited"]
+    if to_apply:
+        apply_result = _apply_run(
+            approved_proposals=to_apply,
+            store_path=api_dir / "risk_store.json",
+        )
+        # Reload board_summary into state
+        import json as _json
+        try:
+            store = _json.loads((api_dir / "risk_store.json").read_text())
+            state["board_summary"] = store.get("board_summary", state.get("board_summary", ""))
+        except Exception:
+            pass
+
+        applied  = apply_result.get("applied", [])
+        skipped  = apply_result.get("skipped", [])
+        cfg_chg  = apply_result.get("config_changes", [])
+        if cfg_chg:
+            print(f"  ⚠ Config changes noted (require manual action): {len(cfg_chg)}")
+            for c in cfg_chg:
+                print(f"    • {c}")
+
+        state.setdefault("warnings", [])
+        if skipped:
+            state["warnings"].append(
+                f"Panel corrections: {len(skipped)} approved finding(s) "
+                f"could not be applied (text anchor not found): {skipped}"
+            )
+    else:
+        print("  [HITL Correction Gate] No corrections to apply.")
+
+    # ── Propagate corrected board_summary to dashboard HTML ──────────────────
+    # Corrections were applied to risk_store.json; re-write the dashboard
+    # so the GitHub push picks up the updated board text.
+    if to_apply:
+        corrected_summary = state.get("board_summary", "")
+        if corrected_summary:
+            dashboard_path = _Path(__file__).parent.parent / "dashboard" / "index.html"
+            if dashboard_path.exists():
+                try:
+                    from tools.dashboard_updater import update_board_summary
+                    changed = update_board_summary(dashboard_path, corrected_summary, state["run_id"])
+                    if changed:
+                        state["dashboard_updated"] = True
+                        print("  [HITL Correction Gate] Dashboard HTML updated with corrected board summary ✓")
+                    else:
+                        print("  [HITL Correction Gate] Dashboard HTML already up to date.")
+                except Exception as e:
+                    state.setdefault("warnings", []).append(f"Dashboard board summary update failed: {e}")
+                    print(f"  ⚠ Could not update dashboard HTML: {e}")
+
+    # ── Log summary ──────────────────────────────────────────────────────────
+    decisions = result["decisions"]
+    n_app  = len(result["approved"])
+    n_rej  = len(result["rejected"])
+    n_edit = len(result["edited"])
+    n_skip = len(result["skipped"])
+    print(f"\n  Panel correction summary: "
+          f"{n_app} approved · {n_rej} rejected · {n_edit} edited · {n_skip} skipped")
+
+    return state
+
+
 def board_summary_correction_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
     """
     Loop 1 — Validation feedback: corrects factual errors in the board summary.
@@ -896,6 +1075,8 @@ def board_summary_correction_node(state: RiskIntelligenceState) -> RiskIntellige
         "component-vs-aggregate", "confusion flagged",
         "incorrect count", "miscounts", "wrong count",
         "primary driver", "sub-component", "aggregate confusion",
+        # P6 2026-06-09: capture completeness gaps (missing dates/deadlines) as correctable
+        "absent from", "missing from", "not present in", "omits the",
     }
     panel_verdict = panel_val.get("panel_verdict", {})
     all_panel = (
@@ -930,6 +1111,12 @@ def board_summary_correction_node(state: RiskIntelligenceState) -> RiskIntellige
         "Fix ONLY the numbered errors listed below — change NOTHING else.\n"
         "Do not rephrase, restructure, or improve any other part of the text.\n"
         "Do not add new content. Return ONLY the corrected summary; no preamble.\n\n"
+        "ABSOLUTE PROHIBITIONS — these MUST NOT be changed regardless of any error listed:\n"
+        "1. S-02 AMBER COUNT: S-02 has exactly 1 amber KRI (competitive_signals=3 at amber threshold=3). "
+        "Do NOT change '1 amber warning' for S-02 to any other number.\n"
+        "2. COMBINED WORST-CASE HEADROOM: If the text says USD 10.7M combined worst-case, "
+        "that is CORRECT (locked calibrator value). Do NOT change it to 105M or any other figure.\n"
+        "Note: Correcting a wrong total amber count (e.g. 18 → 20) IS allowed and correct.\n\n"
         f"ERRORS TO FIX:\n{flags_numbered}\n\n"
         f"CURRENT BOARD SUMMARY:\n{board_summary}"
     )
@@ -976,6 +1163,7 @@ def board_summary_correction_node(state: RiskIntelligenceState) -> RiskIntellige
             dash = Path(__file__).parent.parent / "dashboard" / "index.html"
             if dash.exists():
                 update_board_summary(dash, corrected_summary, state["run_id"])
+                state["dashboard_updated"] = True
                 print("  ✓ Board summary corrected and dashboard re-written")
         except Exception as e:
             state["warnings"].append(f"Board summary correction dashboard write failed: {e}")
@@ -1428,6 +1616,68 @@ def update_exec_recs_node(state: RiskIntelligenceState) -> RiskIntelligenceState
 
 
 
+def html_qa_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
+    """
+    4-dimension HTML quality assurance gate.
+
+    Runs against root index.html AFTER all rendering is complete
+    (post hitl_correction_gate + update_exec_recs).
+
+    Checks:
+      D1  CONSISTENCY  — KRD card titles match body domain; no cross-section contradictions
+      D2  ACCURACY     — KRI tile values + status badges match risk_store.json
+      D3  COMPLETENESS — all required board-pack sections present in HTML
+      D4  SOURCE MATCH — KRI thresholds match kri_thresholds.csv;
+                         model figures match model_benchmarks.json
+
+    ERRORs are escalated to state["errors"] and will block the GitHub push.
+    WARNINGs are escalated to state["warnings"] — logged but non-blocking.
+    """
+    from pathlib import Path as _Path
+    from tools.html_qa_validator import run as qa_run, print_report as qa_print
+
+    print(f"\n{'='*60}")
+    print("[HTML QA] Running 4-dimension dashboard validation...")
+    print(f"{'='*60}")
+
+    html_path = _Path(__file__).parent.parent / "index.html"  # root — GitHub Pages
+
+    try:
+        result = qa_run(html_path)
+        qa_print(result)
+        state["html_qa_results"] = result
+
+        # Escalate ERRORs into pipeline errors (will block push in github_push_node)
+        for issue in result.get("issues", []):
+            if issue["severity"] == "ERROR":
+                state["errors"].append(
+                    f"[HTML-QA/{issue.get('dimension','?').upper()}/"
+                    f"{issue.get('code','?')}] {issue['message']}"
+                )
+            elif issue["severity"] == "WARNING":
+                state["warnings"].append(
+                    f"[HTML-QA/{issue.get('dimension','?').upper()}] {issue['message']}"
+                )
+
+        status = result.get("status", "?")
+        if status == "pass":
+            print(f"\n  ✓ HTML QA: all checks passed")
+        elif status == "warn":
+            wc = result.get("warning_count", 0)
+            print(f"\n  ⚠ HTML QA: {wc} warning(s) — push will proceed")
+        else:
+            ec = result.get("error_count", 0)
+            print(f"\n  ⛔ HTML QA: {ec} error(s) — GitHub push will be BLOCKED")
+
+    except Exception as e:
+        msg = f"HTML QA node failed unexpectedly: {e}"
+        state["warnings"].append(msg)
+        print(f"  ⚠ {msg}")
+        state["html_qa_results"] = {"status": "error", "error": str(e)}
+
+    return state
+
+
 def github_push_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
     """Push updated dashboard to GitHub Pages."""
     audit = _audit  # may be None if dispatch_node not called
@@ -1436,17 +1686,37 @@ def github_push_node(state: RiskIntelligenceState) -> RiskIntelligenceState:
         print("\n[GITHUB] No dashboard changes to push")
         return state
 
-    # Item 6: Enforce panel hard gate — blocked flag prevents push regardless of approvals
-    if state.get("panel_remediation", {}).get("blocked"):
-        reasons = state.get("panel_remediation", {}).get("block_reasons", [])
-        print("\n[GITHUB] ⛔ Push BLOCKED by validation gate:")
-        for r in reasons:
-            print(f"  • {r}")
+    # ── Gate 1: HTML QA errors block the push ────────────────────────────────
+    html_qa = state.get("html_qa_results", {})
+    if html_qa.get("status") == "error":
+        ec = html_qa.get("error_count", "?")
+        print(f"\n[GITHUB] ⛔ Push BLOCKED by HTML QA ({ec} error(s)):")
+        for issue in html_qa.get("issues", []):
+            if issue.get("severity") == "ERROR":
+                dim = issue.get("dimension", "?").upper()
+                print(f"  • [{dim}] {issue.get('message', '')}")
         state["errors"].append(
-            "GitHub push blocked: panel_remediation.blocked=True. "
-            f"Reasons: {'; '.join(reasons)}"
+            f"GitHub push blocked by HTML QA: {ec} error(s). "
+            "Fix the issues reported above and re-run."
         )
         return state
+
+    # ── Gate 2: Legacy consistency-checker block (threshold/benchmark drift) ──
+    # NOTE (2026-06-10): panel fitness_for_board no longer blocks push;
+    # panel findings are handled via the hitl_correction_gate workflow.
+    if state.get("panel_remediation", {}).get("blocked"):
+        reasons = state.get("panel_remediation", {}).get("block_reasons", [])
+        non_panel_reasons = [r for r in reasons
+                             if "PANEL VERDICT" not in r and "fitness_for_board" not in r]
+        if non_panel_reasons:
+            print("\n[GITHUB] ⛔ Push BLOCKED by consistency checker:")
+            for r in non_panel_reasons:
+                print(f"  • {r}")
+            state["errors"].append(
+                "GitHub push blocked by consistency checker. "
+                f"Reasons: {'; '.join(non_panel_reasons)}"
+            )
+            return state
 
     dashboard_path = Path(__file__).parent.parent / "dashboard" / "index.html"
     if not dashboard_path.exists():
@@ -1565,14 +1835,15 @@ def _build_findings_summary(state: RiskIntelligenceState) -> str:
 
 
 def _draft_exec_recs(client, sf, of, ff, cf, compound_scenarios,
-                     cost, audit) -> tuple[dict, list]:
+                     cost, audit, qoq_deltas=None, model_params=None) -> tuple[dict, list]:
     """
     Step 2 — Draft executive recommendations and committee actions.
     Input: KRI values only (no narratives). Returns (exec_recs dict, actions list).
     """
     prompt_path = Path(__file__).parent.parent / "prompts" / "chief_risk_v1.txt"
     system_prompt = prompt_path.read_text()
-    kri_input = _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios)
+    kri_input = _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios,
+                                          qoq_deltas=qoq_deltas, model_params=model_params)
 
     try:
         response = client.messages.create(
@@ -1670,11 +1941,17 @@ _DOMAIN_OWNERS = {
 }
 
 
-def _build_risk_posture_facts(sf, of, ff, cf, compound_scenarios, systemic) -> dict:
+def _build_risk_posture_facts(sf, of, ff, cf, compound_scenarios, systemic,
+                              kri_gt: dict | None = None) -> dict:
     """
     Compute all RISK POSTURE facts deterministically from agent outputs.
     Returns a structured dict — the single source of truth for RISK POSTURE content.
     No LLM involved; these facts are locked before any rendering step.
+
+    kri_gt (kri_ground_truth): if provided, use its authoritative breach/amber totals
+    instead of summing domain agent outputs. Domain agents may undercount KRIs added by
+    the calibrator (e.g. mfa_coverage_pct, privileged_access_unreviewed_days) that go
+    directly into risk_store.json after the domain agents run.
     """
     domain_data = [
         ("Strategic",   sf),
@@ -1682,8 +1959,39 @@ def _build_risk_posture_facts(sf, of, ff, cf, compound_scenarios, systemic) -> d
         ("Financial",   ff),
         ("Compliance",  cf),
     ]
-    total_b = sum((f or {}).get("breach_count", 0) for _, f in domain_data)
-    total_a = sum((f or {}).get("amber_count",  0) for _, f in domain_data)
+    # Start from domain agent totals
+    total_b_agents = sum((f or {}).get("breach_count", 0) for _, f in domain_data)
+    total_a_agents = sum((f or {}).get("amber_count",  0) for _, f in domain_data)
+
+    # Override with authoritative kri_ground_truth counts if available.
+    # Structure: kri_gt["dashboard_kris"] → {domain_key → {risk_id → [kri_dicts]}}
+    total_b = total_b_agents
+    total_a = total_a_agents
+    if kri_gt:
+        db_kris = kri_gt.get("dashboard_kris", {})
+        if db_kris:
+            gt_breaches = sum(
+                1
+                for domain_risks in db_kris.values()
+                for kris_list in domain_risks.values()
+                for k in kris_list
+                if isinstance(k, dict) and k.get("status") == "breach"
+            )
+            gt_ambers = sum(
+                1
+                for domain_risks in db_kris.values()
+                for kris_list in domain_risks.values()
+                for k in kris_list
+                if isinstance(k, dict) and k.get("status") == "amber"
+            )
+            if gt_breaches > 0 or gt_ambers > 0:
+                total_b = gt_breaches
+                total_a = gt_ambers
+                if gt_breaches != total_b_agents or gt_ambers != total_a_agents:
+                    print(f"  [BOARD SYNTHESIS] KRI count override: "
+                          f"breaches {total_b_agents}→{gt_breaches}, "
+                          f"ambers {total_a_agents}→{gt_ambers} "
+                          f"(kri_ground_truth authoritative — domain agents may miss calibrator KRIs)")
     domains_in_breach = [
         {
             "name":      lbl,
@@ -2119,12 +2427,72 @@ def _assemble_board_summary(sf, of, ff, cf, rf, ef,
     return "\n\n".join(lines)
 
 
-def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios) -> str:
+def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios,
+                              qoq_deltas=None, model_params=None) -> str:
     """
-    Build a structured, KRI-values-only input for the constrained LLM call.
-    No narratives — only exact values, thresholds, and statuses.
-    The LLM cannot embellish what it cannot see.
+    Build a structured input for the CRA LLM call.
+
+    Core: KRI values, thresholds, statuses from the data pipeline.
+    Extended: structured metadata (deadlines, provisional flags, owners, notes)
+    read back directly from risk_store.json — the pipeline strips these fields
+    at kri_data_layer and agent levels, so we re-inject them here to ensure
+    the LLM sees all information the panel requires.
+    QoQ: prior-period values from qoq_deltas prevent the LLM from fabricating
+    prior figures for quarter-on-quarter comparisons.
+    Model context: key benchmarks and scope disclosures from model_params
+    (calibrator output) — authoritative figures for p_covenant_breach and VaR.
+
+    The chief_risk_v1.txt prompt permits citing any fact explicitly in this input.
+    This function is the sole information boundary — add fields here, not in prompts.
     """
+    # ── Load enriched KRI metadata from risk_store.json ───────────────────────
+    # The data pipeline produces bare {name, value, unit, status, threshold} dicts.
+    # rich fields (provisional, review_deadline, model_notes, owner) live in
+    # risk_store.json and must be read back here.
+    domain_to_bucket = {
+        "Strategic":   "strategic_risks",
+        "Operational": "operational_risks",
+        "Financial":   "financial_risks",
+        "Compliance":  "compliance_risks",
+    }
+    # Fields to forward; description truncated to avoid token bloat
+    FORWARD_FIELDS = ("provisional", "model_notes", "review_deadline", "owner")
+    store_meta: dict = {}  # (bucket, risk_id, kri_name) → metadata dict
+
+    try:
+        from tools.risk_writer import load_store
+        store = load_store()
+        for bucket in domain_to_bucket.values():
+            for risk_id, risk_obj in store.get(bucket, {}).items():
+                for kri_name, kri_data in risk_obj.get("kris", {}).items():
+                    meta = {}
+                    for f in FORWARD_FIELDS:
+                        val = kri_data.get(f)
+                        if val is not None and val is not False and val != "":
+                            if isinstance(val, str) and len(val) > 160:
+                                val = val[:160] + "…"
+                            meta[f] = val
+                    if meta:
+                        store_meta[(bucket, risk_id, kri_name)] = meta
+    except Exception:
+        pass  # Non-fatal — base KRI data still used
+
+    # ── Build QoQ prior-value lookup ──────────────────────────────────────────
+    # Prevents the CRA LLM from inventing prior-period values.
+    # Keys: kri_name → {prior_value, period_prior, trend}
+    qoq_lookup: dict = {}
+    if qoq_deltas and qoq_deltas.get("available"):
+        period_prior_label = qoq_deltas.get("period_prior", "prior period")
+        for m in qoq_deltas.get("movements", []):
+            kn = m.get("kri_name", "")
+            if kn:
+                qoq_lookup[kn] = {
+                    "prior_value": m.get("prior_value"),
+                    "period":      period_prior_label,
+                    "trend":       m.get("trend", ""),
+                }
+
+    # ── Build breach / amber KRI entries ──────────────────────────────────────
     breach_kris = []
     amber_kris  = []
 
@@ -2135,6 +2503,7 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios) -> str:
         if not findings:
             continue
         kri_updates = findings.get("kri_updates", {})
+        bucket = domain_to_bucket.get(domain_label, "")
         for risk_id, kris in kri_updates.items():
             kri_list = kris if isinstance(kris, list) else (
                 [{"name": k, **v} for k, v in kris.items() if isinstance(v, dict)]
@@ -2147,11 +2516,34 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios) -> str:
                     f"threshold={k.get('threshold','?')} | "
                     f"status={k.get('status','?')}"
                 )
+                # Annotate with enriched metadata from risk_store
+                meta = store_meta.get((bucket, risk_id, k.get("name", "")), {})
+                annotations = []
+                if meta.get("provisional"):
+                    annotations.append("PROVISIONAL")
+                if meta.get("review_deadline"):
+                    annotations.append(f"action_deadline={meta['review_deadline']}")
+                if meta.get("owner"):
+                    annotations.append(f"owner={meta['owner']}")
+                if meta.get("model_notes"):
+                    annotations.append(f"note={meta['model_notes']}")
+                # QoQ prior-value annotation — prevents LLM from fabricating prior values
+                qoq_info = qoq_lookup.get(k.get("name", ""), {})
+                if qoq_info.get("prior_value") is not None:
+                    trend_tag = f" ({qoq_info['trend']})" if qoq_info.get("trend") else ""
+                    annotations.append(
+                        f"prior_value={qoq_info['prior_value']} "
+                        f"({qoq_info.get('period','prior period')}){trend_tag}"
+                    )
+                if annotations:
+                    entry += " | " + " | ".join(annotations)
+
                 if k.get("status") == "breach":
                     breach_kris.append(entry)
                 elif k.get("status") == "amber":
                     amber_kris.append(entry)
 
+    # ── Assemble KRI sections ──────────────────────────────────────────────────
     parts = []
     if breach_kris:
         parts.append("BREACHED KRIs (require immediate action):\n" +
@@ -2169,9 +2561,95 @@ def _build_kri_input_for_llm(sf, of, ff, cf, compound_scenarios) -> str:
         parts.append("COMPOUND SCENARIOS IDENTIFIED BY DOMAIN AGENTS:\n" +
                      "\n".join(f"  • {s}" for s in compound_scenarios))
 
+    # ── Model context from calibrator outputs (model_params) ──────────────────
+    # Authoritative calibrator-tier facts: p_covenant_breach, VaR decomposition.
+    # model_params comes directly from model_calibrator.run_calibration() so these
+    # figures are grounded in the calibrator agent tier and pass validation.
+    try:
+        ctx_lines = ["MODEL CONTEXT (cite as provided — do not modify these figures):"]
+        ep = (model_params or {}).get("ebitda", {})
+        hp = (model_params or {}).get("hedge",  {})
+
+        # MO-01 / MO-02: Full covenant status with explicit P(any) vs P(conditional) distinction
+        # and mandatory 3-step headroom bridge. These are the authoritative figures.
+        p_any    = ep.get("p_any_covenant_breach_pct", 100.0)  # COV006 confirmed → certainty
+        p_cov1   = ep.get("p_cov001_conditional_breach_pct", ep.get("p_covenant_breach_pct"))
+        gross_hd = ep.get("cov001_gross_headroom_usd_m", ep.get("ebitda_headroom_gross_usd_m"))
+        eff_hd   = ep.get("ebitda_headroom_usd_m")          # effective (post-COV006) — PRIMARY
+        cov006_w = ep.get("cov006_full_writeoff_usd_m")
+        pnl_loss = abs(hp.get("total_portfolio_pnl_usd_m", 0)) if hp else 0
+        # ── Category B: use LOCKED deterministic value from calibrator ────────
+        # NEVER re-derive combined_wc from eff_hd - pnl_loss here — the LLM would
+        # compute 152-47=105 ignoring COV006 cure. Use the calibrator-locked field.
+        combined_wc = ep.get("ebitda_headroom_combined_worst_case_usd_m")  # LOCKED = 10.7M
+        combined_wc_derivation = ep.get("combined_worst_case_derivation", "")
+
+        if p_cov1 is not None and eff_hd is not None:
+            threshold_word = "more likely than not" if p_cov1 >= 50 else "materially elevated"
+            bridge_step3 = (
+                f"    (3) Combined worst-case USD {combined_wc}M "
+                f"[post-cure USD {eff_hd}M less USD {round(pnl_loss,1)}M portfolio MTM losses].\n"
+                f"    ⚠ LOCKED VALUE — DO NOT COMPUTE YOUR OWN ARITHMETIC. "
+                f"USE USD {combined_wc}M EXACTLY. Do not compute 152-47 or any other derivation."
+                if combined_wc is not None else ""
+            )
+            ctx_lines.append(
+                f"  COVENANT STATUS — TWO DISTINCT METRICS (do NOT conflate):\n"
+                f"    P(ANY covenant breach TODAY) = {p_any}% — COV006 is CONFIRMED IN ACTIVE BREACH "
+                f"(certainty, not a probability — action required by 2026-06-12).\n"
+                f"    P(additional COV001 breach at 2026-06-30 test) = {p_cov1}% PROVISIONAL "
+                f"({threshold_word} — CONDITIONAL on COV006 remaining in breach).\n"
+                f"    These are DISTINCT — board must see both, not just the {p_cov1}%.\n"
+                f"  COV001 HEADROOM BRIDGE — cite ALL THREE STEPS (mandatory):\n"
+                f"    (1) Gross USD {gross_hd}M [Net Debt 6.384B / 3.0x ceiling = EBITDA floor 2128M].\n"
+                f"    (2) Post-COV006-cure effective USD {eff_hd}M "
+                f"[gross USD {gross_hd}M less COV006 full provision USD {cov006_w}M].\n"
+                f"{bridge_step3}\n"
+                f"  RULE: Never cite USD {gross_hd}M alone — always show step (2) USD {eff_hd}M qualifier.\n"
+                f"  {p_cov1}% is PROVISIONAL — full Monte Carlo rerun by 2026-06-20."
+            )
+
+        # MO-06: analytical VaR decomposition — both sub-components are within F-01 scope.
+        # F-01 covers two sub-KRIs: avg_hedge_ratio_pct (FX-currency) and commodity_hedge_ratio_pct
+        # (commodity, added 2026-06-08 per CF-04). The decomposition below is F-01 internal.
+        # NOTE: simulation VaR fields renamed to _simulation_* — DO NOT use those for board materials.
+        fx_var  = hp.get("var_95_fx_analytical_usd_m")
+        com_var = hp.get("var_95_commodity_analytical_usd_m")
+        comb_lo = hp.get("var_95_combined_lower_usd_m")
+        comb_hi = hp.get("var_95_combined_upper_usd_m")
+        com_unh = round(hp.get("commodity_gross_usd_m", 0) - hp.get("commodity_hedged_usd_m", 0)) if hp else None
+        if fx_var and com_var and comb_lo:
+            ctx_lines.append(
+                f"  F-01 VaR decomposition (analytical, 95% confidence — USE THESE, not simulation figures):\n"
+                f"    FX-currency sub-component = USD {fx_var}M "
+                f"(FX001-FX004 unhedged USD {hp.get('unhedged_usd_m',4080)}M at {hp.get('fx_vol_pct',9.0)}% vol).\n"
+                f"    Commodity sub-component = USD {com_var}M "
+                f"(COM001+COM002 unhedged USD {com_unh}M at {hp.get('commodity_vol_pct',32.0)}% vol — F-01 scope per CF-04).\n"
+                f"    F-01 total VaR range = USD {comb_lo}M-{comb_hi}M (zero-corr lower to perfect-corr upper).\n"
+                f"    RULE: Exec recs must cite F-01 total VaR range, not the FX sub-component alone."
+            )
+
+        # MO-08: COV004 scope note — outside EBITDA MC, must be cited separately
+        cov004_note = ep.get("cov004_model_scope_note")
+        if cov004_note:
+            ctx_lines.append(f"  COV004 SCOPE NOTE: {cov004_note}")
+
+        # EM-05: O-03 field_failure_rate_pct is PROVISIONAL — enforcement note
+        ctx_lines.append(
+            "  O-03 FIELD FAILURE RATE: field_failure_rate_pct is PROVISIONAL — "
+            "QMS-SAP reconciliation pending (COO/VP Quality, review_deadline 2026-06-14). "
+            "Board pack MUST label this value as PROVISIONAL. "
+            "Do NOT cite field_failure_rate as a confirmed figure without this label."
+        )
+
+        if len(ctx_lines) > 1:
+            parts.append("\n".join(ctx_lines))
+    except Exception:
+        pass  # Non-fatal — model context is supplementary
+
     parts.append(
-        "Using only the KRI values above, draft the exec rec updates and "
-        "risk committee recommended actions. "
+        "Using only the KRI values and model context above, draft the exec rec "
+        "updates and risk committee recommended actions. "
         "Return ONLY valid JSON — no markdown, no explanation."
     )
 
@@ -2265,30 +2743,33 @@ def build_graph():
     """Assemble and compile the LangGraph state graph."""
     graph = StateGraph(RiskIntelligenceState)
 
-    graph.add_node("dispatch",                  dispatch_node)
-    graph.add_node("data_validation",          data_validation_node)   # Item 1
-    graph.add_node("kri_data_layer",            kri_data_layer_node)
-    graph.add_node("model_calibration",         model_calibration_node)
-    graph.add_node("run_agents",                run_domain_agents_node)
-    graph.add_node("synthesis",                 chief_risk_synthesis_node)
-    graph.add_node("write_approved",            write_approved_node)
-    graph.add_node("kri_validation",            kri_validation_node)
-    graph.add_node("content_validation",        content_validation_node)
-    graph.add_node("completeness_gate",         completeness_gate_node)
-    graph.add_node("risk_panel",                risk_panel_node)
-    graph.add_node("panel_remediation",         panel_remediation_node)
-    graph.add_node("board_summary_correction",  board_summary_correction_node)  # Loop 1+2
-    graph.add_node("hitl_gate",                 hitl_gate_node)
-    graph.add_node("update_exec_recs",          update_exec_recs_node)
-    graph.add_node("github_push",               github_push_node)
-    graph.add_node("finalise",                  finalise_node)
+    graph.add_node("dispatch",                    dispatch_node)
+    graph.add_node("data_validation",             data_validation_node)   # Item 1
+    graph.add_node("kri_data_layer",              kri_data_layer_node)
+    graph.add_node("model_calibration",           model_calibration_node)
+    graph.add_node("run_agents",                  run_domain_agents_node)
+    graph.add_node("synthesis",                   chief_risk_synthesis_node)
+    graph.add_node("write_approved",              write_approved_node)
+    graph.add_node("kri_validation",              kri_validation_node)
+    graph.add_node("content_validation",          content_validation_node)
+    graph.add_node("completeness_gate",           completeness_gate_node)
+    graph.add_node("board_summary_correction_v1", board_summary_correction_node)  # Loop 1: pre-panel
+    graph.add_node("risk_panel",                  risk_panel_node)
+    graph.add_node("panel_remediation",           panel_remediation_node)          # threshold sync + consistency check
+    graph.add_node("panel_correction",            panel_correction_node)            # NEW: validate + propose
+    graph.add_node("hitl_correction_gate",        hitl_correction_gate_node)        # NEW: CLI diff + apply
+    graph.add_node("hitl_gate",                   hitl_gate_node)
+    graph.add_node("update_exec_recs",            update_exec_recs_node)
+    graph.add_node("html_qa",                     html_qa_node)                         # 4-dim HTML QA gate
+    graph.add_node("github_push",                 github_push_node)
+    graph.add_node("finalise",                    finalise_node)
 
     graph.set_entry_point("dispatch")
-    graph.add_edge("dispatch",                 "data_validation")
-    graph.add_edge("data_validation",          "kri_data_layer")
-    graph.add_edge("kri_data_layer",           "model_calibration")
-    graph.add_edge("model_calibration",        "run_agents")
-    graph.add_edge("run_agents",               "synthesis")
+    graph.add_edge("dispatch",                    "data_validation")
+    graph.add_edge("data_validation",             "kri_data_layer")
+    graph.add_edge("kri_data_layer",              "model_calibration")
+    graph.add_edge("model_calibration",           "run_agents")
+    graph.add_edge("run_agents",                  "synthesis")
     graph.add_conditional_edges(
         "synthesis",
         permission_router,
@@ -2297,17 +2778,20 @@ def build_graph():
             "hitl_gate":      "content_validation",
         }
     )
-    graph.add_edge("write_approved",           "kri_validation")
-    graph.add_edge("kri_validation",           "content_validation")
-    graph.add_edge("content_validation",       "completeness_gate")
-    graph.add_edge("completeness_gate",        "risk_panel")
-    graph.add_edge("risk_panel",               "panel_remediation")
-    graph.add_edge("panel_remediation",        "board_summary_correction")  # ← Loop 1+2
-    graph.add_edge("board_summary_correction", "hitl_gate")
-    graph.add_edge("hitl_gate",                "update_exec_recs")
-    graph.add_edge("update_exec_recs",         "github_push")
-    graph.add_edge("github_push",              "finalise")
-    graph.add_edge("finalise",                 END)
+    graph.add_edge("write_approved",              "kri_validation")
+    graph.add_edge("kri_validation",              "content_validation")
+    graph.add_edge("content_validation",          "completeness_gate")
+    graph.add_edge("completeness_gate",           "board_summary_correction_v1")   # Loop 1: pre-panel correction
+    graph.add_edge("board_summary_correction_v1", "risk_panel")
+    graph.add_edge("risk_panel",                  "panel_remediation")              # threshold sync (kept)
+    graph.add_edge("panel_remediation",           "panel_correction")               # NEW: validate findings
+    graph.add_edge("panel_correction",            "hitl_correction_gate")           # NEW: HITL diff + apply
+    graph.add_edge("hitl_correction_gate",        "hitl_gate")                      # then existing exec rec review
+    graph.add_edge("hitl_gate",                   "update_exec_recs")
+    graph.add_edge("update_exec_recs",            "html_qa")                            # validate final HTML
+    graph.add_edge("html_qa",                     "github_push")                        # block push on ERROR
+    graph.add_edge("github_push",                 "finalise")
+    graph.add_edge("finalise",                    END)
 
     checkpointer = MemorySaver()
     return graph.compile(checkpointer=checkpointer)

@@ -141,7 +141,11 @@ def run(kri_data: dict | None = None) -> dict:
         kri_updates = kri_data["dashboard_kris"]
         # agent_context has additional context metrics
         actx = kri_data.get("agent_context", {})
-        unrealised_pnl  = actx.get("F-01", {}).get("unrealised_pnl_usd_m", unrealised_pnl)
+        # NOTE (2026-06-09): unrealised_pnl override from agent_context REMOVED.
+        # tr["total_unrealised_pnl_usd_m"] (line 128) is FX-only (-26.6M) from CSV — authoritative.
+        # agent_context.F-01.unrealised_pnl_usd_m previously held combined FX+commodity (-47.0M)
+        # causing double-count bug (reported as FX -47.0M + commodity -20.4M = -67.4M total).
+        # kri_data_layer.py now also fixed to store FX-only in agent_context.F-01.
         overdue_90d_pct = actx.get("F-02", {}).get("overdue_90d_pct", overdue_90d_pct)
         overdue_90d_usd = actx.get("F-02", {}).get("overdue_90d_usd_m", overdue_90d_usd)
         mw              = actx.get("F-04", {}).get("material_weakness_count", f04.get("material_weakness_count", 0))

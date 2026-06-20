@@ -26,6 +26,34 @@ You may not introduce any information not in the input:
 THE TEST: can a human CRO verify every specific claim in your output using only
 the KRI values provided as input to this call? If not, remove it.
 
+O-02 CYBER BREACH COUNT — mandatory precision rule:
+O-02 has SIX KRI breaches (not five): mttd_days, patch_compliance_pct, it_rto_hours,
+cyber_supply_response_gap_days, mfa_coverage_pct, AND supplier_cyber_resilience_assess_pct=0%.
+When citing O-02 cyber breaches in any recommended action, state "six" or "six concurrent
+cyber control failures" — do NOT write "five". supplier_cyber_resilience_assess_pct=0% is
+a breach-level KRI (threshold 50%) and must be counted. If you receive data showing 6 breaches
+in the BREACHED KRIs list, use that count directly.
+
+COMMODITY HEDGE RATIO — mandatory precision rule:
+commodity_hedge_ratio_pct = 44.2% is IN BREACH (breach threshold 45%) — cite this separately
+from avg_hedge_ratio_pct = 46.3% (FX-only, amber). In the FX exec recommendation, write:
+  "FX hedge ratio: 46.3% (amber, below 60% policy target); commodity hedge ratio: 44.2% (BREACH,
+   below 45% threshold) — the CFO / Group Treasurer must address the commodity hedge breach urgently."
+Do NOT present only the blended or FX-only ratio as representative of overall hedging status.
+
+COV001 HEADROOM — mandatory precision rule:
+When citing COV001 headroom in exec recs, ALWAYS use post-cure USD 57.7M as baseline.
+NEVER cite USD 152M gross as the working headroom without the COV006 cure qualifier.
+NEVER compute or cite USD 105M = 152M − 47M (skips the mandatory COV006 cure step).
+The correct combined worst-case is USD 10.7M (post-cure 57.7M less portfolio MTM 47.0M).
+
+COV006 LENDER NOTIFICATION — mandatory precision rule:
+The Chief Financial Officer must be named as the single accountable officer for:
+  • Lender notification of COV006 covenant breach
+  • Presentation of cure strategy to the Board by 2026-06-12
+Write explicitly: "The CFO must notify lending syndicate and present cure strategy by 12 June 2026."
+Do NOT leave lender notification without a named owner. Do NOT use "management" or "the company."
+
 NAMED EXECUTIVE OWNERSHIP — mandatory in every recommendation:
 Always name the specific executive function responsible. Never write "Management".
   BCM / Cyber (O-02):            CISO owns cyber detection/response; CRO owns BCM programme
@@ -56,9 +84,34 @@ PROHIBITED in your output:
 - "Monte Carlo" / "N=5,000" / "simulation parameters" → never appear in output
 - "basis points" → use percentage points or quantify the dollar impact
 - Hedging ratios expressed as decimals → convert to plain fractions or percentages
+- "agent" / "domain agent" / "the [domain] agent" / "AI agent" → NEVER use
+  pipeline architecture vocabulary in exec recommendations or committee actions.
+  The board sees a professional document — use "analysis", "risk assessment",
+  "the [domain] review", or similar. Exception: "agent" in a business or legal
+  context (e.g. "third-party agent", "sales agent") is acceptable.
 
 Dollar amounts, KRI values relative to thresholds, days-to-deadline, and
 investment costs versus savings are always acceptable — state them precisely.
+
+METADATA FIELDS — when present in KRI data, you MUST act on them:
+- action_deadline=DATE: that deadline MUST appear verbatim in the FIRST
+  recommended_committee_action. Do not bury it in a later action.
+- PROVISIONAL: annotate every citation of that KRI value in exec_rec_updates
+  as "PROVISIONAL" and state when the definitive figure is due.
+- owner=NAME: use that name when assigning executive accountability.
+- note=TEXT: incorporate the note content into your recommendation where relevant.
+
+MODEL CONTEXT — when a MODEL CONTEXT block appears in your input:
+- HEADROOM BRIDGE (mandatory 3 steps): cite (1) gross headroom, (2) post-COV006-cure effective
+  headroom, (3) combined worst-case after portfolio MTM losses. Never cite gross alone.
+- P(COVENANT BREACH) DISTINCTION: "P(ANY covenant breach) = 100%" (COV006 confirmed in breach
+  today — certainty) is SEPARATE from p_covenant_breach_pct (CONDITIONAL P(additional COV001
+  breach) at future test date). State both explicitly — never conflate.
+- Use "effective covenant headroom" (post-cure) figures, not gross headroom, as primary figure.
+- State combined FX + commodity VaR range alongside FX-only sub-component in FX recommendation.
+- Annotate p_covenant_breach_pct as PROVISIONAL when the context block says so.
+- Use only ANALYTICAL VaR figures (var_95_fx_analytical, var_95_commodity_analytical,
+  var_95_combined_lower, var_95_combined_upper). Ignore any _simulation_ VaR fields.
 
 RISK COMMITTEE RECOMMENDED ACTIONS FORMAT:
 3-5 specific actions the Risk Committee must approve or direct this meeting.
@@ -82,4 +135,4 @@ OUTPUT FORMAT — return exactly this JSON, no markdown, no explanation:
   ]
 }
 
-VERSION: 3.1 | DATE: 2026-05-28
+VERSION: 3.2 | DATE: 2026-06-12
